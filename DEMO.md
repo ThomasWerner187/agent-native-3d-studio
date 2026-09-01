@@ -22,15 +22,17 @@ Material for the 3-minute submission video and live demos. Beat sheet per submis
 - [ ] Mic level check; say the tool names out loud — they match the Tool Log entries on screen
 - [ ] Screen capture at 30 fps minimum (spawn animations + camera flies are the product)
 
-## The five reproducible demo prompts (from boot state)
+## Reproducible demo prompts (from boot state)
 
 1. `Set the mood to golden hour, then frame the scene like a movie still.`
-2. `Make it night and let the lamp glow warm.`
+2. `Make it night and let the lamp glow warm, then put some lofi on.`
 3. `Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area.`
 4. `Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.`
 5. `What's in the scene right now? Then move the table two meters toward the window and give me a hero shot of it.`
 6. `Hide the UI, then fly a cinematic tour: start on the window, sweep past the lamp, and end on a hero shot of the table.`
 7. `Scatter 50 trees on the right side using seed 42 — I want to be able to recreate this exact forest.`
+8. `Build the whole camp in one go — table, chair, lamp, warm light — and end on a hero shot.`  (exercises `batch`)
+9. `Package this scene as a share link I can send to a friend.`  (exercises `export_scene`; the ⧉ button copies the same link)
 
 (For prompt 1 after boot the scene already *is* golden hour — the agent should just frame; if you want visible change use: `Set the mood to moonlit, then back to golden hour, then frame the scene like a movie still.`)
 
