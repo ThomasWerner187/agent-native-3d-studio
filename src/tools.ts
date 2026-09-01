@@ -206,6 +206,10 @@ export function transformObject(ctx: ToolContext, args: Args): string {
   for (const id of targets.ids) {
     const entry = ctx.store.get(id)!;
     const g = entry.group;
+    // report the state AFTER the animation, not the pre-tween snapshot
+    const reportPos = { x: g.position.x, y: g.position.y, z: g.position.z };
+    let reportRy = THREE.MathUtils.radToDeg(g.rotation.y);
+    const reportScale = { x: g.scale.x, y: g.scale.y, z: g.scale.z };
     if (op === 'move') {
       const to = {
         x: mode === 'absolute' ? (x != null ? clamp(x, -38, 38) : undefined) : (x ?? 0) + g.position.x,
@@ -213,6 +217,9 @@ export function transformObject(ctx: ToolContext, args: Args): string {
         y: mode === 'relative' ? Math.max(0, (y ?? 0) + g.position.y) : y != null ? Math.max(0, y) : undefined,
       };
       moveObject(g, to);
+      reportPos.x = to.x ?? reportPos.x;
+      reportPos.y = to.y ?? reportPos.y;
+      reportPos.z = to.z ?? reportPos.z;
     } else if (op === 'rotate') {
       const dx = x ?? 0, dy = y ?? 0, dz = z ?? 0;
       if (mode === 'relative') {
@@ -221,12 +228,14 @@ export function transformObject(ctx: ToolContext, args: Args): string {
           y: g.rotation.y + THREE.MathUtils.degToRad(dy),
           z: g.rotation.z + THREE.MathUtils.degToRad(dz),
         });
+        reportRy = reportRy + dy;
       } else {
         rotateObject(g, {
           x: x != null ? THREE.MathUtils.degToRad(x) : undefined,
           y: y != null ? THREE.MathUtils.degToRad(y) : undefined,
           z: z != null ? THREE.MathUtils.degToRad(z) : undefined,
         });
+        if (y != null) reportRy = y;
       }
     } else {
       const factor = mode === 'relative'
@@ -236,13 +245,14 @@ export function transformObject(ctx: ToolContext, args: Args): string {
       const ny = clamp(mode === 'relative' ? g.scale.y * factor.y : factor.y, 0.1, 8);
       const nz = clamp(mode === 'relative' ? g.scale.z * factor.z : factor.z, 0.1, 8);
       scaleObject(g, { x: nx, y: ny, z: nz });
+      reportScale.x = nx; reportScale.y = ny; reportScale.z = nz;
     }
     updated.push({
       id,
       name: entry.name,
-      p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
-      ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
-      s: round2(g.scale.x),
+      p: [round2(reportPos.x), round2(reportPos.y), round2(reportPos.z)],
+      ry: round2(reportRy),
+      s: round2(reportScale.x),
     });
   }
   return ok({ op, mode, count: updated.length, updated: updated.slice(0, 25) });
