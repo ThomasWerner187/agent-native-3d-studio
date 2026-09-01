@@ -123,6 +123,7 @@ html, body {
   border-radius: 6px;
 }
 .mini-btn:hover { color: var(--ink); background: rgba(255, 214, 170, 0.1); }
+.mini-btn.active { color: var(--ink); background: rgba(255, 179, 107, 0.25); }
 
 /* ---------- tool log ---------- */
 #tool-log {

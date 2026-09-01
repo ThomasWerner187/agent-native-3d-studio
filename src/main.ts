@@ -7,6 +7,7 @@ import { registerTools, dispatchTool } from './webmcp';
 import type { ToolContext } from './tools';
 import { initChrome, logToolCall, logInfo, setStatus } from './ui';
 import { initDevAgent } from './devagent';
+import { setMusic, isMusicOn, installAudioUnlock } from './ambience';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
 
 /**
@@ -81,6 +82,16 @@ initChrome(() => {
     logInfo('Scene reset to its original state.');
   }
 });
+
+// --- Lofi toggle (same tracks the set_music tool plays) ----------------------
+const musicBtn = document.getElementById('music-toggle');
+musicBtn?.addEventListener('click', () => {
+  const r = setMusic(!isMusicOn());
+  musicBtn.classList.toggle('active', r.playing);
+  musicBtn.title = r.playing ? `Lofi on — ${r.track}` : 'Lofi on/off — self-made Suno tracks';
+  logToolCall('set_music', { on: r.playing }, JSON.stringify({ ok: true, playing: r.playing, track: r.track }));
+});
+installAudioUnlock();
 
 // --- WebMCP -----------------------------------------------------------------
 const devMode = new URLSearchParams(location.search).has('agent') || import.meta.env.DEV;

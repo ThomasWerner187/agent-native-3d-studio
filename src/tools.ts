@@ -5,9 +5,10 @@ import { SceneStore, round2 } from './store';
 import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType } from './factory';
 import type { SnapshotManager } from './snapshot';
 import { AGENT_PLAYBOOK } from './agent-guide';
+import { setMusic, isMusicOn } from './ambience';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
-  holdCamera, despawn, EASES,
+  holdCamera, despawn, tween, EASES,
 } from './anim';
 
 /**
@@ -982,6 +983,111 @@ export function boardSquare(ctx: ToolContext, args: Args): string {
     square_size: round2(cell),
     note: 'Center of the square on the board surface (rank 1 at the board\'s local -z edge). transform_object a piece here with mode absolute.',
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* chess_move — perform a move the agent decided                       */
+/* ------------------------------------------------------------------ */
+
+/** Board-top surface height (boardTop box: center y 0.05 + half 0.031). */
+const BOARD_SURFACE_Y = 0.081;
+
+export async function chessMove(ctx: ToolContext, args: Args): Promise<string> {
+  const pieceArg = String(args.piece ?? '');
+  const r = ctx.store.resolve(pieceArg);
+  if (!r.ok) return fail(r.error, 'unknown_target');
+  const piece = r.entry;
+  if (piece.type !== 'chess_piece') {
+    return fail(`"${piece.name}" is a ${piece.type}, not a chess_piece.`, 'unknown_target');
+  }
+
+  const square = String(args.to ?? '').trim().toLowerCase();
+  if (!/^[a-h][1-8]$/.test(square)) {
+    return fail(`to must be algebraic like "e4" (files a-h, ranks 1-8), got "${args.to}".`, 'bad_request');
+  }
+
+  // Board: explicit target, else the nearest chessboard to the piece.
+  let board;
+  if (args.board != null) {
+    const r = ctx.store.resolve(String(args.board));
+    if (!r.ok) return fail(r.error, 'unknown_target');
+    if (r.entry.type !== 'chessboard') {
+      return fail(`"${r.entry.name}" is a ${r.entry.type}, not a chessboard.`, 'unknown_target');
+    }
+    board = r.entry;
+  } else {
+    const boards = ctx.store.all().filter((e) => e.type === 'chessboard');
+    if (boards.length === 0) {
+      return fail('No chessboard in the scene — add one with add_object{type:"chessboard"} first.', 'unknown_target');
+    }
+    const p = piece.group.position;
+    board = boards.reduce((best, b) =>
+      (b.group.position.distanceToSquared(p) < best.group.position.distanceToSquared(p) ? b : best));
+  }
+
+  const file = square.charCodeAt(0) - 97;
+  const rank = Number(square[1]) - 1;
+  const size = 1.8;
+  const cell = size / 8;
+  const half = size / 2;
+  const local = new THREE.Vector3(-half + (file + 0.5) * cell, 0, -half + (rank + 0.5) * cell);
+  const world = board.group.localToWorld(local.clone());
+  const from = piece.group.position.clone();
+  const to = new THREE.Vector3(world.x, BOARD_SURFACE_Y, world.z);
+
+  // Animated move with a small lift — visible, never a hard cut.
+  const lift = 0.16;
+  tween({
+    dur: 520,
+    group: `pos:${piece.group.uuid}`,
+    update: (k) => {
+      piece.group.position.x = from.x + (to.x - from.x) * k;
+      piece.group.position.z = from.z + (to.z - from.z) * k;
+      piece.group.position.y = from.y + (to.y - from.y) * k + Math.sin(k * Math.PI) * lift;
+    },
+  });
+  ctx.store.bump();
+  const completed = (await awaitGroup(`pos:${piece.group.uuid}`)).completed;
+
+  let camera: string = 'none';
+  const cam = String(args.camera ?? 'none');
+  if (completed && (cam === 'follow' || cam === 'hero')) {
+    camera = cam;
+    if (cam === 'follow') {
+      const dir = new THREE.Vector3(to.x - from.x, 0, to.z - from.z);
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+      dir.normalize();
+      ctx.studio.flyTo(
+        { position: new THREE.Vector3(to.x - dir.x * 1.2, 0.9, to.z - dir.z * 1.2), target: new THREE.Vector3(to.x, 0.16, to.z), fov: 42 },
+        750,
+      );
+      await awaitGroup('camera');
+    } else {
+      await frameCamera(ctx, { target: board.id, angle: 'hero', select: false });
+    }
+  }
+
+  return ok(ctx, {
+    piece: piece.id,
+    name: piece.name,
+    from: [round2(from.x), round2(from.y), round2(from.z)],
+    to: square,
+    board: board.id,
+    camera,
+    ...(completed ? {} : { applied: false, note: 'Move was interrupted mid-animation; the piece rests where it stopped.' }),
+    position: [round2(piece.group.position.x), round2(piece.group.position.y), round2(piece.group.position.z)],
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* set_music — the agent puts on lofi                                  */
+/* ------------------------------------------------------------------ */
+
+export function setMusicTool(_ctx: ToolContext, args: Args): string {
+  const on = args.on == null ? !isMusicOn() : Boolean(args.on);
+  const vol = args.volume == null ? undefined : Math.max(0, Math.min(1, Number(args.volume)));
+  const r = setMusic(on, vol);
+  return JSON.stringify({ ok: true, playing: r.playing, track: r.track, volume: r.volume, note: r.note });
 }
 
 /* ------------------------------------------------------------------ */

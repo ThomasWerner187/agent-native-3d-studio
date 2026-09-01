@@ -94,6 +94,21 @@ export class Studio {
   private clock = new THREE.Clock();
   private frameCallbacks: Array<(dt: number) => void> = [];
 
+  // Idle orbit — the lowest authority in the camera hierarchy. After 25 s
+  // without any human input or agent call, the camera drifts in a slow
+  // cinematic orbit around the scene. Any grab or tool call stops it.
+  private lastActivity = performance.now();
+  private idleOrbiting = false;
+  private idleAngle = 0;
+  private idleRadius = 12;
+  private idleHeight = 5.2;
+
+  /** Every human interaction and every agent call feeds this. */
+  noteActivity(): void {
+    this.lastActivity = performance.now();
+    if (this.idleOrbiting) this.idleOrbiting = false;
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -125,7 +140,10 @@ export class Studio {
     this.controls.minDistance = 2.5;
     this.controls.maxDistance = 55;
     // A human grabbing the camera always wins over an in-flight agent camera move.
-    this.controls.addEventListener('start', () => cancelCameraTween());
+    this.controls.addEventListener('start', () => {
+      cancelCameraTween();
+      this.noteActivity();
+    });
 
     this.hemi = new THREE.HemisphereLight('#ffd9b0', '#8a6f5a', 0.75);
     this.ambient = new THREE.AmbientLight('#fff0dd', 0.35);
@@ -168,8 +186,30 @@ export class Studio {
     updateTweens(performance.now());
     const dt = this.clock.getDelta();
     for (const cb of this.frameCallbacks) cb(dt);
+    this.updateIdleOrbit(dt);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Slow cinematic drift after 25 s of nothing — lowest camera authority. */
+  private updateIdleOrbit(dt: number): void {
+    if (!this.idleOrbiting) {
+      if (performance.now() - this.lastActivity < 25_000 || document.hidden) return;
+      this.idleOrbiting = true;
+      const off = this.camera.position.clone().sub(this.controls.target);
+      this.idleAngle = Math.atan2(off.x, off.z);
+      this.idleRadius = Math.max(6, Math.hypot(off.x, off.z));
+      this.idleHeight = Math.max(2.5, off.y);
+    }
+    this.idleAngle += dt * 0.1;
+    const breathe = 1 + Math.sin(this.idleAngle * 0.7) * 0.06;
+    const r = this.idleRadius * breathe;
+    this.camera.position.set(
+      this.controls.target.x + Math.sin(this.idleAngle) * r,
+      this.controls.target.y + this.idleHeight * (1 + Math.sin(this.idleAngle * 0.45) * 0.08),
+      this.controls.target.z + Math.cos(this.idleAngle) * r,
+    );
+    this.camera.lookAt(this.controls.target);
   }
 
   private onResize(): void {

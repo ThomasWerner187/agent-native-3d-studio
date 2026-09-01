@@ -2,7 +2,7 @@ import type { ToolContext } from './tools';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
   frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
-  deleteObjects, boardSquare, helpTool,
+  deleteObjects, boardSquare, chessMove, setMusicTool, helpTool,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
@@ -406,6 +406,46 @@ export const TOOL_DEFS: ToolDef[] = [
     run: (ctx, args) => boardSquare(ctx, args),
   },
   {
+    name: 'chess_move',
+    description:
+      'Move a chess piece to a square on a chessboard: the scene resolves the square to world coordinates, animates ' +
+      'the move with a small lift, and can drive the camera. Chess rules stay with you — you decide the move, the ' +
+      'scene performs it. piece accepts an id or a name; board defaults to the chessboard nearest the piece.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        piece: { type: 'string', description: 'The piece to move — id (e.g. "obj_17") or name (e.g. "white king e2").' },
+        to: { type: 'string', description: 'Target square in algebraic notation, e.g. "e4" (files a-h, ranks 1-8).' },
+        board: { type: 'string', description: 'Optional chessboard id/name. Omit to use the chessboard nearest the piece.' },
+        camera: {
+          type: 'string',
+          enum: ['none', 'follow', 'hero'],
+          description: 'Camera action after the move (default none). "follow" flies a low angle behind the piece; "hero" ends on a hero shot of the board.',
+        },
+      },
+      required: ['piece', 'to'],
+    },
+    annotations: { idempotentHint: false },
+    mutating: true,
+    run: (ctx, args) => chessMove(ctx, args),
+  },
+  {
+    name: 'set_music',
+    description:
+      'Put lofi music on or off: three self-made Suno tracks (Aurora Drift, Mirror Lake, Dusk Tide Drift) play as a ' +
+      'playlist. Pure page ambience; does not change the 3D scene. The browser may hold audio until the first user ' +
+      'gesture on the page (autoplay policy) — the result note tells you.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        on: { type: 'boolean', description: 'true = play, false = stop. Omit to toggle.' },
+        volume: { type: 'number', minimum: 0, maximum: 1, description: 'Master volume 0-1 (default 0.5).' },
+      },
+    },
+    annotations: { idempotentHint: true },
+    run: (ctx, args) => setMusicTool(ctx, args),
+  },
+  {
     name: 'snapshot',
     description:
       'Save a restore point of the current scene (all objects, materials, lighting, camera). Call it before a risky ' +
@@ -439,6 +479,7 @@ export type ToolLogger = (tool: string, args: Record<string, unknown>, result: s
 
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
 async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger): Promise<string> {
+  ctx.studio.noteActivity();
   let result: string;
   try {
     if (MUTATING.has(def.name)) ctx.snapshots.capture(`before ${def.name}`);

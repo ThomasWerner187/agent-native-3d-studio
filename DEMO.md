@@ -78,7 +78,7 @@ it read the `getTools()` listing. Fix shipped: every tool description now ends
 with the exact invocation recipe (all within the 500-char budget).
 
 **How to re-run the timed test (~30 s of setup):**
-1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 15 tools").
+1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 17 tools").
 2. Open the ChatGPT sidebar → New chat.
 3. Paste and send:
    > Drive the 3D scene in the current browser tab using its WebMCP tools. Steps:

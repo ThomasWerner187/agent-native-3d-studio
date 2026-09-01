@@ -11,7 +11,7 @@ export const AGENT_PLAYBOOK = [
   'WORKFLOW: start with describe_scene — objects have ids ("obj_3") and names; both target tools. Mutating tools animate and reply only AFTER the scene settled, with live values + scene_version. undo steps back, so experiment freely.',
   'BUILD: add_object{type,position{x,z},scale,name} — types: box/sphere/cylinder/plane/tree/rock/lamp/window/chair/table/chessboard/chess_piece. scatter{type,count,area{cx,cz,w,d},seed} places many with natural variation. set_material{targets,color"#hex",emissive} makes things glow; set_lighting{preset:golden_hour|night_neon|studio|overcast|moonlit,intensity}.',
   'CAMERA: frame_camera{target:"scene"|id,angle:front|side|top|three_quarter|low|hero,select:false}. camera_path{keyframes:[{target,angle,hold_ms}]} flies sequences — fly-throughs, reveals. Hide the HUD with set_ui{visible:false} for clean shots.',
-  'CHESS: add_object{type:"chessboard"} → board_square{square:"e4"} → add_object{type:"chess_piece",piece:"queen",side:"black",position:<square>,name:"black queen d8"} → move with transform_object{x:<square.x>,z:<square.z>}. Pieces: pawn/rook/knight/bishop/queen/king. delete_objects{name_contains:"pawn"} clears groups. You supply the chess rules; the scene supplies geometry.',
+  'CHESS: add_object{type:"chessboard"} → board_square{square:"e4"} shows positions → add chess pieces (piece:"queen",side:"black") → chess_move{piece:"white pawn e2",to:"e4",camera:"follow"} performs the move and flies the camera. delete_objects{name_contains:"pawn"} clears groups. You supply the rules; the scene supplies geometry.',
   'HUMANS: the mouse always works, even mid-call. A human grabbing the camera interrupts agent camera moves — the result then says applied:false.',
 ].join('\n');
 

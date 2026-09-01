@@ -28,6 +28,7 @@
         <div class="panel-head">
           <span class="panel-title">Tool Log</span>
           <span class="panel-sub">webmcp calls, live</span>
+          <button id="music-toggle" class="mini-btn" title="Lofi on/off — self-made Suno tracks">♪</button>
           <button id="scene-reset" class="mini-btn" title="Reset the scene to its original state">↺</button>
           <button id="tool-log-toggle" class="mini-btn" title="Collapse">–</button>
         </div>
@@ -59,8 +60,12 @@
             <span>“Make it night, let the lamp glow warm, then hide the UI and give me a cozy cinematic shot.”</span>
             <span class="copy-hint">copy</span>
           </button>
-          <button class="prompt" data-copy="Set the mood to golden hour and frame the whole scene like a movie still — three quarter angle, portrait lens.">
-            <span>“Set the mood to golden hour and frame the scene like a movie still.”</span>
+          <button class="prompt" data-copy="Play a short chess game against yourself on the board — 6 legal moves total. After each move, perform it with chess_move and switch the camera to the moving side with a follow angle. Finish on a hero shot of the board.">
+            <span>“Play a short chess game against yourself, switching the camera to the moving side after every move.”</span>
+            <span class="copy-hint">copy</span>
+          </button>
+          <button class="prompt" data-copy="Set the mood to golden hour, put the lofi music on, and frame the whole scene like a movie still — three quarter angle, portrait lens.">
+            <span>“Set the mood to golden hour, put the lofi music on, and frame the scene like a movie still.”</span>
             <span class="copy-hint">copy</span>
           </button>
         </div>
@@ -84,7 +89,7 @@
     <script type="application/json" id="agent-manifest">
     {
       "page": "Agent-Native 3D Scene Studio (three.js)",
-      "tools": "document.modelContext — 15 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, snapshot, undo",
+      "tools": "document.modelContext — 17 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo",
       "start_here": "call the help tool for the full playbook (workflow + recipes)",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
       "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",
