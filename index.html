@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent-Native 3D Scene Studio</title>
+    <meta name="description" content="A 3D scene studio where a human and an AI agent work on the same live scene — via WebMCP." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport"></canvas>
+
+      <!-- top-left brand + WebMCP status -->
+      <header class="hud hud-top">
+        <div class="brand">
+          <div class="brand-title">Agent-Native 3D Scene Studio</div>
+          <div class="brand-sub">human + agent, one live scene</div>
+        </div>
+        <div id="webmcp-status" class="status-chip status-checking" title="WebMCP availability">
+          <span class="status-dot"></span>
+          <span class="status-text">checking WebMCP…</span>
+        </div>
+      </header>
+
+      <!-- tool log, right side -->
+      <aside id="tool-log" class="hud panel">
+        <div class="panel-head">
+          <span class="panel-title">Tool Log</span>
+          <span class="panel-sub">webmcp calls, live</span>
+          <button id="tool-log-toggle" class="mini-btn" title="Collapse">–</button>
+        </div>
+        <div id="tool-log-entries" class="panel-body">
+          <div class="log-empty">No tool calls yet.<br />Open an agent (e.g. the Model Context Tool Inspector) and ask it to build something.</div>
+        </div>
+      </aside>
+
+      <!-- starter prompts, bottom left -->
+      <div id="prompt-card" class="hud panel">
+        <div class="panel-head">
+          <span class="panel-title">Try it with an agent</span>
+          <button id="prompt-card-close" class="mini-btn" title="Dismiss">×</button>
+        </div>
+        <div class="panel-body prompts">
+          <button class="prompt" data-copy="Set the mood to golden hour, then frame the scene like a movie still.">
+            <span>“Set the mood to golden hour, then frame the scene like a movie still.”</span>
+            <span class="copy-hint">copy</span>
+          </button>
+          <button class="prompt" data-copy="Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area. Make the lamp glow warmly.">
+            <span>“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area…”</span>
+            <span class="copy-hint">copy</span>
+          </button>
+          <button class="prompt" data-copy="Scatter 40 trees across the left half of the meadow, but keep the stone path and the seating area completely clear.">
+            <span>“Scatter 40 trees across the left half of the meadow, but keep the stone path and the seating area clear.”</span>
+            <span class="copy-hint">copy</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- controls hint, bottom center -->
+      <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete</div>
+
+      <div id="toast" class="toast"></div>
+
+      <!-- cinematic overlays -->
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
