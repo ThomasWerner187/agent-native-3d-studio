@@ -78,11 +78,12 @@ snapshots.captureBoot();
 
 // --- shared-scene links: #scene=... restores an exported scene on load ------
 {
-  const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
-  if (m) {
-    // A truncated/edited link must never take the page down — fall back to
-    // the default scene instead.
+  // A truncated/edited link must never take the page down — fall back to
+  // the default scene instead.
+  if (location.hash.startsWith('#scene=')) {
     try {
+      const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
+      if (!m) throw new Error('no usable scene payload in link');
       const r = snapshots.importJson(atobUrlSafe(m[1]));
       if (r.ok) {
         logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
@@ -91,7 +92,7 @@ snapshots.captureBoot();
         logInfo(`Share link could not be restored: ${r.error}`);
       }
     } catch {
-      logInfo('Share link was corrupted — showing the default scene instead.');
+      logInfo('Share link damaged — starting from the default scene.');
     }
     history.replaceState(null, '', location.pathname + location.search);
   }

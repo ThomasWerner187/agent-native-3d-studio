@@ -95,6 +95,23 @@ try {
     }
   }
 
+  // --- corrupted share link must never take the page down (boot path) -------
+  const pageErrors = [];
+  const badPage = await browser.newPage();
+  badPage.on('pageerror', (err) => pageErrors.push(String(err)));
+  await badPage.goto(`${BASE}/?agent=1#scene=not-valid-base64-%%%zzz`);
+  await badPage.waitForTimeout(2500);
+  const chipText = await badPage.evaluate(() => document.querySelector('#webmcp-status .status-text')?.textContent ?? '');
+  const logEntries = await badPage.evaluate(() => document.querySelector('#tool-log-entries')?.children.length ?? 0);
+  const chipOk = chipText.length > 0 && !chipText.includes('checking');
+  if (pageErrors.length === 0 && chipOk && logEntries > 0) {
+    console.log(' ✓ corrupted-share-link boot (no pageerror, chip live, scene booted)');
+  } else {
+    failures++;
+    console.log(`✗ corrupted-share-link boot — pageerrors: ${pageErrors.length}, chip: "${chipText}", log entries: ${logEntries}`);
+  }
+  await badPage.close();
+
   await browser.close();
   console.log(`\n${names.length - failures}/${names.length} tools verified`);
   writeFileSync('scripts/smoke-result.json', JSON.stringify({ at: new Date().toISOString(), verified: names.length - failures, total: names.length }, null, 2));
