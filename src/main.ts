@@ -141,9 +141,8 @@ document.getElementById('scene-share')?.addEventListener('click', () => {
 
 // --- "Watch the agent build" — curated run through the real tool handlers ----
 const show = new AgentShow({
-  call: async (tool, args) => {
-    await dispatchTool(ctx, tool, args, logToolCall);
-  },
+  call: (tool, args) => dispatchTool(ctx, tool, args, logToolCall),
+  armOrbit: () => studio.armIdleOrbit(),
   clearToMeadow: () => {
     snapshots.resetToBoot();
     for (const e of store.all()) {

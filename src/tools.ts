@@ -318,10 +318,15 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   if (side) entry.materials[0]?.color.set(CHESS_SIDES[side as 'white' | 'black']);
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
-  spawnPop(entry.group);
+  const lazy = args.animate === false;
+  if (lazy) {
+    // Bulk placement: still pops in (staggered), but the call returns at once.
+    spawnPop(entry.group, Math.random() * 1400);
+  } else {
+    spawnPop(entry.group);
+    await awaitGroup(`spawn:${entry.group.uuid}`);
+  }
   ctx.store.bump();
-
-  await awaitGroup(`spawn:${entry.group.uuid}`);
 
   return ok(ctx, {
     operation_id: opId,

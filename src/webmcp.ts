@@ -138,6 +138,7 @@ export const TOOL_DEFS: ToolDef[] = [
         },
         rotation_y: { type: 'number', description: 'Rotation around the vertical axis, in degrees.' },
         name: { type: 'string', description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
+        animate: { type: 'boolean', description: 'false = bulk placement: the object pops in staggered, but the call returns immediately instead of waiting for the pop (default true).' },
       },
       required: ['type'],
     },
@@ -418,7 +419,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'batch',
     description:
-      'Run several tool calls in ONE turn: ops is an array of {tool, args}. One snapshot, one result with every ' +
+      'Run up to 200 tool calls in ONE turn: ops is an array of {tool, args}. One snapshot, one result with every ' +
       'operation outcome, undo rolls the whole batch back. Use for complete setups (e.g. furniture + light + camera) ' +
       'instead of many separate calls. Not nestable; batch/undo/snapshot are rejected inside.',
     inputSchema: {
@@ -427,7 +428,7 @@ export const TOOL_DEFS: ToolDef[] = [
         ops: {
           type: 'array',
           minItems: 1,
-          maxItems: 12,
+          maxItems: 200,
           description: 'The operations to run in order.',
           items: {
             type: 'object',
@@ -539,7 +540,7 @@ const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot']);
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
   if (!ops) return fail('ops must be an array of {tool, args} objects.');
-  if (ops.length < 1 || ops.length > 12) return fail('ops must contain 1-12 operations.');
+  if (ops.length < 1 || ops.length > 200) return fail('ops must contain 1-200 operations.');
 
   ctx.studio.noteActivity();
   // No extra snapshot here — batch is a mutating tool, so invoke() already

@@ -38,7 +38,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   night_neon: {
     background: '#161c30',
     skyTop: '#0a0f1e',
-    fog: ['#161c30', 18, 42],
+    fog: ['#161c30', 18, 48],
     sun: { color: '#7f9fff', intensity: 0.5, position: [-12, 14, -8] },
     hemi: { sky: '#33406e', ground: '#0e1220', intensity: 0.4 },
     ambient: { color: '#2a3354', intensity: 0.3 },
@@ -66,7 +66,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   moonlit: {
     background: '#1a2338',
     skyTop: '#0d1524',
-    fog: ['#1a2338', 16, 40],
+    fog: ['#1a2338', 16, 50],
     sun: { color: '#a9c4ff', intensity: 1.0, position: [-14, 12, -6] },
     hemi: { sky: '#46598c', ground: '#1a2030', intensity: 0.35 },
     ambient: { color: '#26304d', intensity: 0.32 },
@@ -107,6 +107,11 @@ export class Studio {
   noteActivity(): void {
     this.lastActivity = performance.now();
     if (this.idleOrbiting) this.idleOrbiting = false;
+  }
+
+  /** Start the idle orbit on the next frame (used by the show finale). */
+  armIdleOrbit(): void {
+    this.lastActivity = performance.now() - 26_000;
   }
 
   constructor(canvas: HTMLCanvasElement) {
@@ -332,7 +337,7 @@ export class Studio {
       this.idleOrbiting = true;
       const off = this.camera.position.clone().sub(this.controls.target);
       this.idleAngle = Math.atan2(off.x, off.z);
-      this.idleRadius = Math.max(6, Math.hypot(off.x, off.z));
+      this.idleRadius = Math.max(2.5, Math.hypot(off.x, off.z));
       this.idleHeight = Math.max(2.5, off.y);
     }
     this.idleAngle += dt * 0.1;
