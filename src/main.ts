@@ -84,7 +84,7 @@ snapshots.captureBoot();
     try {
       const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
       if (!m) throw new Error('no usable scene payload in link');
-      const r = snapshots.importJson(atobUrlSafe(m[1]));
+      const r = snapshots.importJson(atobUrlSafe(m[1]), { captureUndo: true });
       if (r.ok) {
         logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
         snapshots.captureBoot(); // the shared state becomes the new reset baseline
@@ -134,8 +134,8 @@ installAudioUnlock();
 
 // --- Share button: scene link (works without WebMCP on the visitor side) -----
 document.getElementById('scene-share')?.addEventListener('click', () => {
-  const res = JSON.parse(exportScene(ctx, {}) as string) as { url?: string };
-  if (res.url) void navigator.clipboard?.writeText(res.url).catch(() => {});
+  const res = JSON.parse(exportScene(ctx, {}) as string) as { result?: { url?: string } };
+  if (res.result?.url) void navigator.clipboard?.writeText(res.result.url).catch(() => {});
   logInfo('Scene link copied to the clipboard — anyone can open it.');
 });
 

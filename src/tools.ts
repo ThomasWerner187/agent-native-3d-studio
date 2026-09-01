@@ -1139,8 +1139,7 @@ export async function importScene(ctx: ToolContext, args: Args): Promise<string>
     json = b64urlDecode(m[1]);
   }
   if (!json) return fail('Provide the exported json or a share url (with #scene=...).', 'bad_request');
-  // hash-driven boot imports run through the same path; only capture undo state when replacing a live scene
-  if (ctx.store.size > 0) ctx.snapshots.capture('before import');
+  // invoke() already captured the pre-import snapshot — no nested capture here
   const r = ctx.snapshots.importJson(json);
   if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');
   const target = new THREE.Vector3(...(JSON.parse(json).camera?.t ?? [0, 0.8, 0]));

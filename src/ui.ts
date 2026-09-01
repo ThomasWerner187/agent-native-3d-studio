@@ -126,9 +126,10 @@ function renderEntry(entry: LogEntry): HTMLElement {
     if (r) {
       try {
         const parsed = JSON.parse(r);
-        if (parsed.id) ids.push(parsed.id);
-        if (parsed.piece) ids.push(parsed.piece);
-        if (Array.isArray(parsed.results)) for (const sub of parsed.results) if (sub?.id) ids.push(sub.id);
+        const inner = (parsed.result ?? parsed) as Record<string, unknown>;
+        if (inner.id) ids.push(inner.id as string);
+        if (inner.piece) ids.push(inner.piece as string);
+        if (Array.isArray(inner.results)) for (const sub of inner.results as Record<string, unknown>[]) if (sub?.id) ids.push(sub.id as string);
       } catch { /* non-JSON */ }
     }
     if (ids.length) activityFx.highlight(ids, '#ff9a3c');

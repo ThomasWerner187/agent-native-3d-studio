@@ -1,12 +1,12 @@
 {
-  "at": "2026-09-01T20:05:27.804Z",
+  "at": "2026-09-01T20:19:20.086Z",
   "invocation": {
     "verified": 20,
     "total": 20
   },
   "behavior": {
-    "passed": 11,
-    "total": 11,
+    "passed": 12,
+    "total": 12,
     "checks": [
       {
         "name": "add_object increases contents",
@@ -62,6 +62,11 @@
         "name": "single undo rolls back whole batch",
         "pass": true,
         "detail": ""
+      },
+      {
+        "name": "stale expected_scene_version rejected",
+        "pass": true,
+        "detail": "\"Stale observation: you saw scene_version 5, but the scene is now NaN (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
       }
     ]
   }

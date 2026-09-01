@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { SceneStore } from './store';
 import type { Studio } from './scene';
 import { isObjectType, disposeObject } from './factory';
+import { LIGHTING_PRESETS } from './scene';
 
 /**
  * Reversibility: every mutating tool auto-captures a snapshot beforehand,
@@ -30,6 +31,8 @@ interface SerializedObject {
 interface SnapshotData {
   /** Export format version (present on imported/exported JSON). */
   v?: number;
+  schema_version?: number;
+  scene_version?: number;
   idCounter: number;
   version: number;
   lighting: { preset: string; intensity: number };
@@ -124,6 +127,21 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
   studio.controls.update();
 }
 
+/** Portable export schema. schema_version 2 is the current one. */
+const MAX_EXPORT_OBJECTS = 600;
+
+function migrateExport(raw: Record<string, unknown>): { ok: boolean; data?: SnapshotData; error?: string } {
+  const schema = raw.schema_version ?? (raw.v === 1 ? 1 : null);
+  if (schema === 1) {
+    // v1: { v:1, idCounter, version, lighting, camera, objects }
+    return { ok: true, data: { ...raw, v: 2, schema_version: 2 } as SnapshotData };
+  }
+  if (schema === 2 && Array.isArray(raw.objects)) {
+    return { ok: true, data: raw as unknown as SnapshotData };
+  }
+  return { ok: false, error: 'unsupported schema_version (expected 1 or 2)' };
+}
+
 export class SnapshotManager {
   private boot: Snapshot | null = null;
   private ring: Snapshot[] = [];
@@ -157,6 +175,20 @@ export class SnapshotManager {
     };
   }
 
+  /** Remove a snapshot without restoring it (failed/no-op transactions). */
+  discard(id: string): void {
+    this.ring = this.ring.filter((s) => s.id !== id);
+  }
+
+  /** Restore the newest snapshot WITHOUT popping it (atomic batch rollback). */
+  restoreLast(): boolean {
+    const snap = this.ring[this.ring.length - 1];
+    if (!snap) return false;
+    restore(this.store, this.studio, snap.data);
+    this.store.bump();
+    return true;
+  }
+
   /** Undo: restore and drop the most recent snapshot. */
   undo(): { ok: boolean; snapshot_id?: string; label?: string; error?: string } {
     const snap = this.ring.pop();
@@ -174,27 +206,61 @@ export class SnapshotManager {
     return true;
   }
 
-  /** Full scene as portable JSON (objects + camera + lighting + id counter). */
+  /** Full scene as portable JSON (objects + camera + lighting + versions). */
   exportJson(): string {
     const snap = serialize(this.store, this.studio);
-    return JSON.stringify({ v: 1, idCounter: snap.idCounter, lighting: snap.lighting, camera: snap.camera, objects: snap.objects });
+    return JSON.stringify({
+      schema_version: 2,
+      scene_version: snap.version,
+      id_counter: snap.idCounter,
+      lighting: snap.lighting,
+      camera: snap.camera,
+      objects: snap.objects,
+    });
   }
 
   /**
-   * Replace the scene with an exported JSON. Captures an undo snapshot
-   * first, so imports are as reversible as every other mutation.
+   * Replace the scene with an exported JSON. The payload is fully validated
+   * BEFORE the current scene is touched. Snapshot ownership: call with
+   * captureUndo=true only when no central invoke() layer already captured.
    */
-  importJson(json: string): { ok: boolean; restored?: number; error?: string } {
-    let data: SnapshotData;
+  importJson(json: string, opts: { captureUndo?: boolean } = {}): { ok: boolean; restored?: number; error?: string } {
+    if (json.length > 4_000_000) return { ok: false, error: 'payload too large (max 4 MB)' };
+    let raw: Record<string, unknown>;
     try {
-      data = JSON.parse(json) as SnapshotData;
+      raw = JSON.parse(json) as Record<string, unknown>;
     } catch {
       return { ok: false, error: 'not valid JSON' };
     }
-    if (!data || data.v !== 1 || !Array.isArray(data.objects)) {
-      return { ok: false, error: 'expected export format {"v":1,"objects":[...]}' };
+    const migrated = migrateExport(raw);
+    if (!migrated.ok) return { ok: false, error: migrated.error };
+    const data = migrated.data as SnapshotData;
+
+    // validate everything before destroying the live scene
+    if (!Array.isArray(data.objects) || data.objects.length > MAX_EXPORT_OBJECTS) {
+      return { ok: false, error: `objects must be an array with at most 600 entries` };
     }
-    this.capture('before import');
+    const presets = LIGHTING_PRESETS as readonly string[];
+    if (data.lighting && !presets.includes(data.lighting.preset)) {
+      return { ok: false, error: `unknown lighting preset "${data.lighting.preset}"` };
+    }
+    if (data.camera) {
+      const c = data.camera;
+      if (![c.p, c.t].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n))) || !Number.isFinite(c.fov)) {
+        return { ok: false, error: 'camera must be {p:[x,y,z], t:[x,y,z], fov:number}' };
+      }
+    }
+    for (const o of data.objects) {
+      if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${o.type}"` };
+      if (![o.p, o.s].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n)))) {
+        return { ok: false, error: `object "${o.id}" has a malformed pose/scale` };
+      }
+      if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.01 || n > 10)) {
+        return { ok: false, error: `object "${o.id}" out of bounds` };
+      }
+    }
+
+    if (opts.captureUndo) this.capture('before import');
     restore(this.store, this.studio, data);
     this.store.bump();
     return { ok: true, restored: data.objects.length };

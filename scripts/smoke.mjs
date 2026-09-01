@@ -62,13 +62,13 @@ try {
     r.delete_objects = await window.__call('delete_objects', { name_contains: 'smoke tree' });
     const board = await window.__call('add_object', { type: 'chessboard', name: 'smoke board' });
     const piece = await window.__call('add_object', { type: 'chess_piece', piece: 'king', side: 'white', name: 'smoke king' });
-    r.board_square = await window.__call('board_square', { square: 'e4', board: board.id });
-    r.chess_move = await window.__call('chess_move', { piece: piece.id, to: 'e4', camera: 'hero' });
+    r.board_square = await window.__call('board_square', { square: 'e4', board: board.result.id });
+    r.chess_move = await window.__call('chess_move', { piece: piece.result.id, to: 'e4', camera: 'hero' });
     r.set_music = await window.__call('set_music', { on: false });
     r.snapshot = await window.__call('snapshot', { label: 'smoke' });
     r.undo = await window.__call('undo', {});
     r.export_scene = await window.__call('export_scene', {});
-    const url = r.export_scene.url;
+    const url = r.export_scene.result?.url ?? '';
     r.import_scene = await window.__call('import_scene', { url });
     r.batch = await window.__call('batch', {
       ops: [
@@ -124,25 +124,26 @@ try {
   await badPage2.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
   const run = (tool, args) => badPage2.evaluate(([t, a]) => window.__tool(t, a), [tool, args]);
   const j = (raw) => JSON.parse(raw);
-  const describe = async () => j(await run('describe_scene', {}));
+  const describe = async () => (j(await run('describe_scene', {})).result ?? {});
 
   // add_object really adds + places where asked
   const d0 = await describe();
   const add = j(await run('add_object', { type: 'box', name: 'behavior box', position: { x: 3, z: 3 } }));
+  const addId = add.result?.id;
   const d1 = await describe();
   check('add_object increases contents', d1.object_count === d0.object_count + 1);
-  const q1 = j(await run('query_scene', { id_or_name: add.id, fields: ['pose'] }));
+  const q1 = (j(await run('query_scene', { id_or_name: addId, fields: ['pose'] })).result ?? {});
   const pose = q1.objects?.[0]?.pose;
   check('add_object lands at requested position', !!pose && Math.abs(pose.p[0] - 3) < 0.01 && Math.abs(pose.p[2] - 3) < 0.01, JSON.stringify(pose));
 
   // transform moves the live object
-  await run('transform_object', { targets: add.id, op: 'move', mode: 'absolute', x: -2, z: 5 });
-  const q2 = j(await run('query_scene', { id_or_name: add.id, fields: ['pose'] }));
+  await run('transform_object', { targets: addId, op: 'move', mode: 'absolute', x: -2, z: 5 });
+  const q2 = (j(await run('query_scene', { id_or_name: addId, fields: ['pose'] })).result ?? {});
   check('transform_object moves live position', Math.abs(q2.objects?.[0]?.pose.p[0] - -2) < 0.01 && Math.abs(q2.objects?.[0]?.pose.p[2] - 5) < 0.01, JSON.stringify(q2.objects?.[0]?.pose));
 
   // set_material changes material state
-  await run('set_material', { targets: add.id, color: '#88aaff' });
-  const q3 = j(await run('query_scene', { id_or_name: add.id, fields: ['material'] }));
+  await run('set_material', { targets: addId, color: '#88aaff' });
+  const q3 = (j(await run('query_scene', { id_or_name: addId, fields: ['material'] })).result ?? {});
   check('set_material changes material', (q3.objects?.[0]?.material?.color ?? '').toLowerCase() === '#88aaff', JSON.stringify(q3.objects?.[0]?.material));
 
   // set_lighting changes preset
@@ -151,19 +152,20 @@ try {
   check('set_lighting changes preset', d2.lighting?.preset === 'night_neon', d2.lighting?.preset);
 
   // delete removes exactly the target; undo restores it
-  await run('delete_objects', { targets: add.id });
+  await run('delete_objects', { targets: addId });
   const d3 = await describe();
-  const gone = j(await run('query_scene', { id_or_name: add.id }));
+  const gone = j(await run('query_scene', { id_or_name: addId }));
   check('delete_objects removes the target', d3.object_count === d0.object_count && gone.ok === false);
   await run('undo', {});
   const d4 = await describe();
-  const back = j(await run('query_scene', { id_or_name: add.id }));
+  const back = j(await run('query_scene', { id_or_name: addId }));
   check('undo restores deleted object', d4.object_count === d1.object_count && back.ok === true);
 
   // export/import round-trips the same scene
   const exp = j(await run('export_scene', {}));
+  const shareUrl = exp.result?.url;
   const beforeRoundtrip = await describe();
-  const imp = j(await run('import_scene', { url: exp.url ?? '' }));
+  const imp = j(await run('import_scene', { url: shareUrl ?? '' }));
   const afterImport = await describe();
   check('export/import round-trips scene', imp.ok === true && afterImport.object_count === beforeRoundtrip.object_count);
 
@@ -182,10 +184,16 @@ try {
     { tool: 'set_lighting', args: { preset: 'moonlit' } },
   ]}));
   const mid = await describe();
-  check('batch applies as one', b.ok === true && b.failed === 0 && mid.object_count === pre.object_count + 1 && mid.lighting?.preset === 'moonlit');
+  check('batch applies as one', b.ok === true && b.result?.failed === 0 && mid.object_count === pre.object_count + 1 && mid.lighting?.preset === 'moonlit');
   await run('undo', {});
   const post = await describe();
   check('single undo rolls back whole batch', post.object_count === pre.object_count && post.lighting?.preset === pre.lighting?.preset);
+
+  // optimistic concurrency: stale expected version is rejected, scene untouched
+  const cur = await describe();
+  const stale = j(await run('transform_object', { targets: cur.objects?.[0]?.id, op: 'move', x: 1, expected_scene_version: cur.scene_version + 5 }));
+  const afterStale = await describe();
+  check('stale expected_scene_version rejected', stale.ok === false && stale.code === 'stale_scene' && afterStale.version === cur.version, JSON.stringify(stale.error ?? ''));
 
   const passCount = behavioral.filter((b2) => b2.pass).length;
   console.log(`\n[behavior] ${passCount}/${behavioral.length} semantic checks passed`);

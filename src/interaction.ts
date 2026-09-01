@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import type { SceneStore } from './store';
-import { despawn } from './anim';
+import { despawn, cancelGroup } from './anim';
 
 /**
  * Mouse interaction: orbit (OrbitControls), click-to-select, drag-to-move.
@@ -69,6 +69,10 @@ export class Interaction {
     if (this.dragging && this.downHitId) {
       const entry = this.store.get(this.downHitId);
       if (!entry) return;
+      // human takeover: cancel any in-flight agent tween for THIS object
+      cancelGroup(`pos:${entry.group.uuid}`);
+      cancelGroup(`rot:${entry.group.uuid}`);
+      cancelGroup(`scale:${entry.group.uuid}`);
       if (!this.dragGlowDone) {
         this.dragGlowDone = true;
         this.studio.highlightObjects([entry.id], '#3ca8ff'); // human edits glow blue

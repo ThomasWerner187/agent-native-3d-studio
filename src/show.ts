@@ -215,7 +215,7 @@ export class AgentShow {
       const exported = await this.step('export_scene', {});
       if (this.cancelled) return;
       try {
-        const url = exported ? (JSON.parse(exported) as { url?: string }).url : null;
+        const url = exported ? ((JSON.parse(exported) as { result?: { url?: string } }).result?.url ?? null) : null;
         if (url) await this.step('import_scene', { url });
       } catch { /* signature stays as-is if the roundtrip fails */ }
       this.deps.armOrbit();

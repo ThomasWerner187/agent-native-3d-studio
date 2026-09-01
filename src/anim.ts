@@ -248,3 +248,9 @@ export function holdCamera(ms: number): void {
 export function cancelCameraTween(): void {
   cancelGroup('camera');
 }
+
+/** Abort propagation: cancel every in-flight tool tween (camera, moves, pops). */
+export function cancelAllToolTweens(): void {
+  const groups = new Set(tweens.map((t) => t.group).filter((g): g is string => !!g));
+  for (const g of groups) cancelGroup(g);
+}

@@ -7,6 +7,7 @@ import {
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
+import { cancelAllToolTweens } from './anim';
 
 /**
  * Registration of the studio tools via the WebMCP imperative API:
@@ -579,12 +580,22 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
     }
   }
 
-  return ok(ctx, {
+  // atomic: any failed operation rolls the whole batch back (one snapshot)
+  const status = failed > 0 ? 'rolled_back' : 'applied';
+  if (failed > 0) ctx.snapshots.restoreLast();
+  const payload: Record<string, unknown> = {
     operations: ops.length,
     failed,
+    transaction_status: status,
     results,
-    note: failed ? `${failed} of ${ops.length} operations failed — see results.` : `All ${ops.length} operations applied. undo rolls the whole batch back.`,
-  });
+    note: status === 'rolled_back'
+      ? `${failed} of ${ops.length} operations failed — the batch was rolled back atomically; the scene is unchanged.`
+      : `All ${ops.length} operations applied. undo rolls the whole batch back.`,
+  };
+  if (failed > 0) {
+    return JSON.stringify({ ok: false, code: 'batch_rolled_back', transaction_status: status, ...payload });
+  }
+  return ok(ctx, payload);
 }
 
 const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
@@ -592,15 +603,80 @@ const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name))
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
 
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
-async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger): Promise<string> {
+async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal): Promise<string> {
   ctx.studio.noteActivity();
+  const t0 = performance.now();
+  const versionBefore = ctx.store.version;
+  const isMutating = MUTATING.has(def.name);
+
+  // optimistic concurrency: reject stale plans before touching the scene
+  const expected = args?.expected_scene_version;
+  if (isMutating && expected != null) {
+    const exp = Number(expected);
+    if (Number.isFinite(exp) && exp !== ctx.store.version) {
+      const result = JSON.stringify({
+        ok: false, code: 'stale_scene',
+        error: `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
+        expected_scene_version: exp, actual_scene_version: ctx.store.version,
+      });
+      log(def.name, args ?? {}, result);
+      return result;
+    }
+  }
+
+  // exactly one snapshot per logical transaction, taken here (central ownership)
+  const snapId = isMutating ? ctx.snapshots.capture(`before ${def.name}`) : null;
+
+  if (signal?.aborted) {
+    if (snapId) ctx.snapshots.discard(snapId);
+    const result = JSON.stringify({ ok: false, code: 'cancelled', error: 'Cancelled before it started.', applied: false });
+    log(def.name, args ?? {}, result);
+    return result;
+  }
+  const onAbort = () => cancelAllToolTweens();
+  signal?.addEventListener('abort', onAbort, { once: true });
+
   let result: string;
   try {
-    if (MUTATING.has(def.name)) ctx.snapshots.capture(`before ${def.name}`);
     result = await def.run(ctx, args ?? {});
   } catch (e) {
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
   }
+
+  // uniform operation envelope: every invocation reports the same metadata
+  let data: Record<string, unknown> = {};
+  try {
+    data = JSON.parse(result) as Record<string, unknown>;
+  } catch {
+    data = { ok: true, raw: result };
+  }
+  const ok = data.ok !== false;
+  if (signal?.aborted && ok) {
+    // the run finished, but cancellation arrived mid-flight: report honestly
+    data = { ...data, applied: false, cancelled: true };
+  }
+  if (!ok && snapId) ctx.snapshots.discard(snapId); // failed calls leave no undo noise
+
+  const envelope: Record<string, unknown> = {
+    ok,
+    operation_id: typeof data.operation_id === 'string' ? data.operation_id : undefined,
+    actor: 'agent',
+    scene_version_before: versionBefore,
+    scene_version_after: ctx.store.version,
+    applied: (data.applied as boolean) ?? ok,
+    duration_ms: Math.round(performance.now() - t0),
+  };
+  delete data.operation_id;
+  delete data.applied;
+  if (ok) {
+    envelope.result = data;
+  } else {
+    envelope.code = data.code ?? 'internal_error';
+    envelope.error = data.error ?? 'operation failed';
+  }
+  result = JSON.stringify(envelope);
   log(def.name, args ?? {}, result);
   return result;
 }
@@ -625,8 +701,7 @@ export async function registerTools(ctx: ToolContext, log: ToolLogger): Promise<
           inputSchema: def.inputSchema,
           ...(def.annotations ? { annotations: def.annotations } : {}),
           execute: async (input, execCtx) => {
-            void execCtx;
-            return invoke(ctx, def, input ?? {}, log);
+            return invoke(ctx, def, input ?? {}, log, execCtx?.signal);
           },
         },
         { signal: controller.signal },
