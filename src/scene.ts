@@ -30,7 +30,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   golden_hour: {
     background: '#eec48f',
     skyTop: '#8fa8c4',
-    fog: ['#eec48f', 26, 58],
+    fog: ['#eec48f', 24, 48],
     sun: { color: '#ffb070', intensity: 3.6, position: [18, 9, 8] },
     hemi: { sky: '#ffd9b0', ground: '#8a6f5a', intensity: 0.85 },
     ambient: { color: '#fff0dd', intensity: 0.35 },
@@ -38,7 +38,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   night_neon: {
     background: '#161c30',
     skyTop: '#0a0f1e',
-    fog: ['#161c30', 18, 46],
+    fog: ['#161c30', 18, 42],
     sun: { color: '#7f9fff', intensity: 0.5, position: [-12, 14, -8] },
     hemi: { sky: '#33406e', ground: '#0e1220', intensity: 0.4 },
     ambient: { color: '#2a3354', intensity: 0.3 },
@@ -50,7 +50,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   studio: {
     background: '#ddd6ca',
     skyTop: '#e9e4da',
-    fog: ['#ddd6ca', 34, 70],
+    fog: ['#ddd6ca', 30, 46],
     sun: { color: '#ffffff', intensity: 2.6, position: [10, 16, 10] },
     hemi: { sky: '#ffffff', ground: '#b8ada0', intensity: 0.9 },
     ambient: { color: '#ffffff', intensity: 0.5 },
@@ -58,7 +58,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   overcast: {
     background: '#b6b2aa',
     skyTop: '#a3a09a',
-    fog: ['#b6b2aa', 22, 54],
+    fog: ['#b6b2aa', 20, 44],
     sun: { color: '#d9d4c8', intensity: 1.3, position: [8, 18, 4] },
     hemi: { sky: '#cfcabe', ground: '#8f887c', intensity: 0.95 },
     ambient: { color: '#d8d3c8', intensity: 0.55 },
@@ -66,7 +66,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   moonlit: {
     background: '#1a2338',
     skyTop: '#0d1524',
-    fog: ['#1a2338', 16, 44],
+    fog: ['#1a2338', 16, 40],
     sun: { color: '#a9c4ff', intensity: 1.0, position: [-14, 12, -6] },
     hemi: { sky: '#46598c', ground: '#1a2030', intensity: 0.35 },
     ambient: { color: '#26304d', intensity: 0.32 },
@@ -130,7 +130,7 @@ export class Studio {
     this.scene.background = this.skyTexture;
 
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 300);
-    this.camera.position.set(8.6, 4.8, 10.6);
+    this.camera.position.set(6.4, 3.0, 7.6);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.set(0, 0.8, 0);

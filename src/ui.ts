@@ -102,13 +102,18 @@ function renderEntry(entry: LogEntry): HTMLElement {
   if (entry.args && Object.keys(entry.args).length > 0) {
     const args = document.createElement('div');
     args.className = 'log-args';
-    args.textContent = compactJson(entry.args);
+    // No truncation here: the details view exists to hold the full payload.
+    try {
+      args.textContent = JSON.stringify(entry.args);
+    } catch {
+      args.textContent = compactJson(entry.args);
+    }
     raw.appendChild(args);
   }
   if (entry.result != null) {
     const res = document.createElement('div');
     res.className = 'log-result';
-    res.textContent = firstLine(entry.result);
+    res.textContent = entry.result;
     raw.appendChild(res);
   }
   div.appendChild(raw);

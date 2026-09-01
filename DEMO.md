@@ -6,7 +6,8 @@ Material for the 3-minute submission video and live demos. Beat sheet per submis
 
 | Time | Shot | Action / narration |
 |------|------|--------------------|
-| 0:00–0:20 | **The problem.** Open DevTools → Elements. Hover the canvas. | “This is what an agent sees when it opens a 3D tool: one empty `<canvas>`. No DOM, no buttons, nothing to scrape. Every object, every light lives in the scene graph — invisible.” |
+| 0:00–0:15 | **The hook.** Press **“▶ Watch the agent build”**. | “This is an agent building a world — through 20 structured tools, while I keep the mouse.” Tool log fills with real calls: batch-planted avenue, golden hour, lofi, cinematic camera flight. Grab the camera mid-show: “Human took control” — that's the collaboration. |
+| 0:15–0:30 | **The problem.** Open DevTools → Elements. Hover the canvas. | “This is what an agent sees when it opens a 3D tool: one empty `<canvas>`. No DOM, no buttons, nothing to scrape. Every object, every light lives in the scene graph — invisible. Without WebMCP this app isn't slow for an agent — it's closed.” |
 | 0:20–1:20 | **The collaboration.** Inspector open next to the studio. Prompt: *“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area. Make it evening.”* | Objects pop in while you talk. Then — while the agent is still calling tools — **grab the camera and drag an object with the mouse.** Say: “The agent works through WebMCP tools on the live scene. My mouse never stops working. We're two users on one state.” |
 | 1:20–2:10 | **The proof.** Prompt: *“Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.”* Orbit the camera during the staggered spawn. | “Forty trees, exclusion zones respected. This takes twenty minutes by hand — and by hand is the ONLY other way, because a canvas is unreachable for agents.” |
 | 2:10–2:40 | **Trust & transparency.** Show the Tool Log panel, then `chrome://webmcp-internals` or the Inspector's tool list. Call `describe_scene` and point at the JSON. Click ↺ (reset) after an agent mistake — or `undo`. | “Every call is visible to the user. Every mutation is reversible. Agents report only after the scene actually settled — scene_version and operation_id included.” |
@@ -78,7 +79,7 @@ it read the `getTools()` listing. Fix shipped: every tool description now ends
 with the exact invocation recipe (all within the 500-char budget).
 
 **How to re-run the timed test (~30 s of setup):**
-1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 17 tools").
+1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 20 tools").
 2. Open the ChatGPT sidebar → New chat.
 3. Paste and send:
    > Drive the 3D scene in the current browser tab using its WebMCP tools. Steps:
@@ -94,3 +95,12 @@ with the exact invocation recipe (all within the 500-char budget).
 > run? (2) The tool descriptions each end with a call recipe now — did you see and
 > use it? (3) What single page change would cut your time-to-first-successful-call
 > the most?
+
+## Current feature showcase (20 tools — smoke-verified 20/20 via `npm run smoke`)
+
+- **Watch the agent build** (button): the curated 25 s show — best first beat, zero setup.
+- **batch**: whole setups in one call — "the measured lesson: turns are the bottleneck, not the scene".
+- **export_scene / ⧉ button**: scene becomes a share link that opens for anyone, no WebMCP — persistence without a backend.
+- **chess_move + board_square**: agent-vs-itself chess with follow/hero cameras — the most surprising beat.
+- **set_music**: three self-made Suno tracks; "…and put some lofi on" lands every time.
+- Full tool smoke test: `npm run smoke` → `20/20 tools verified` (`scripts/smoke-result.json`, CI runs it on every push).

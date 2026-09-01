@@ -116,7 +116,7 @@ Design decisions worth calling out (all learned from live agent testing):
 - **Experimental browser API.** WebMCP needs Chrome 149+ with `chrome://flags/#enable-webmcp-testing`; other browsers get the mouse-only experience with an honest status chip.
 - **One flat meadow.** The ground is a circle at y=0 — no terrain, physics, or water. `exclusion_zones` are axis-aligned rectangles.
 - **The scene doesn't play chess.** There is no rules engine: pieces are objects, `board_square` is geometry only. Legal-move knowledge lives in the agent (LLMs know chess); nothing stops an illegal move except the agent itself.
-- **No persistence.** A reload resets to the curated starter scene (deliberately: stateless demo, and `undo`/`snapshot` cover within-session reversibility).
+- **Persistence is the share link.** `export_scene` packs the whole scene into a `#scene=...` URL — that link IS the save file, and `import_scene` restores it (undo-safe). A plain reload still resets to the starter scene; server-side accounts are deliberately out of scope.
 - **Material edits are object-wide.** `set_material` re-tints all parts of a preset; per-part editing (e.g. only the trunk) is not exposed.
 - **Scene size is bounded** (radius ≈ 60, 200 instances per scatter). `describe_scene` truncates its object list at 40 by design — use `query_scene` for the full paginated listing (up to 200/page).
 - **`camera_path` loops are capped** at 3 repetitions / 90 s so a runaway agent can't hold the camera hostage; grabbing the camera always wins.

@@ -542,7 +542,9 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
   if (ops.length < 1 || ops.length > 12) return fail('ops must contain 1-12 operations.');
 
   ctx.studio.noteActivity();
-  ctx.snapshots.capture('before batch');
+  // No extra snapshot here — batch is a mutating tool, so invoke() already
+  // captured one for the whole batch. Two snapshots would make the first
+  // undo a no-op.
 
   const results: Record<string, unknown>[] = [];
   let failed = 0;

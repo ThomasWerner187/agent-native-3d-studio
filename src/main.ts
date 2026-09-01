@@ -80,14 +80,20 @@ snapshots.captureBoot();
 {
   const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
   if (m) {
-    const r = snapshots.importJson(atobUrlSafe(m[1]));
-    history.replaceState(null, '', location.pathname + location.search);
-    if (r.ok) {
-      logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
-      snapshots.captureBoot(); // the shared state becomes the new reset baseline
-    } else {
-      logInfo(`Share link could not be restored: ${r.error}`);
+    // A truncated/edited link must never take the page down — fall back to
+    // the default scene instead.
+    try {
+      const r = snapshots.importJson(atobUrlSafe(m[1]));
+      if (r.ok) {
+        logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
+        snapshots.captureBoot(); // the shared state becomes the new reset baseline
+      } else {
+        logInfo(`Share link could not be restored: ${r.error}`);
+      }
+    } catch {
+      logInfo('Share link was corrupted — showing the default scene instead.');
     }
+    history.replaceState(null, '', location.pathname + location.search);
   }
 }
 
