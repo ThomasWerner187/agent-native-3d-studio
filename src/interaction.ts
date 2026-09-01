@@ -20,6 +20,7 @@ export class Interaction {
   private downAt: { x: number; y: number } | null = null;
   private downHitId: string | null = null;
   private dragging = false;
+  private dragGlowDone = false;
 
   constructor(
     private studio: Studio,
@@ -68,6 +69,10 @@ export class Interaction {
     if (this.dragging && this.downHitId) {
       const entry = this.store.get(this.downHitId);
       if (!entry) return;
+      if (!this.dragGlowDone) {
+        this.dragGlowDone = true;
+        this.studio.highlightObjects([entry.id], '#3ca8ff'); // human edits glow blue
+      }
       const rect = this.studio.renderer.domElement.getBoundingClientRect();
       this.pointer.set(
         ((ev.clientX - rect.left) / rect.width) * 2 - 1,
@@ -97,6 +102,7 @@ export class Interaction {
         else this.select(null);
       }
     }
+    this.dragGlowDone = false;
     this.downAt = null;
     this.downHitId = null;
   }

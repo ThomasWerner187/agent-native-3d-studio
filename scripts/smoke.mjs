@@ -19,7 +19,12 @@ await new Promise((r) => setTimeout(r, 1600));
 let failures = 0;
 const checked = [];
 try {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  let browser;
+  try {
+    browser = await chromium.launch({ channel: 'chrome', headless: true });
+  } catch {
+    browser = await chromium.launch({ headless: true }); // CI: bundled chromium
+  }
   const page = await browser.newPage();
   await page.goto(`${BASE}/?agent=1`);
   await page.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
@@ -98,5 +103,9 @@ try {
   console.error('SMOKE FAILED:', e.message);
   process.exitCode = 1;
 } finally {
-  process.kill(-server.pid);
+  try {
+    process.kill(-server.pid);
+  } catch {
+    /* preview already gone (ESRCH) — nothing to clean up */
+  }
 }

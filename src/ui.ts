@@ -16,6 +16,44 @@ interface LogEntry {
 const MAX_ENTRIES = 100;
 const entries: LogEntry[] = [];
 
+/** Visual effects the log can trigger (wired in main.ts): object glows. */
+export interface ActivityFx {
+  highlight(ids: string[], color: string): void;
+}
+let activityFx: ActivityFx | null = null;
+export function registerActivityFx(fx: ActivityFx): void {
+  activityFx = fx;
+}
+
+/** Human-readable story line for a tool call — the raw JSON stays expandable. */
+function activityLine(tool: string, args: Record<string, unknown>, result?: string): string {
+  const targets = typeof args.targets === 'string' ? args.targets : Array.isArray(args.targets) ? `${args.targets.length} objects` : 'objects';
+  switch (tool) {
+    case 'help': return '📖 Reading the studio playbook';
+    case 'describe_scene': return '👀 Inspecting the scene';
+    case 'query_scene': return '🔍 Looking closer at the objects';
+    case 'add_object': return `➕ Placing ${args.name ? `“${args.name}”` : `a ${args.type}`}`;
+    case 'transform_object': return `↔️ Moving ${targets}`;
+    case 'set_material': return `🎨 Recoloring ${targets}`;
+    case 'set_lighting': return `🌇 Setting the mood: ${args.preset ?? 'custom'}`;
+    case 'frame_camera': return `🎬 Framing ${args.target ?? 'scene'} (${args.angle ?? 'default'})`;
+    case 'camera_path': return `🎥 Directing a camera flight`;
+    case 'scatter': return `🌿 Planting ${args.count} ${args.type}s`;
+    case 'set_ui': return args.visible === false ? '🎞 Hiding the HUD for a clean shot' : '🎞 Bringing the HUD back';
+    case 'delete_objects': return '🗑 Clearing objects away';
+    case 'board_square': return `♟ Asking the board where ${String(args.square ?? '').toUpperCase()} is`;
+    case 'chess_move': return `♟ Playing ${args.piece ?? 'piece'} → ${String(args.to ?? '').toUpperCase()}`;
+    case 'set_music': return args.on === false ? '🎵 Turning the lofi off' : '🎵 Putting lofi on';
+    case 'snapshot': return '💾 Saving a restore point';
+    case 'undo': return '⏪ Stepping one move back';
+    case 'export_scene': return '🔗 Packaging the scene as a share link';
+    case 'import_scene': return '📥 Restoring a shared scene';
+    case 'batch': return `⚡ Running ${Array.isArray(args.ops) ? args.ops.length : '?'} steps as one`;
+    case 'reset': return '↺ Restoring the original scene';
+    default: return `⚙ ${tool}`;
+  }
+}
+
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
   if (!e) throw new Error(`missing #${id}`);
@@ -46,21 +84,48 @@ function renderEntry(entry: LogEntry): HTMLElement {
     div.innerHTML = `<div class="log-result">${firstLine(entry.result ?? '', 300)}</div>`;
     return div;
   }
+  // Story line first; raw args/result stay expandable for debugging.
   const head = document.createElement('div');
   head.className = 'log-head';
-  head.innerHTML = `<span class="dot"></span><span class="t">${fmtTime(entry.time)}</span><span>${entry.tool}()</span>`;
+  head.innerHTML = `<span class="dot"></span><span class="t">${fmtTime(entry.time)}</span>`;
+  const story = document.createElement('span');
+  story.className = 'story';
+  story.textContent = activityLine(entry.tool, entry.args ?? {}, entry.result);
+  head.appendChild(story);
   div.appendChild(head);
+
+  const raw = document.createElement('details');
+  raw.className = 'log-raw';
+  const summary = document.createElement('summary');
+  summary.textContent = `${entry.tool}()`;
+  raw.appendChild(summary);
   if (entry.args && Object.keys(entry.args).length > 0) {
     const args = document.createElement('div');
     args.className = 'log-args';
     args.textContent = compactJson(entry.args);
-    div.appendChild(args);
+    raw.appendChild(args);
   }
   if (entry.result != null) {
     const res = document.createElement('div');
     res.className = 'log-result';
     res.textContent = firstLine(entry.result);
-    div.appendChild(res);
+    raw.appendChild(res);
+  }
+  div.appendChild(raw);
+
+  // Orange glow on the objects this call created/moved (agent = orange).
+  if (activityFx && entry.ok !== false) {
+    const ids: string[] = [];
+    const r = entry.result;
+    if (r) {
+      try {
+        const parsed = JSON.parse(r);
+        if (parsed.id) ids.push(parsed.id);
+        if (parsed.piece) ids.push(parsed.piece);
+        if (Array.isArray(parsed.results)) for (const sub of parsed.results) if (sub?.id) ids.push(sub.id);
+      } catch { /* non-JSON */ }
+    }
+    if (ids.length) activityFx.highlight(ids, '#ff9a3c');
   }
   return div;
 }

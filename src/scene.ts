@@ -158,6 +158,8 @@ export class Studio {
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 90;
     this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.radius = 4;
+    this.sun.shadow.blurSamples = 12;
     this.sun.shadow.normalBias = 0.02;
 
     this.accentGroup = new THREE.Group();
@@ -173,10 +175,123 @@ export class Studio {
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
+    this.buildAmbientLife();
+
+    // The studio can tell the HUD when the human grabs the camera.
+    this.controls.addEventListener('start', () => this.onHumanGrab?.());
+
     window.addEventListener('resize', () => this.onResize());
 
     this.renderer.setAnimationLoop(() => this.frame());
   }
+
+  /** Set by main.ts — fired when the user starts dragging/zooming. */
+  onHumanGrab?: () => void;
+
+  private fireflies: THREE.Points | null = null;
+  private fireflyPhase: number[] = [];
+
+  /**
+   * Decorative-only life: grass tufts, flowers and fireflies. These are NOT
+   * scene objects (never targeted by tools) — pure art direction.
+   */
+  private buildAmbientLife(): void {
+    const dummy = new THREE.Object3D();
+    const inMeadow = (r = 34) => {
+      const a = Math.random() * Math.PI * 2;
+      const rad = 3.5 + Math.sqrt(Math.random()) * r;
+      return [Math.cos(a) * rad, Math.sin(a) * rad] as const;
+    };
+
+    // Grass tufts — small cones with per-instance tint/height variation.
+    const tuftGeo = new THREE.ConeGeometry(0.09, 0.34, 5);
+    tuftGeo.translate(0, 0.17, 0);
+    const tuftMat = new THREE.MeshStandardMaterial({ color: '#6f8a5e', roughness: 0.95 });
+    const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, 420);
+    tufts.receiveShadow = true;
+    const tuftColor = new THREE.Color();
+    for (let i = 0; i < 420; i++) {
+      const [x, z] = inMeadow();
+      dummy.position.set(x, 0, z);
+      dummy.rotation.set((Math.random() - 0.5) * 0.35, Math.random() * Math.PI, (Math.random() - 0.5) * 0.35);
+      dummy.scale.setScalar(0.7 + Math.random() * 0.9);
+      dummy.updateMatrix();
+      tufts.setMatrixAt(i, dummy.matrix);
+      tuftColor.setHSL(0.26 + Math.random() * 0.05, 0.3 + Math.random() * 0.15, 0.32 + Math.random() * 0.12);
+      tufts.setColorAt(i, tuftColor);
+    }
+    this.scene.add(tufts);
+
+    // Flowers — tiny stems with warm accent heads.
+    const headGeo = new THREE.SphereGeometry(0.055, 8, 6);
+    const headMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
+    const heads = new THREE.InstancedMesh(headGeo, headMat, 64);
+    const accents = ['#e8b74f', '#d97f6a', '#b8a5d9', '#f0f0e4'];
+    for (let i = 0; i < 64; i++) {
+      const [x, z] = inMeadow(26);
+      const h = 0.16 + Math.random() * 0.14;
+      dummy.position.set(x, h, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(0.7 + Math.random() * 0.7);
+      dummy.updateMatrix();
+      heads.setMatrixAt(i, dummy.matrix);
+      tuftColor.set(accents[i % accents.length]);
+      heads.setColorAt(i, tuftColor);
+    }
+    this.scene.add(heads);
+
+    // Fireflies — additive points that float; brightest at night.
+    const N = 64;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const [x, z] = inMeadow(14);
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = 0.5 + Math.random() * 2.2;
+      pos[i * 3 + 2] = z;
+      this.fireflyPhase.push(Math.random() * Math.PI * 2);
+    }
+    const ffGeo = new THREE.BufferGeometry();
+    ffGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const ffMat = new THREE.PointsMaterial({
+      color: '#ffd27f', size: 0.09, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+    });
+    this.fireflies = new THREE.Points(ffGeo, ffMat);
+    this.scene.add(this.fireflies);
+  }
+
+  /** Pulse objects with an emissive tint — orange for agent, blue for human. */
+  highlightObjects(ids: string[], color = '#ff9a3c'): void {
+    for (const id of ids) {
+      const entry = this.highlightLookup(id);
+      if (!entry) continue;
+      for (const mat of entry.materials) {
+        const target = new THREE.Color(color);
+        const from = mat.emissive.clone();
+        const baseI = mat.emissiveIntensity;
+        mat.emissiveIntensity = 1;
+        tween({
+          dur: 900,
+          update: (k) => {
+            // up fast, fade slow
+            const pulse = k < 0.25 ? k / 0.25 : 1 - (k - 0.25) / 0.75;
+            mat.emissive.copy(from).lerp(target, 0.85 * pulse);
+          },
+          done: () => {
+            mat.emissive.copy(from);
+            mat.emissiveIntensity = baseI;
+          },
+        });
+      }
+    }
+  }
+
+  private highlightLookup(id: string): { materials: THREE.MeshStandardMaterial[] } | null {
+    return this.highlightFind?.(id) ?? null;
+  }
+
+  /** Set by main.ts — looks up a store entry without importing the store here. */
+  highlightFind: ((id: string) => { materials: THREE.MeshStandardMaterial[] } | null) | null = null;
 
   onFrame(cb: (dt: number) => void): void {
     this.frameCallbacks.push(cb);
@@ -187,8 +302,27 @@ export class Studio {
     const dt = this.clock.getDelta();
     for (const cb of this.frameCallbacks) cb(dt);
     this.updateIdleOrbit(dt);
+    this.updateFireflies(dt);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private fireflyTime = 0;
+  private updateFireflies(dt: number): void {
+    const ff = this.fireflies;
+    if (!ff) return;
+    this.fireflyTime += dt;
+    const t = this.fireflyTime;
+    const pos = ff.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < this.fireflyPhase.length; i++) {
+      pos.setY(i, pos.getY(i) + Math.sin(t * 0.9 + this.fireflyPhase[i]) * 0.0022);
+      pos.setX(i, pos.getX(i) + Math.cos(t * 0.5 + this.fireflyPhase[i]) * 0.0016);
+    }
+    pos.needsUpdate = true;
+    const night = this.currentPreset === 'night_neon' || this.currentPreset === 'moonlit';
+    const mat = ff.material as THREE.PointsMaterial;
+    mat.opacity += ((night ? 0.95 : 0.22) - mat.opacity) * 0.02;
+    mat.size = night ? 0.13 : 0.08;
   }
 
   /** Slow cinematic drift after 25 s of nothing — lowest camera authority. */
@@ -337,6 +471,29 @@ function makeGroundTexture(): THREE.CanvasTexture {
     g.fillStyle = light ? 'rgba(196, 205, 160, 0.05)' : 'rgba(74, 88, 60, 0.05)';
     g.beginPath();
     g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  // grass tufts: short directional strokes in two greens — reads as a meadow,
+  // not a painted circle
+  for (let i = 0; i < 900; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const len = 2 + Math.random() * 5;
+    const ang = Math.random() * Math.PI;
+    g.strokeStyle = Math.random() > 0.5 ? 'rgba(120, 138, 88, 0.16)' : 'rgba(66, 80, 52, 0.16)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len - len * 0.4);
+    g.stroke();
+  }
+  // a handful of soft clover patches for rhythm
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    g.fillStyle = 'rgba(88, 104, 66, 0.08)';
+    g.beginPath();
+    g.arc(x, y, 5 + Math.random() * 9, 0, Math.PI * 2);
     g.fill();
   }
   const tex = new THREE.CanvasTexture(c);

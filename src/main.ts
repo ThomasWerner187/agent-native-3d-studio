@@ -5,10 +5,12 @@ import { Interaction } from './interaction';
 import { SnapshotManager } from './snapshot';
 import { registerTools, dispatchTool } from './webmcp';
 import type { ToolContext } from './tools';
-import { initChrome, logToolCall, logInfo, setStatus } from './ui';
+import { initChrome, logToolCall, logInfo, setStatus, toast, registerActivityFx } from './ui';
 import { initDevAgent } from './devagent';
 import { setMusic, isMusicOn, installAudioUnlock } from './ambience';
 import { exportScene } from './tools';
+import { disposeObject } from './factory';
+import { AgentShow } from './show';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
 
 /**
@@ -29,6 +31,14 @@ const ctx: ToolContext = {
 };
 
 const interaction = new Interaction(studio, store, canvas);
+
+// --- activity storytelling ---------------------------------------------------
+// The tool log tells the story in words; the scene glows where it happens.
+registerActivityFx({ highlight: (ids, color) => studio.highlightObjects(ids, color) });
+studio.highlightFind = (id) => store.get(id) ?? null;
+studio.onHumanGrab = () => {
+  toast('Human took control — the agent steps back.');
+};
 
 function place(
   type: Parameters<SceneStore['spawn']>[0],
@@ -121,6 +131,42 @@ document.getElementById('scene-share')?.addEventListener('click', () => {
   if (res.url) void navigator.clipboard?.writeText(res.url).catch(() => {});
   logInfo('Scene link copied to the clipboard — anyone can open it.');
 });
+
+// --- "Watch the agent build" — curated run through the real tool handlers ----
+const show = new AgentShow({
+  call: async (tool, args) => {
+    await dispatchTool(ctx, tool, args, logToolCall);
+  },
+  clearToMeadow: () => {
+    snapshots.resetToBoot();
+    for (const e of store.all()) {
+      studio.scene.remove(e.group);
+      disposeObject(e.group);
+    }
+    store.clear();
+    store.bump();
+    logInfo('AGENT: “Describe a world — a tree avenue along the path, warm light, music.”');
+  },
+  onDone: () => {
+    toast('The agent is done — your turn. Grab the camera anytime.');
+    const btn = document.getElementById('show-agent');
+    if (btn) btn.textContent = '▶ Watch the agent build';
+  },
+  onPause: () => {
+    toast('Human took control — show paused. Your turn.');
+    const btn = document.getElementById('show-agent');
+    if (btn) btn.textContent = '▶ Watch the agent build';
+  },
+});
+document.getElementById('show-agent')?.addEventListener('click', () => {
+  if (show.isRunning) return;
+  const btn = document.getElementById('show-agent');
+  if (btn) btn.textContent = '… agent building — grab the camera anytime';
+  void show.run();
+});
+canvas.addEventListener('pointerdown', () => {
+  if (show.isRunning) show.stop();
+}, { capture: true });
 
 // --- WebMCP -----------------------------------------------------------------
 const devMode = new URLSearchParams(location.search).has('agent') || import.meta.env.DEV;

@@ -64,7 +64,7 @@ export class SceneStore {
       forceId?: string;
     } = {},
   ): SceneEntry {
-    const built = buildObject(type, opts.variant);
+    const built = buildObject(type, opts.variant, (this.typeCounters.get(type) ?? 0) + 1);
     let scale = built.group.scale;
     if (typeof opts.scale === 'number') scale = built.group.scale.setScalar(opts.scale);
     else if (opts.scale) scale = built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);

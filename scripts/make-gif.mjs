@@ -52,5 +52,9 @@ try {
   const r = spawnSync('ffmpeg', ['-y', '-i', `/tmp/studio-gif/${webm}`, '-vf', vf, '-loop', 0, 'docs/demo.gif'], { stdio: 'inherit' });
   console.log(r.status === 0 ? 'docs/demo.gif written' : 'ffmpeg failed');
 } finally {
-  process.kill(-server.pid);
+  try {
+    process.kill(-server.pid);
+  } catch {
+    /* already gone */
+  }
 }

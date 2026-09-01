@@ -245,3 +245,53 @@ body.ui-hidden .hud {
 body.ui-hidden .hud {
   transition: opacity 0.4s ease;
 }
+
+/* --- activity storytelling -------------------------------------------------*/
+.log-head .story { color: var(--ink); font-weight: 500; }
+.log-raw { margin-top: 4px; font-size: 10px; opacity: 0.55; }
+.log-raw summary { cursor: pointer; color: var(--ink-dim); }
+.log-raw[open] summary { opacity: 0.7; }
+.log-raw .log-args, .log-raw .log-result { margin-top: 3px; }
+
+.story-line { margin: 2px 0 10px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.hero-prompt { border-color: rgba(255, 179, 107, 0.55); background: rgba(255, 179, 107, 0.08); }
+.experiments { margin-top: 8px; }
+.experiments summary { cursor: pointer; font-size: 11px; color: var(--ink-dim); padding: 4px 0; }
+.experiments .prompt { margin-top: 8px; }
+
+/* --- "watch the agent build" ------------------------------------------------*/
+.show-btn {
+  position: fixed;
+  left: 50%;
+  bottom: 54px;
+  transform: translateX(-50%);
+  z-index: 6;
+  border: 1px solid rgba(255, 179, 107, 0.7);
+  background: rgba(30, 24, 18, 0.82);
+  color: #ffcf9e;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.show-btn:hover { background: rgba(64, 46, 28, 0.9); transform: translateX(-50%) scale(1.03); }
+.ui-hidden .show-btn { opacity: 0; pointer-events: none; }
+
+.hint-link { color: var(--ink-dim); }
+.hint-link:hover { color: var(--ink); }
+
+/* --- focus visibility --------------------------------------------------------*/
+.mini-btn:focus-visible, .prompt:focus-visible, .show-btn:focus-visible, .hint-link:focus-visible {
+  outline: 2px solid #ffb36b;
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  #tool-log { left: 10px; right: 10px; top: auto; bottom: 130px; max-height: 34vh; }
+  #prompt-card { max-height: 38vh; overflow: auto; }
+  .show-btn { bottom: 92px; font-size: 13px; }
+}

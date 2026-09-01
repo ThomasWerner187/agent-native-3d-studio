@@ -61,7 +61,7 @@ export function disposeObject(root: THREE.Object3D): void {
   });
 }
 
-export function buildObject(type: ObjectType, variant?: string): BuiltObject {
+export function buildObject(type: ObjectType, variant?: string, seed?: number): BuiltObject {
   const group = new THREE.Group();
   const materials: THREE.MeshStandardMaterial[] = [];
   const def = DEFAULT_COLORS[type];
@@ -94,15 +94,30 @@ export function buildObject(type: ObjectType, variant?: string): BuiltObject {
       break;
     }
     case 'tree': {
-      const trunk = stdMat('#8a6a4f', 0.9);
-      const foliage = stdMat(def.color, def.roughness);
-      const t = mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.7, 10), trunk);
-      t.position.y = 0.35;
-      const c1 = mesh(new THREE.ConeGeometry(0.58, 1.15, 10), foliage);
-      c1.position.y = 1.12;
-      const c2 = mesh(new THREE.ConeGeometry(0.42, 0.95, 10), foliage);
-      c2.position.y = 1.72;
-      add(t); add(c1); add(c2);
+      // Seeded variation: every tree gets its own height, tier count, tilt and
+      // foliage tint — but the same seed always rebuilds the same tree, so
+      // snapshots/undo are stable.
+      const r = mulberry32(1000 + (seed ?? 0) * 7919);
+      const trunkMat = stdMat('#8a6a4f', 0.9);
+      const hueShift = (r() - 0.5) * 0.04;
+      const foliageCol = new THREE.Color(def.color).offsetHSL(hueShift, (r() - 0.5) * 0.08, (r() - 0.5) * 0.07);
+      const foliage = stdMat(`#${foliageCol.getHexString()}`, def.roughness);
+      const trunkH = 0.55 + r() * 0.35;
+      const t = mesh(new THREE.CylinderGeometry(0.075, 0.13, trunkH, 10), trunkMat);
+      t.position.y = trunkH / 2;
+      t.rotation.z = (r() - 0.5) * 0.09;
+      add(t);
+      let y = trunkH * 0.92;
+      const tiers = 2 + Math.floor(r() * 2); // 2–3 crown tiers
+      let radius = 0.5 + r() * 0.16;
+      for (let i = 0; i < tiers; i++) {
+        const tierH = 0.75 + r() * 0.4;
+        const cone = mesh(new THREE.ConeGeometry(radius, tierH, 10), foliage);
+        cone.position.set((r() - 0.5) * 0.12, y + tierH * 0.42, (r() - 0.5) * 0.12);
+        add(cone);
+        y += tierH * 0.52;
+        radius *= 0.72;
+      }
       break;
     }
     case 'rock': {
@@ -199,6 +214,17 @@ export function buildObject(type: ObjectType, variant?: string): BuiltObject {
   });
 
   return { group, materials };
+}
+
+/** Deterministic PRNG (same as tools.ts) for per-object variation. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /** Turned-chess-piece silhouettes, one lathe profile per piece (radius, height in meters). */
