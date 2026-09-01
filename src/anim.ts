@@ -128,9 +128,10 @@ export function spawnPop(obj: THREE.Object3D, delay = 0, dur = 420): void {
 }
 
 /** Shrink to nothing, then remove from parent. */
-export function despawn(obj: THREE.Object3D, done: () => void, dur = 260): void {
+export function despawn(obj: THREE.Object3D, done: () => void, dur = 260, delay = 0): void {
   const start = obj.scale.clone();
   tween({
+    delay,
     dur,
     ease: easeOutCubic,
     update: (k) => obj.scale.copy(start).multiplyScalar(Math.max(0.001, 1 - k)),

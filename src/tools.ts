@@ -6,7 +6,7 @@ import { OBJECT_TYPES, isObjectType } from './factory';
 import type { SnapshotManager } from './snapshot';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
-  holdCamera, EASES,
+  holdCamera, despawn, EASES,
 } from './anim';
 
 /**
@@ -864,5 +864,99 @@ export async function undoTool(ctx: ToolContext, _args: Args): Promise<string> {
     restored_snapshot_id: result.snapshot_id,
     from_operation: result.label,
     objects: ctx.store.size,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* delete_objects — batch removal ("clear the board")                   */
+/* ------------------------------------------------------------------ */
+
+export async function deleteObjects(ctx: ToolContext, args: Args): Promise<string> {
+  let entries;
+  if (args.targets != null) {
+    const resolved = resolveTargets(ctx, args.targets);
+    if (typeof resolved === 'string') return fail(resolved, 'unknown_target');
+    entries = resolved.ids.map((id) => ctx.store.get(id)!);
+  } else {
+    entries = ctx.store.all();
+    if (args.type != null) {
+      const type = String(args.type);
+      if (!isObjectType(type)) return fail(`Unknown type "${type}". Allowed: ${OBJECT_TYPES.join(', ')}. Use type + name_contains, or explicit targets.`, 'unknown_type');
+      entries = entries.filter((e) => e.type === type);
+    }
+    if (typeof args.name_contains === 'string') {
+      const q = args.name_contains.toLowerCase();
+      entries = entries.filter((e) => e.name.toLowerCase().includes(q));
+    }
+    if (args.type == null && typeof args.name_contains !== 'string') {
+      return fail('Provide targets (ids/names), or a type, or name_contains — e.g. {name_contains: "pawn"} clears every pawn.', 'bad_request');
+    }
+  }
+
+  if (entries.length === 0) {
+    return fail('Nothing matches this filter — describe_scene or query_scene shows what exists.', 'unknown_target');
+  }
+
+  const opId = newOpId();
+  const ids = entries.map((e) => e.id);
+  const names = entries.map((e) => e.name);
+  for (const e of entries) {
+    ctx.store.remove(e.id);
+  }
+  ctx.store.bump();
+
+  // staggered shrink-out, mirroring scatter's spawn rhythm
+  const stagger = Math.min(500 / entries.length, 40);
+  const results = await Promise.all(entries.map((e, i) => {
+    const g = e.group;
+    despawn(g, () => ctx.studio.scene.remove(g), 280, i * stagger);
+    return awaitGroup(`spawn:${g.uuid}`);
+  }));
+  const allCompleted = results.every((r) => r.completed);
+
+  return ok(ctx, {
+    operation_id: opId,
+    deleted: ids.length,
+    ids: ids.slice(0, 60),
+    names: names.slice(0, 20),
+    ...interruptedNote(allCompleted),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* board_square — ask the board where a chess square is                 */
+/* ------------------------------------------------------------------ */
+
+export function boardSquare(ctx: ToolContext, args: Args): string {
+  const boardArg = String(args.board ?? 'chessboard');
+  const r = ctx.store.resolve(boardArg);
+  if (!r.ok) return fail(r.error, 'unknown_target');
+  if (r.entry.type !== 'chessboard') {
+    return fail(`"${r.entry.name}" is a ${r.entry.type}, not a chessboard.`, 'unknown_target');
+  }
+  const square = String(args.square ?? '').trim().toLowerCase();
+  if (!/^[a-h][1-8]$/.test(square)) {
+    return fail(`square must be algebraic like "e4" (files a-h, ranks 1-8), got "${args.square}".`, 'bad_request');
+  }
+  const file = square.charCodeAt(0) - 97; // a..h → 0..7
+  const rank = Number(square[1]) - 1;     // 1..8 → 0..7
+
+  const board = r.entry.group;
+  const size = 1.8;
+  const cell = size / 8;
+  const half = size / 2;
+  // file a starts at local -x; rank 1 at local -z (rotate the board to face White)
+  const lx = -half + (file + 0.5) * cell;
+  const lz = -half + (rank + 0.5) * cell;
+  const world = new THREE.Vector3(lx, 0.09, lz);
+  board.localToWorld(world);
+
+  return ok(ctx, {
+    board: r.entry.id,
+    board_name: r.entry.name,
+    square,
+    position: [round2(world.x), round2(world.y), round2(world.z)],
+    square_size: round2(cell),
+    note: 'Center of the square on the board surface (rank 1 at the board\'s local -z edge). transform_object a piece here with mode absolute.',
   });
 }

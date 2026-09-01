@@ -37,10 +37,10 @@ function place(
   studio.scene.add(entry.group);
 }
 
-// --- curated starter scene: a tiny lofi camp at golden hour -----------------
+// --- curated starter scene: a tiny lofi park at golden hour -----------------
 studio.applyLighting('golden_hour', 1);
 
-// stepping-stone path leading to the camp
+// stepping-stone path leading from the foreground to the picnic spot
 for (let i = 0; i < 5; i++) {
   const t = i / 4;
   place('plane', -1.2 - t * 3.2, -0.6 + t * 2.6, {
@@ -49,16 +49,16 @@ for (let i = 0; i < 5; i++) {
     name: `stepping stone ${i + 1}`,
   });
 }
-place('table', 2.6, 0.6, { rotY: -18 });
-place('chair', 2.05, 1.62, { rotY: 148 });
-place('lamp', 3.5, -0.5);
-place('window', -3.9, -2.6, { rotY: 32 });
-place('tree', -5.2, -1.4, { scale: 1.15 });
-place('tree', -3.6, -3.6, { scale: 1.4, rotY: 40 });
-place('tree', -6.6, 0.1, { scale: 0.92, rotY: 75 });
-place('rock', 4.7, -2.9, { scale: 1.3, rotY: 20 });
-place('rock', -2.2, 3.4, { scale: 0.65, rotY: 160 });
+place('table', 2.6, 0.6, { rotY: -18, name: 'picnic table' });
+place('chair', 2.05, 1.62, { rotY: 148, name: 'camp chair' });
+place('lamp', 3.5, -0.5, { name: 'street lamp' });
 place('box', 4.0, 2.2, { scale: 0.7, rotY: 30, name: 'crate' });
+// a small grove framing the scene
+place('tree', -5.2, -1.4, { scale: 1.15, name: 'old oak' });
+place('tree', -3.6, -3.6, { scale: 1.4, rotY: 40, name: 'tall pine' });
+place('tree', -6.6, 0.1, { scale: 0.92, rotY: 75, name: 'young oak' });
+place('rock', 4.7, -2.9, { scale: 1.3, rotY: 20, name: 'mossy boulder' });
+place('rock', -2.2, 3.4, { scale: 0.65, rotY: 160, name: 'flat rock' });
 
 // pin the pristine state for the Reset button (and agents' worst days)
 snapshots.captureBoot();

@@ -2,6 +2,7 @@ import type { ToolContext } from './tools';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
   frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
+  deleteObjects, boardSquare,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
@@ -81,9 +82,10 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'add_object',
     description:
-      'Add one object to the scene. Use for primitives (box, sphere, cylinder, plane) and furniture presets ' +
-      '(tree, rock, lamp, window, chair, table). Objects pop in animated at the given position. ' +
-      'Returns the new object id — use it to target the object later.',
+      'Add one object to the scene. Use for primitives (box, sphere, cylinder, plane), furniture presets ' +
+      '(tree, rock, lamp, window, chair, table) and game pieces (chessboard, chess_piece). Objects pop in ' +
+      'animated at the given position. Returns the new object id — use it to target the object later. ' +
+      'Tip for chess: name pieces after their square, e.g. "white pawn e2".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -336,6 +338,44 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     annotations: { idempotentHint: true },
     run: (ctx, args) => setUi(ctx, args),
+  },
+  {
+    name: 'delete_objects',
+    description:
+      'Remove one or many objects at once — by explicit targets, or by filter: type and/or name_contains. ' +
+      'This is how to clear a whole group (“delete all pawns” → {name_contains: "pawn"}). Objects shrink out ' +
+      'animated; the removal is undoable (auto restore-point). The result lists every deleted id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targets: {
+          type: ['string', 'array'],
+          description: 'Explicit object id(s)/name(s) to delete.',
+          items: { type: 'string' },
+        },
+        type: { type: 'string', enum: TYPES, description: 'Delete all objects of this type (combine with name_contains).' },
+        name_contains: { type: 'string', description: 'Delete every object whose name contains this, e.g. "pawn".' },
+      },
+    },
+    annotations: { destructiveHint: true },
+    mutating: true,
+    run: (ctx, args) => deleteObjects(ctx, args),
+  },
+  {
+    name: 'board_square',
+    description:
+      'Get the world position of a chess square (a1-h8) on a chessboard, so you can move pieces precisely: ' +
+      'ask for the square, then transform_object a chess_piece there with mode absolute. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        board: { type: 'string', description: 'The chessboard object (id or name). Default: "chessboard".' },
+        square: { type: 'string', description: 'Algebraic square, files a-h + ranks 1-8, e.g. "e4".' },
+      },
+      required: ['square'],
+    },
+    annotations: { readOnlyHint: true },
+    run: (ctx, args) => boardSquare(ctx, args),
   },
   {
     name: 'snapshot',

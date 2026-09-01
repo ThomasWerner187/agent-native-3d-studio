@@ -6,7 +6,7 @@ A cozy 3D scene studio in the browser where a human and an AI agent build the **
 
 ## Why this needs WebMCP (not just benefits from it)
 
-A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: twelve structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
+A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: fourteen structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
 
 ## Try it live
 
@@ -19,7 +19,7 @@ Requirements (the API is experimental, so one-time setup):
 3. Optionally install the agent simulator: the free
    [Model Context Tool Inspector](https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd)
    extension (by the Chrome team). It lets you chat with the page's tools directly.
-4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 12 tools”.**
+4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 14 tools”.**
 
 Then paste any of these into the Inspector (or any WebMCP-aware agent) and watch the scene change while your mouse stays fully functional:
 
@@ -31,6 +31,9 @@ Then paste any of these into the Inspector (or any WebMCP-aware agent) and watch
 | 4 | “Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.” | `describe_scene` + `scatter` with `exclusion_zones` |
 | 5 | “What’s in the scene right now? Then move the table two meters toward the window and give me a hero shot of it.” | `describe_scene` → `transform_object` → `frame_camera` |
 | 6 | “Hide the UI, then fly a cinematic tour: start on the window, sweep past the lamp, and end on a hero shot of the table.” | `set_ui` + `camera_path` — the reveal moment |
+| 7 | “Plant an avenue of trees along both sides of the stone path, add a few boulders, then fly an exciting camera flight right through the avenue.” | two `scatter` rows + `camera_path` through the trees |
+| 8 | “Set up a chessboard with pawns next to the picnic table, zoom in, and play your first move against me — animate the piece.” | `add_object` (chessboard/chess_piece) + `board_square` + `transform_object` + `frame_camera` |
+| 9 | “Delete all pawns — kings-only chess. Switch the camera to whoever's turn it is.” | `delete_objects` by name filter + per-turn camera swaps |
 
 While an agent works: **drag to orbit, click to select, drag objects to move them, ⌫/Delete to remove, H to toggle the HUD.** Grabbing the camera also cancels any in-flight agent camera move — the human always wins. Every tool call appears in the visible **Tool Log** (top right), each mutating tool auto-saves a restore point (↺ button or `undo` tool steps back).
 
@@ -42,7 +45,7 @@ No WebMCP in your browser? The scene still works with the mouse, the chip tells 
 |------|---------|----------------|
 | `describe_scene` | Scene overview: object counts, first objects, camera, lighting. | The eyes. Without it the agent is blind; with it, one-way commands become a dialogue (look → critique → refine). |
 | `query_scene` | Paginated object query: filters, field selection, real bounding boxes. | Large scenes stay fully observable — `total`/`next_offset` page through everything, so an agent never mistakes a truncated view for the whole scene. |
-| `add_object` | One object: primitives + furniture presets (tree, rock, lamp, window, chair, table). | Scoped to a single, well-validated creation with enums for every type — no free-form hallucination surface. |
+| `add_object` | One object: primitives, furniture presets (tree, rock, lamp, window, chair, table) and game pieces (chessboard, chess_piece). | Scoped to a single, well-validated creation with enums for every type — no free-form hallucination surface. |
 | `transform_object` | Move/rotate/scale one id, a name, or a batch — absolute or relative. | Batch targets + relative mode match how people actually direct edits (“move those three back a bit”). |
 | `set_material` | Color, roughness, metalness, emissive, opacity. | Material personality in one call; emissive also drives the lamp’s real point light, so “make it glow” *glows*. |
 | `set_lighting` | Five curated mood presets (golden_hour, night_neon, studio, overcast, moonlit) + intensity + sun azimuth. | Sky, fog, sun, ambient switch as one coherent, animated mood instead of five fiddly parameters to hallucinate. |
@@ -50,6 +53,8 @@ No WebMCP in your browser? The scene still works with the mouse, the chip tells 
 | `camera_path` | Direct a sequence: 2–12 keyframed shots with per-shot angle, lens, flight time and hold, cinematic easing, optional loop. | From moving the camera to **directing** it — tours, reveals, orbit drama. Interruptible by the human at any moment; completed shots are reported per keyframe. |
 | `set_ui` | Show/hide the HUD (tool log, panels). | The agent can stage its own reveal: build, hide the UI, run the camera path, hand back. Humans press H at any time. |
 | `scatter` | Distribute up to 200 instances over an area with jitter, scale/rotation variance and **exclusion_zones**. | The 20-minutes-by-hand proof moment: “a forest, but not on the path.” |
+| `delete_objects` *(bonus)* | Batch removal by targets, type or name filter (“delete all pawns”). | Group edits are as natural as single edits; staggered shrink-out animation, undoable like every mutation. |
+| `board_square` *(bonus)* | Ask a chessboard where square e4 is (world position). | The scene stays a scene — chess *rules* live in the agent; the board only answers geometry questions. Precise moves without coordinate math. |
 | `snapshot` *(bonus)* | Save a named restore point. | Reversibility is a trust primitive — Chrome's own security guidance asks for it. |
 | `undo` *(bonus)* | Step back to the last restore point. | Every mutating tool auto-captures one before it runs, so undo is always meaningful — including after an agent mistakes. |
 
@@ -86,6 +91,7 @@ Design decisions worth calling out (all learned from live agent testing):
 - **Typed errors:** failures carry a machine-readable `code` (`unknown_type`, `ambiguous_target`, `unknown_target`, `out_of_range`, …) plus a human `error`.
 - **Side-effect annotations** on every tool: `readOnlyHint` on the query tools, `idempotentHint` on material/lighting/camera/scatter, `destructiveHint` on `undo`.
 - **Reproducible layouts:** `scatter` accepts an RNG `seed` (always returned) and `avoid_object_ids` with real bounding-box footprints (`footprint: "actual_bounds"`).
+- **Chess, agent-native style:** the scene ships board + pieces + a `board_square` geometry oracle — the *rules* stay in the agent's head. It asks where e4 is, moves the piece, zooms in for the move, turns the camera to your side on your turn.
 - **Strict validation in code, loose in schema**, with descriptive errors (“Ambiguous target »tree« matches 3 objects: … use an id”) so the model can self-correct.
 - **`annotations.readOnlyHint** on `describe_scene`; mutating tools auto-snapshot for `undo`.
 - The same handlers power a query-param dev harness (`?agent=1`) — one code path, honestly labeled, never faked.
@@ -94,6 +100,7 @@ Design decisions worth calling out (all learned from live agent testing):
 
 - **Experimental browser API.** WebMCP needs Chrome 149+ with `chrome://flags/#enable-webmcp-testing`; other browsers get the mouse-only experience with an honest status chip.
 - **One flat meadow.** The ground is a circle at y=0 — no terrain, physics, or water. `exclusion_zones` are axis-aligned rectangles.
+- **The scene doesn't play chess.** There is no rules engine: pieces are objects, `board_square` is geometry only. Legal-move knowledge lives in the agent (LLMs know chess); nothing stops an illegal move except the agent itself.
 - **No persistence.** A reload resets to the curated starter scene (deliberately: stateless demo, and `undo`/`snapshot` cover within-session reversibility).
 - **Material edits are object-wide.** `set_material` re-tints all parts of a preset; per-part editing (e.g. only the trunk) is not exposed.
 - **Scene size is bounded** (radius ≈ 60, 200 instances per scatter). `describe_scene` truncates its object list at 40 by design — use `query_scene` for the full paginated listing (up to 200/page).

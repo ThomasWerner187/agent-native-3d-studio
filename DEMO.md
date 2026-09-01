@@ -33,6 +33,24 @@ Material for the 3-minute submission video and live demos. Beat sheet per submis
 
 (For prompt 1 after boot the scene already *is* golden hour — the agent should just frame; if you want visible change use: `Set the mood to moonlit, then back to golden hour, then frame the scene like a movie still.`)
 
+## ✅ Verified chess sequence (tested end-to-end, 2026-09-01)
+
+These are the exact tool calls the chess prompts produce — all verified working:
+
+```
+1. add_object    { type: "chessboard", position: {x:0.5, z:2.5}, rotation_y: 15, name: "chessboard" }
+2. board_square  { board: "chessboard", square: "e2" }              → world position of e2
+3. add_object    { type: "chess_piece", position: <e2>, name: "white pawn e2" }
+4. set_material  { targets: ["black pawn a7", …], color: "#3a3632" } (black set)
+5. board_square  { square: "e4" }                                    → world position of e4
+6. transform_object { targets: ["white pawn e2"], op: "move", mode: "absolute", x: <e4.x>, z: <e4.z> }
+7. camera_path   { keyframes: [ {target:"chessboard", angle:"front"}, {target:"chessboard", angle:"side"} ] }
+8. delete_objects { name_contains: "pawn" }                          → removes every pawn, undoable
+9. undo          {}                                                  → pawns are back
+```
+
+Verified results: move lands exactly on the square coordinate (±0.01), `delete_objects` removed 9/9 pawns, `undo` restored all 9, camera path completed 2/2 shots.
+
 ## Manual tool check (Inspector → manual execute, no LLM needed)
 
 ```json

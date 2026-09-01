@@ -9,6 +9,7 @@ import * as THREE from 'three';
 export const OBJECT_TYPES = [
   'box', 'sphere', 'cylinder', 'plane',
   'tree', 'rock', 'lamp', 'window', 'chair', 'table',
+  'chessboard', 'chess_piece',
 ] as const;
 export type ObjectType = (typeof OBJECT_TYPES)[number];
 
@@ -28,6 +29,8 @@ export const DEFAULT_COLORS: Record<ObjectType, { color: string; roughness: numb
   window:   { color: '#a8c8d8', roughness: 0.15, metalness: 0.1 },
   chair:    { color: '#b08968', roughness: 0.8,  metalness: 0.0 },
   table:    { color: '#9c7a5b', roughness: 0.8,  metalness: 0.0 },
+  chessboard:  { color: '#ffffff', roughness: 0.75, metalness: 0.0 },
+  chess_piece: { color: '#e8dcc8', roughness: 0.55, metalness: 0.05 },
 };
 
 export interface BuiltObject {
@@ -161,6 +164,32 @@ export function buildObject(type: ObjectType): BuiltObject {
       }
       break;
     }
+    case 'chessboard': {
+      const boardMat = stdMat(def.color, def.roughness);
+      boardMat.map = makeCheckerTexture();
+      const rimMat = stdMat('#6b5140', 0.8);
+      const boardTop = mesh(new THREE.BoxGeometry(1.8, 0.062, 1.8), boardMat);
+      boardTop.position.y = 0.05;
+      const rim = mesh(new THREE.BoxGeometry(1.92, 0.05, 1.92), rimMat);
+      rim.position.y = 0.025;
+      add(boardTop); add(rim);
+      break;
+    }
+    case 'chess_piece': {
+      const mat = stdMat(def.color, def.roughness, def.metalness);
+      // turned-pawn silhouette via lathe (radius, height) profile, ~0.35 tall
+      const profile = [
+        new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.085, 0.0), new THREE.Vector2(0.085, 0.02),
+        new THREE.Vector2(0.06, 0.045), new THREE.Vector2(0.045, 0.1), new THREE.Vector2(0.035, 0.16),
+        new THREE.Vector2(0.03, 0.2), new THREE.Vector2(0.065, 0.22), new THREE.Vector2(0.065, 0.245),
+        new THREE.Vector2(0.03, 0.26),
+      ];
+      const body = mesh(new THREE.LatheGeometry(profile, 24), mat);
+      const head = mesh(new THREE.SphereGeometry(0.05, 18, 12), mat);
+      head.position.y = 0.3;
+      add(body); add(head);
+      break;
+    }
   }
 
   group.traverse((o) => {
@@ -168,4 +197,24 @@ export function buildObject(type: ObjectType): BuiltObject {
   });
 
   return { group, materials };
+}
+
+/** 8x8 checkerboard in warm cream/walnut, drawn once to a canvas. */
+function makeCheckerTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const light = '#e8d7b8';
+  const dark = '#7c6248';
+  const sq = 64;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      g.fillStyle = (x + y) % 2 === 0 ? light : dark;
+      g.fillRect(x * sq, y * sq, sq, sq);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
 }
