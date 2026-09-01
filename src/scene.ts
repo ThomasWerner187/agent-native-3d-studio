@@ -115,7 +115,7 @@ export class Studio {
     this.scene.background = this.skyTexture;
 
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 300);
-    this.camera.position.set(9.5, 5.6, 11.5);
+    this.camera.position.set(8.6, 4.8, 10.6);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.set(0, 0.8, 0);

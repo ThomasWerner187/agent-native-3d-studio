@@ -1,0 +1,28 @@
+- generic [ref=f4e2]:
+  - banner:
+    - generic:
+      - generic: Agent-Native 3D Scene Studio
+      - generic: human + agent, one live scene
+    - generic "This browser does not expose document.modelContext. Needs Chrome 149+ with chrome://flags/#enable-webmcp-testing. The scene still works with the mouse, and tools can be tested via ?agent=1." [ref=f4e4]: WebMCP unavailable here
+  - complementary [ref=f4e7]:
+    - generic [ref=f4e8]:
+      - generic [ref=f4e9]: Tool Log
+      - generic [ref=f4e10]: webmcp calls, live
+      - button "↺" [ref=f4e11] [cursor=pointer]
+      - button "–" [ref=f4e12] [cursor=pointer]
+    - generic [ref=f4e13]: document.modelContext is not available in this browser. Needs Chrome 149+ with chrome://flags/#enable-webmcp-testing. Mouse interaction works everywhere; local tool testing via ?agent=1.
+  - generic [ref=f4e16]:
+    - generic [ref=f4e17]:
+      - generic [ref=f4e18]: Try it with an agent
+      - button "×" [ref=f4e19] [cursor=pointer]
+    - generic [ref=f4e20]:
+      - button "“Set the mood to golden hour, then frame the scene like a movie still.” copy" [ref=f4e21] [cursor=pointer]:
+        - generic [ref=f4e22]: “Set the mood to golden hour, then frame the scene like a movie still.”
+        - generic [ref=f4e23]: copy
+      - 'button "“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area…” copy" [ref=f4e24] [cursor=pointer]':
+        - generic [ref=f4e25]: "“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area…”"
+        - generic [ref=f4e26]: copy
+      - button "“Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area clear.” copy" [ref=f4e27] [cursor=pointer]:
+        - generic [ref=f4e28]: “Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area clear.”
+        - generic [ref=f4e29]: copy
+  - generic: drag to orbit · scroll to zoom · click to select · drag an object to move it · ⌫ delete
