@@ -114,7 +114,11 @@ There are two different Codex surfaces, and they behave differently:
 - **The ChatGPT sidebar inside Chrome** — has the "Chrome control skill" and can evaluate JS in the page. It finds the tools itself (`getTools()` + `executeTool()`); a plain prompt like *"Drive the 3D scene using its WebMCP tools…"* works (verified: 8-call neon-chess run, 3m12s baseline).
 - **Desktop/Codex sessions without injection** — they read the page (they quote the green "WebMCP live · 20 tools" chip) but have no injected tool surface, and some will *refuse* instead of using the in-page path (observed: "this session exposes none of those tools for invocation"). The page now carries the recipe as readable text — the **agent bridge** in the tool-log panel and the status chip tooltip — so point the agent at it explicitly.
 
-**Prompt that works for the refusing surfaces** (say "evaluate JavaScript in the page", never just "use the webmcp tool"):
+**Say it like a human** — since the page ships the agent bridge (the readable recipe in the tool-log panel), the natural prompt should just work; the agent reads the bridge and finds the invocation path itself:
+
+> Write "THOMAS" in glowing letters where the OPENAI word stands, add two more chess pieces to the board, and play two real moves — then give me a top view.
+
+Use the explicit version below **only** if an agent still refuses (some surfaces never look at the page and demand injected tools — never phrase it as "use the webmcp tool", singular; agents search for a literal tool with that name):
 
 > Using only this page's WebMCP tools — callable from the page's JS context:
 > `const mc = document.modelContext; const tools = await mc.getTools(); const call = (name, args) => mc.executeTool(tools.find(t => t.name === name), JSON.stringify(args));`

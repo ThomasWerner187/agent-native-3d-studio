@@ -327,4 +327,5 @@ body.ui-hidden .hud {
   white-space: pre-wrap;
   color: #ffd9a8;
 }
-.ui-hidden .agent-bridge { display: none; }
+/* the bridge is FOR agents — keep it visible even with the HUD hidden */
+.ui-hidden .agent-bridge { opacity: 0.85; }
