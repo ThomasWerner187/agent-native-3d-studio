@@ -100,6 +100,16 @@ export const TOOL_DEFS: ToolDef[] = [
       type: 'object',
       properties: {
         type: { type: 'string', enum: TYPES, description: 'The kind of object to add.' },
+        piece: {
+          type: 'string',
+          enum: ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'],
+          description: 'chess_piece only: which piece shape (default pawn).',
+        },
+        side: {
+          type: 'string',
+          enum: ['white', 'black'],
+          description: 'chess_piece only: piece colorway (default white).',
+        },
         position: {
           type: 'object',
           description: 'Ground position. Omit to auto-place near the scene center.',

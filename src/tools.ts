@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
-import { OBJECT_TYPES, isObjectType } from './factory';
+import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType } from './factory';
 import type { SnapshotManager } from './snapshot';
 import { AGENT_PLAYBOOK } from './agent-guide';
 import {
@@ -214,6 +214,7 @@ export function queryScene(ctx: ToolContext, args: Args): string {
     const g = e.group;
     const mat = e.materials[0];
     const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type };
+    if (e.type === 'chess_piece' && e.variant) o.piece = e.variant;
     if (want('pose')) {
       const uniform =
         Math.abs(g.scale.x - g.scale.y) < 0.01 && Math.abs(g.scale.y - g.scale.z) < 0.01
@@ -265,6 +266,24 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
   }
+
+  // Chess piece preset params — validated strictly so agents self-correct.
+  let piece: string | undefined;
+  let side: string | undefined;
+  if (args.piece != null || args.side != null) {
+    if (type !== 'chess_piece') {
+      return fail('piece/side only apply to type "chess_piece".');
+    }
+    piece = args.piece != null ? String(args.piece) : undefined;
+    if (piece != null && !(CHESS_PIECES as readonly string[]).includes(piece)) {
+      return fail(`Unknown piece "${piece}". Allowed pieces: ${CHESS_PIECES.join(', ')}.`);
+    }
+    side = args.side != null ? String(args.side) : undefined;
+    if (side != null && side !== 'white' && side !== 'black') {
+      return fail(`side must be "white" or "black".`);
+    }
+  }
+
   const pos = (args.position ?? {}) as { x?: unknown; y?: unknown; z?: unknown };
   let x = num(pos.x);
   let z = num(pos.z);
@@ -293,7 +312,9 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
     name: typeof args.name === 'string' ? args.name : undefined,
     scale,
     rotationYDeg: num(args.rotation_y),
+    variant: piece,
   });
+  if (side) entry.materials[0]?.color.set(CHESS_SIDES[side as 'white' | 'black']);
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
   spawnPop(entry.group);
@@ -306,6 +327,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
     id: entry.id,
     name: entry.name,
     type: entry.type,
+    ...(piece || side ? { piece: piece ?? 'pawn', side: side ?? 'white' } : {}),
     position: { x: round2(entry.group.position.x), y: 0, z: round2(entry.group.position.z) },
     scale: round2(entry.group.scale.x),
   });

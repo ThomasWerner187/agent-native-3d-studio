@@ -14,6 +14,8 @@ interface SerializedObject {
   id: string;
   name: string;
   type: string;
+  /** Preset variant (chess piece kind) so undo rebuilds the same shape. */
+  variant?: string;
   p: [number, number, number];
   r: [number, number, number];
   s: [number, number, number];
@@ -59,6 +61,7 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
         id: e.id,
         name: e.name,
         type: e.type,
+        variant: e.variant,
         p: [g.position.x, g.position.y, g.position.z],
         r: [g.rotation.x, g.rotation.y, g.rotation.z],
         s: [g.scale.x, g.scale.y, g.scale.z],
@@ -82,6 +85,7 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
     const entry = store.spawn(o.type, {
       forceId: o.id,
       name: o.name,
+      variant: o.variant,
       scale: { x: o.s[0], y: o.s[1], z: o.s[2] },
     });
     entry.group.position.set(o.p[0], o.p[1], o.p[2]);

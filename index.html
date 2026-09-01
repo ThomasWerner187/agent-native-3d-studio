@@ -87,7 +87,7 @@
       "tools": "document.modelContext — 15 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, snapshot, undo",
       "start_here": "call the help tool for the full playbook (workflow + recipes)",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
-      "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",
+      "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",
       "human_parallel": "the user's mouse works at all times and overrides agent camera moves"
     }
     </script>

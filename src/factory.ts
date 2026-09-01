@@ -50,7 +50,7 @@ function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, cast = true): THRE
   return m;
 }
 
-export function buildObject(type: ObjectType): BuiltObject {
+export function buildObject(type: ObjectType, variant?: string): BuiltObject {
   const group = new THREE.Group();
   const materials: THREE.MeshStandardMaterial[] = [];
   const def = DEFAULT_COLORS[type];
@@ -177,17 +177,8 @@ export function buildObject(type: ObjectType): BuiltObject {
     }
     case 'chess_piece': {
       const mat = stdMat(def.color, def.roughness, def.metalness);
-      // turned-pawn silhouette via lathe (radius, height) profile, ~0.35 tall
-      const profile = [
-        new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.085, 0.0), new THREE.Vector2(0.085, 0.02),
-        new THREE.Vector2(0.06, 0.045), new THREE.Vector2(0.045, 0.1), new THREE.Vector2(0.035, 0.16),
-        new THREE.Vector2(0.03, 0.2), new THREE.Vector2(0.065, 0.22), new THREE.Vector2(0.065, 0.245),
-        new THREE.Vector2(0.03, 0.26),
-      ];
-      const body = mesh(new THREE.LatheGeometry(profile, 24), mat);
-      const head = mesh(new THREE.SphereGeometry(0.05, 18, 12), mat);
-      head.position.y = 0.3;
-      add(body); add(head);
+      group.add(buildChessPiece(variant ?? 'pawn', mat));
+      materials.push(mat);
       break;
     }
   }
@@ -197,6 +188,88 @@ export function buildObject(type: ObjectType): BuiltObject {
   });
 
   return { group, materials };
+}
+
+/** Turned-chess-piece silhouettes, one lathe profile per piece (radius, height in meters). */
+export const CHESS_PIECES = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'] as const;
+export type ChessPiece = (typeof CHESS_PIECES)[number];
+
+/** Colorways for the chess_piece `side` param (warm dark instead of pure black to fit the palette). */
+export const CHESS_SIDES: Record<'white' | 'black', string> = { white: '#e8dcc8', black: '#3a332d' };
+
+function lathe(pts: [number, number][], mat: THREE.MeshStandardMaterial): THREE.Mesh {
+  const profile = pts.map(([x, y]) => new THREE.Vector2(x, y));
+  return mesh(new THREE.LatheGeometry(profile, 28), mat);
+}
+
+function buildChessPiece(piece: string, mat: THREE.MeshStandardMaterial): THREE.Group {
+  const g = new THREE.Group();
+  const put = (m: THREE.Mesh) => g.add(m);
+  // Shared turned base so the set reads as one family.
+  const base: [number, number][] = [[0.0, 0.0], [0.095, 0.0], [0.095, 0.02], [0.065, 0.05]];
+
+  switch (piece) {
+    case 'pawn': {
+      put(lathe([...base, [0.05, 0.1], [0.038, 0.17], [0.03, 0.2], [0.065, 0.22], [0.065, 0.245], [0.03, 0.26]], mat));
+      const head = mesh(new THREE.SphereGeometry(0.05, 20, 14), mat);
+      head.position.y = 0.3;
+      put(head);
+      break;
+    }
+    case 'rook': {
+      // Cup-shaped top suggests crenellations without extra geometry.
+      put(lathe([...base, [0.052, 0.12], [0.05, 0.24], [0.085, 0.28], [0.085, 0.35], [0.052, 0.35], [0.052, 0.305], [0.0, 0.305]], mat));
+      break;
+    }
+    case 'knight': {
+      put(lathe([...base, [0.055, 0.1], [0.05, 0.15], [0.065, 0.18], [0.0, 0.2]], mat));
+      // Stylized head: slanted capsule neck + snout box + ears.
+      const neck = mesh(new THREE.CapsuleGeometry(0.035, 0.14, 6, 14), mat);
+      neck.position.set(0.0, 0.24, 0.0);
+      neck.rotation.z = 0.45;
+      put(neck);
+      const snout = mesh(new THREE.BoxGeometry(0.05, 0.05, 0.09), mat);
+      snout.position.set(-0.045, 0.31, 0.0);
+      snout.rotation.z = 0.5;
+      put(snout);
+      for (const ex of [-0.015, 0.02]) {
+        const ear = mesh(new THREE.ConeGeometry(0.016, 0.05, 8), mat);
+        ear.position.set(ex + 0.01, 0.38, 0.0);
+        ear.rotation.z = -0.25;
+        put(ear);
+      }
+      break;
+    }
+    case 'bishop': {
+      put(lathe([...base, [0.048, 0.12], [0.04, 0.24], [0.055, 0.3], [0.028, 0.36]], mat));
+      const mitre = mesh(new THREE.SphereGeometry(0.03, 16, 12), mat);
+      mitre.position.y = 0.385;
+      put(mitre);
+      break;
+    }
+    case 'queen': {
+      put(lathe([...base, [0.052, 0.14], [0.042, 0.28], [0.038, 0.34], [0.075, 0.37], [0.08, 0.395], [0.04, 0.4]], mat));
+      for (const [cx, cz] of [[0.055, 0], [-0.055, 0], [0, 0.055], [0, -0.055], [0.04, 0.04], [-0.04, -0.04], [0.04, -0.04], [-0.04, 0.04]]) {
+        const pearl = mesh(new THREE.SphereGeometry(0.013, 10, 8), mat);
+        pearl.position.set(cx, 0.415, cz);
+        put(pearl);
+      }
+      break;
+    }
+    case 'king': {
+      put(lathe([...base, [0.052, 0.14], [0.045, 0.3], [0.038, 0.36], [0.075, 0.39], [0.08, 0.415], [0.035, 0.42], [0.035, 0.44]], mat));
+      const v = mesh(new THREE.BoxGeometry(0.022, 0.095, 0.022), mat);
+      v.position.y = 0.49;
+      put(v);
+      const h = mesh(new THREE.BoxGeometry(0.065, 0.022, 0.022), mat);
+      h.position.y = 0.495;
+      put(h);
+      break;
+    }
+    default:
+      return buildChessPiece('pawn', mat);
+  }
+  return g;
 }
 
 /** 8x8 checkerboard in warm cream/walnut, drawn once to a canvas. */

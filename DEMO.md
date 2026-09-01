@@ -40,7 +40,7 @@ These are the exact tool calls the chess prompts produce — all verified workin
 ```
 1. add_object    { type: "chessboard", position: {x:0.5, z:2.5}, rotation_y: 15, name: "chessboard" }
 2. board_square  { board: "chessboard", square: "e2" }              → world position of e2
-3. add_object    { type: "chess_piece", position: <e2>, name: "white pawn e2" }
+3. add_object    { type: "chess_piece", piece: "pawn", side: "white", position: <e2>, name: "white pawn e2" }   // piece: pawn|rook|knight|bishop|queen|king, side: white|black
 4. set_material  { targets: ["black pawn a7", …], color: "#3a3632" } (black set)
 5. board_square  { square: "e4" }                                    → world position of e4
 6. transform_object { targets: ["white pawn e2"], op: "move", mode: "absolute", x: <e4.x>, z: <e4.z> }

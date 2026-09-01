@@ -10,6 +10,8 @@ export interface SceneEntry {
   id: string;
   name: string;
   type: ObjectType;
+  /** Preset variant, e.g. the chess piece kind ('queen'); survives snapshots. */
+  variant?: string;
   group: THREE.Group;
   materials: THREE.MeshStandardMaterial[];
 }
@@ -56,11 +58,13 @@ export class SceneStore {
       name?: string;
       scale?: number | { x: number; y: number; z: number };
       rotationYDeg?: number;
+      /** Preset variant (chess piece kind); rebuilt identically by snapshots. */
+      variant?: string;
       /** Used when restoring snapshots so object ids stay stable. */
       forceId?: string;
     } = {},
   ): SceneEntry {
-    const built = buildObject(type);
+    const built = buildObject(type, opts.variant);
     let scale = built.group.scale;
     if (typeof opts.scale === 'number') scale = built.group.scale.setScalar(opts.scale);
     else if (opts.scale) scale = built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);
@@ -77,6 +81,7 @@ export class SceneStore {
       id,
       name: opts.name?.trim() || `${type} ${n2}`,
       type,
+      variant: opts.variant,
       group: built.group,
       materials: built.materials,
     };
