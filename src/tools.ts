@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
-import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType } from './factory';
+import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
 import type { SnapshotManager } from './snapshot';
 import { AGENT_PLAYBOOK } from './agent-guide';
 import { setMusic, isMusicOn } from './ambience';
@@ -49,7 +49,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function fail(error: string, code = 'invalid_request'): string {
+export function fail(error: string, code = 'invalid_request'): string {
   return JSON.stringify({ ok: false, code, error });
 }
 
@@ -57,7 +57,7 @@ function newOpId(): string {
   return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function ok(ctx: ToolContext, result: Record<string, unknown>): string {
+export function ok(ctx: ToolContext, result: Record<string, unknown>): string {
   return JSON.stringify({
     ok: true,
     operation_id: result.operation_id,
@@ -933,7 +933,10 @@ export async function deleteObjects(ctx: ToolContext, args: Args): Promise<strin
   const stagger = Math.min(500 / entries.length, 40);
   const results = await Promise.all(entries.map((e, i) => {
     const g = e.group;
-    despawn(g, () => ctx.studio.scene.remove(g), 280, i * stagger);
+    despawn(g, () => {
+      ctx.studio.scene.remove(g);
+      disposeObject(g);
+    }, 280, i * stagger);
     return awaitGroup(`spawn:${g.uuid}`);
   }));
   const allCompleted = results.every((r) => r.completed);
@@ -1088,6 +1091,60 @@ export function setMusicTool(_ctx: ToolContext, args: Args): string {
   const vol = args.volume == null ? undefined : Math.max(0, Math.min(1, Number(args.volume)));
   const r = setMusic(on, vol);
   return JSON.stringify({ ok: true, playing: r.playing, track: r.track, volume: r.volume, note: r.note });
+}
+
+/* ------------------------------------------------------------------ */
+/* export_scene / import_scene — scenes become shareable artifacts     */
+/* ------------------------------------------------------------------ */
+
+function b64urlEncode(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(s: string): string {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+export function exportScene(ctx: ToolContext, _args: Args): string {
+  const json = ctx.snapshots.exportJson();
+  const hash = `#scene=${b64urlEncode(json)}`;
+  const url = `${location.origin}${location.pathname}${hash}`;
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+  return ok(ctx, {
+    bytes: json.length,
+    objects: ctx.store.size,
+    url,
+    note:
+      url.length > 30_000
+        ? 'Share link created, but it is very long (large scene). Anyone can open it — no WebMCP needed.'
+        : 'Share link created (also set as this page URL). Anyone can open it — no WebMCP needed. import_scene restores the JSON.',
+  });
+}
+
+export async function importScene(ctx: ToolContext, args: Args): Promise<string> {
+  let json = args.json != null ? String(args.json) : '';
+  if (!json && args.url != null) {
+    const m = String(args.url).match(/#scene=([A-Za-z0-9\-_]+)/);
+    if (!m) return fail('url contains no #scene= fragment.', 'bad_request');
+    json = b64urlDecode(m[1]);
+  }
+  if (!json) return fail('Provide the exported json or a share url (with #scene=...).', 'bad_request');
+  // hash-driven boot imports run through the same path; only capture undo state when replacing a live scene
+  if (ctx.store.size > 0) ctx.snapshots.capture('before import');
+  const r = ctx.snapshots.importJson(json);
+  if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');
+  const target = new THREE.Vector3(...(JSON.parse(json).camera?.t ?? [0, 0.8, 0]));
+  ctx.studio.controls.target.copy(target);
+  await awaitGroup('camera');
+  return ok(ctx, {
+    restored: r.restored,
+    note: 'Scene replaced. undo returns to the previous state — modify freely from here.',
+  });
 }
 
 /* ------------------------------------------------------------------ */

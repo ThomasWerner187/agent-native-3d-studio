@@ -8,6 +8,7 @@ import type { ToolContext } from './tools';
 import { initChrome, logToolCall, logInfo, setStatus } from './ui';
 import { initDevAgent } from './devagent';
 import { setMusic, isMusicOn, installAudioUnlock } from './ambience';
+import { exportScene } from './tools';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
 
 /**
@@ -65,6 +66,27 @@ place('rock', -2.2, 3.4, { scale: 0.65, rotY: 160, name: 'flat rock' });
 // pin the pristine state for the Reset button (and agents' worst days)
 snapshots.captureBoot();
 
+// --- shared-scene links: #scene=... restores an exported scene on load ------
+{
+  const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
+  if (m) {
+    const r = snapshots.importJson(atobUrlSafe(m[1]));
+    history.replaceState(null, '', location.pathname + location.search);
+    if (r.ok) {
+      logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
+      snapshots.captureBoot(); // the shared state becomes the new reset baseline
+    } else {
+      logInfo(`Share link could not be restored: ${r.error}`);
+    }
+  }
+}
+
+function atobUrlSafe(s: string): string {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 // --- agent discoverability --------------------------------------------------
 // Agents without a WebMCP-capable harness read the console / DOM manifest.
 console.info(
@@ -92,6 +114,13 @@ musicBtn?.addEventListener('click', () => {
   logToolCall('set_music', { on: r.playing }, JSON.stringify({ ok: true, playing: r.playing, track: r.track }));
 });
 installAudioUnlock();
+
+// --- Share button: scene link (works without WebMCP on the visitor side) -----
+document.getElementById('scene-share')?.addEventListener('click', () => {
+  const res = JSON.parse(exportScene(ctx, {}) as string) as { url?: string };
+  if (res.url) void navigator.clipboard?.writeText(res.url).catch(() => {});
+  logInfo('Scene link copied to the clipboard — anyone can open it.');
+});
 
 // --- WebMCP -----------------------------------------------------------------
 const devMode = new URLSearchParams(location.search).has('agent') || import.meta.env.DEV;

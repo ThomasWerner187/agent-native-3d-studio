@@ -1,12 +1,20 @@
 # Agent-Native 3D Scene Studio
 
-A cozy 3D scene studio in the browser where a human and an AI agent build the **same live scene at the same time** — the agent through [WebMCP](https://developer.chrome.com/docs/ai/webmcp) tools (editing, scattering, lighting — and directing real cinematic camera paths), you through the mouse, both without ever blocking the other.
+A cozy 3D scene studio in the browser where a human and an AI agent build the **same live scene at the same time** — the agent through [WebMCP](https://developer.chrome.com/docs/ai/webmcp) tools (editing, scattering, lighting, lofi music — and directing real cinematic camera paths), you through the mouse, both without ever blocking the other.
 
-![The studio: a golden-hour camp scene, an agent's tool calls streaming into the visible tool log](docs/screenshot.png)
+**20 seconds, no setup:** paste this into the agent and watch (or open the page and just grab the camera — after 25 idle seconds it drifts into a slow cinematic orbit on its own):
+
+> *"Plant an avenue of trees along the stone path, then fly an exciting camera flight through it."*
+
+![Recorded agent run: a batch call plants a tree avenue, golden hour rolls in, then a four-shot cinematic camera flight — docs/demo.gif](docs/demo.gif)
+
+**No Chrome flag handy?** Every tool also runs through the built-in dev harness: open [`?agent=1`](https://agent-native-3d-studio.netlify.app/?agent=1) — same handlers, honestly labeled `DEV HARNESS`. Or share any scene with the ⧉ button / `export_scene` — the link contains the whole scene and opens for anyone.
+
+**All tools verified:** `npm run smoke` → 20/20 ok (`scripts/smoke-result.json`).
 
 ## Why this needs WebMCP (not just benefits from it)
 
-A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: seventeen structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
+A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: twenty structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
 
 ## Try it live
 
@@ -19,7 +27,7 @@ Requirements (the API is experimental, so one-time setup):
 3. Optionally install the agent simulator: the free
    [Model Context Tool Inspector](https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd)
    extension (by the Chrome team). It lets you chat with the page's tools directly.
-4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 17 tools”.**
+4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 20 tools”.**
 
 Then paste any of these into the Inspector (or any WebMCP-aware agent) and watch the scene change while your mouse stays fully functional:
 
@@ -60,6 +68,9 @@ No WebMCP in your browser? The scene still works with the mouse, the chip tells 
 | `snapshot` *(bonus)* | Save a named restore point. | Reversibility is a trust primitive — Chrome's own security guidance asks for it. |
 | `undo` *(bonus)* | Step back to the last restore point. | Every mutating tool auto-captures one before it runs, so undo is always meaningful — including after an agent mistakes. |
 | `set_music` *(bonus)* | Put lofi on/off — three self-made Suno tracks as a playlist (volume). | Agents don't just shape the scene, they set its mood: "put some lofi on" while the camera flies. Browser autoplay policy may hold audio until the first click; the result says so. |
+| `export_scene` *(bonus)* | Export objects + camera + lighting; sets the page URL to a `#scene=...` share link. | Scenes become artifacts: link opens for anyone, no WebMCP, no flag — the judge sees the exact scene. Also the answer to "no persistence": links ARE the persistence. |
+| `import_scene` *(bonus)* | Restore an exported scene (JSON or share link). Captures an undo snapshot first. | Modify a shared scene with the agent, experiment, `undo` back — collaboration on top of artifacts. |
+| `batch` *(bonus)* | Run 1–12 tool calls in one turn: one snapshot, one result, whole-batch undo. | Measurement showed model turns dominate agent wall-clock, not the scene. `batch` is that lesson turned into tool design — a whole setup in one call. |
 
 ## How the WebMCP integration works
 

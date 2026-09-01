@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SceneStore } from './store';
 import type { Studio } from './scene';
-import { isObjectType } from './factory';
+import { isObjectType, disposeObject } from './factory';
 
 /**
  * Reversibility: every mutating tool auto-captures a snapshot beforehand,
@@ -28,6 +28,8 @@ interface SerializedObject {
 }
 
 interface SnapshotData {
+  /** Export format version (present on imported/exported JSON). */
+  v?: number;
   idCounter: number;
   version: number;
   lighting: { preset: string; intensity: number };
@@ -77,7 +79,10 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
 }
 
 function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
-  for (const e of store.all()) studio.scene.remove(e.group);
+  for (const e of store.all()) {
+    studio.scene.remove(e.group);
+    disposeObject(e.group);
+  }
   store.clear();
 
   for (const o of data.objects) {
@@ -167,6 +172,32 @@ export class SnapshotManager {
     restore(this.store, this.studio, this.boot.data);
     this.store.bump();
     return true;
+  }
+
+  /** Full scene as portable JSON (objects + camera + lighting + id counter). */
+  exportJson(): string {
+    const snap = serialize(this.store, this.studio);
+    return JSON.stringify({ v: 1, idCounter: snap.idCounter, lighting: snap.lighting, camera: snap.camera, objects: snap.objects });
+  }
+
+  /**
+   * Replace the scene with an exported JSON. Captures an undo snapshot
+   * first, so imports are as reversible as every other mutation.
+   */
+  importJson(json: string): { ok: boolean; restored?: number; error?: string } {
+    let data: SnapshotData;
+    try {
+      data = JSON.parse(json) as SnapshotData;
+    } catch {
+      return { ok: false, error: 'not valid JSON' };
+    }
+    if (!data || data.v !== 1 || !Array.isArray(data.objects)) {
+      return { ok: false, error: 'expected export format {"v":1,"objects":[...]}' };
+    }
+    this.capture('before import');
+    restore(this.store, this.studio, data);
+    this.store.bump();
+    return { ok: true, restored: data.objects.length };
   }
 
   count(): number {

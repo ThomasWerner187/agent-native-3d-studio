@@ -28,6 +28,7 @@
         <div class="panel-head">
           <span class="panel-title">Tool Log</span>
           <span class="panel-sub">webmcp calls, live</span>
+          <button id="scene-share" class="mini-btn" title="Copy a link to this exact scene — opens anywhere, no WebMCP needed">⧉</button>
           <button id="music-toggle" class="mini-btn" title="Lofi on/off — self-made Suno tracks">♪</button>
           <button id="scene-reset" class="mini-btn" title="Reset the scene to its original state">↺</button>
           <button id="tool-log-toggle" class="mini-btn" title="Collapse">–</button>
@@ -72,7 +73,7 @@
       </div>
 
       <!-- controls hint, bottom center -->
-      <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete&ensp;·&ensp;<kbd>H</kbd> hide UI</div>
+      <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete&ensp;·&ensp;<kbd>H</kbd> hide UI&ensp;·&ensp;<a href="?agent=1" class="hint-link">no WebMCP flag? try the built-in harness →</a></div>
 
       <div id="toast" class="toast"></div>
 
@@ -89,7 +90,7 @@
     <script type="application/json" id="agent-manifest">
     {
       "page": "Agent-Native 3D Scene Studio (three.js)",
-      "tools": "document.modelContext — 17 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo",
+      "tools": "document.modelContext — 20 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
       "start_here": "call the help tool for the full playbook (workflow + recipes)",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
       "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",

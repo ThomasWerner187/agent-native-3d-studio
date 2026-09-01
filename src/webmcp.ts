@@ -3,6 +3,7 @@ import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
   frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
   deleteObjects, boardSquare, chessMove, setMusicTool, helpTool,
+  exportScene, importScene, fail, ok,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
@@ -387,7 +388,62 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     annotations: { destructiveHint: true },
     mutating: true,
-    run: (ctx, args) => deleteObjects(ctx, args),
+    run: (ctx, args) => undoTool(ctx, args),
+  },
+  {
+    name: 'export_scene',
+    description:
+      'Export the whole scene (objects, materials, camera, lighting) and get a share link: the URL contains the scene, ' +
+      'anyone can open it and see the exact scene — no WebMCP or setup needed. Also returned as JSON for import_scene.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+    run: (ctx, args) => exportScene(ctx, args),
+  },
+  {
+    name: 'import_scene',
+    description:
+      'Replace the scene with an exported one (from export_scene JSON or a share link). Captures an undo snapshot ' +
+      'first, so you can modify the imported scene freely and undo returns to the previous state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        json: { type: 'string', description: 'Scene JSON from export_scene. Omit if you pass url.' },
+        url: { type: 'string', description: 'A share link containing #scene=... .' },
+      },
+    },
+    annotations: { destructiveHint: true },
+    mutating: true,
+    run: (ctx, args) => importScene(ctx, args),
+  },
+  {
+    name: 'batch',
+    description:
+      'Run several tool calls in ONE turn: ops is an array of {tool, args}. One snapshot, one result with every ' +
+      'operation outcome, undo rolls the whole batch back. Use for complete setups (e.g. furniture + light + camera) ' +
+      'instead of many separate calls. Not nestable; batch/undo/snapshot are rejected inside.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ops: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 12,
+          description: 'The operations to run in order.',
+          items: {
+            type: 'object',
+            properties: {
+              tool: { type: 'string', description: 'Tool name, e.g. "add_object".' },
+              args: { type: 'object', description: 'That tool\'s arguments object.' },
+            },
+            required: ['tool'],
+          },
+        },
+      },
+      required: ['ops'],
+    },
+    annotations: { idempotentHint: false },
+    mutating: true,
+    run: (ctx, args) => batch(ctx, args),
   },
   {
     name: 'board_square',
@@ -472,6 +528,61 @@ export const TOOL_DEFS: ToolDef[] = [
 
 // Append the in-page call recipe to every description (see CDP_RECIPE above).
 for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
+
+/**
+ * batch — N operations in ONE call: one snapshot, one result, one model turn.
+ * Live measurement showed model turns (not scene animation) dominate agent
+ * wall-clock, so collapsing turns is the single biggest speed lever.
+ */
+const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot']);
+
+export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
+  const ops = Array.isArray(args.ops) ? args.ops : null;
+  if (!ops) return fail('ops must be an array of {tool, args} objects.');
+  if (ops.length < 1 || ops.length > 12) return fail('ops must contain 1-12 operations.');
+
+  ctx.studio.noteActivity();
+  ctx.snapshots.capture('before batch');
+
+  const results: Record<string, unknown>[] = [];
+  let failed = 0;
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i] as { tool?: unknown; args?: unknown };
+    const name = String(op?.tool ?? '');
+    const def = TOOL_DEFS.find((d) => d.name === name);
+    if (!def) {
+      failed++;
+      results.push({ index: i, ok: false, code: 'unknown_tool', error: `Unknown tool "${name}".` });
+      continue;
+    }
+    if (BATCH_DISALLOWED.has(name)) {
+      failed++;
+      results.push({ index: i, ok: false, code: 'bad_request', error: `"${name}" cannot run inside batch.` });
+      continue;
+    }
+    try {
+      const res = await def.run(ctx, (op?.args ?? {}) as Record<string, unknown>);
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(res) as Record<string, unknown>;
+      } catch {
+        parsed = { ok: true, raw: res };
+      }
+      if (parsed.ok === false) failed++;
+      results.push({ index: i, tool: name, ...parsed });
+    } catch (e) {
+      failed++;
+      results.push({ index: i, tool: name, ok: false, code: 'internal_error', error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return ok(ctx, {
+    operations: ops.length,
+    failed,
+    results,
+    note: failed ? `${failed} of ${ops.length} operations failed — see results.` : `All ${ops.length} operations applied. undo rolls the whole batch back.`,
+  });
+}
 
 const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
 

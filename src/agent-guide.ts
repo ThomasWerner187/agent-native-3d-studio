@@ -23,7 +23,7 @@ export const AGENT_PLAYBOOK = [
 export const NO_CLIENT_RECIPE = [
   '// No WebMCP tool surface in your harness? Call the page tools via the standard in-page API:',
   'const mc = document.modelContext;',
-  'const tools = await mc.getTools();                    // 15 tools, alphabetically sorted',
+  'const tools = await mc.getTools();                    // 20 tools, alphabetically sorted',
   'const add = tools.find(t => t.name === "add_object");',
   'await mc.executeTool(add, JSON.stringify({ type: "tree", position: { x: 2, z: 1 } }));',
   '// every result is a JSON string {ok, scene_version, ...}; read back with describe_scene.',

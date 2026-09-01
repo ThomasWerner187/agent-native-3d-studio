@@ -50,6 +50,17 @@ function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, cast = true): THRE
   return m;
 }
 
+/** Free GPU resources of a removed object (call AFTER unlinking from the scene). */
+export function disposeObject(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+    else if (mat) mat.dispose();
+  });
+}
+
 export function buildObject(type: ObjectType, variant?: string): BuiltObject {
   const group = new THREE.Group();
   const materials: THREE.MeshStandardMaterial[] = [];
