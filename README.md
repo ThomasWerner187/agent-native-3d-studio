@@ -6,7 +6,7 @@ A cozy 3D scene studio in the browser where a human and an AI agent build the **
 
 ## Why this needs WebMCP (not just benefits from it)
 
-A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: fourteen structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
+A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: fifteen structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
 
 ## Try it live
 
@@ -19,7 +19,7 @@ Requirements (the API is experimental, so one-time setup):
 3. Optionally install the agent simulator: the free
    [Model Context Tool Inspector](https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd)
    extension (by the Chrome team). It lets you chat with the page's tools directly.
-4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 14 tools”.**
+4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 15 tools”.**
 
 Then paste any of these into the Inspector (or any WebMCP-aware agent) and watch the scene change while your mouse stays fully functional:
 
@@ -43,6 +43,7 @@ No WebMCP in your browser? The scene still works with the mouse, the chip tells 
 
 | Tool | Purpose | Why this shape |
 |------|---------|----------------|
+| `help` | The full agent playbook: workflow conventions, build/camera/chess recipes, human-interaction guarantees — one tool result. | An agent that reads one row of the table understands the whole studio; `help` compresses that onboarding into a single call. |
 | `describe_scene` | Scene overview: object counts, first objects, camera, lighting. | The eyes. Without it the agent is blind; with it, one-way commands become a dialogue (look → critique → refine). |
 | `query_scene` | Paginated object query: filters, field selection, real bounding boxes. | Large scenes stay fully observable — `total`/`next_offset` page through everything, so an agent never mistakes a truncated view for the whole scene. |
 | `add_object` | One object: primitives, furniture presets (tree, rock, lamp, window, chair, table) and game pieces (chessboard, chess_piece). | Scoped to a single, well-validated creation with enums for every type — no free-form hallucination surface. |
@@ -94,6 +95,7 @@ Design decisions worth calling out (all learned from live agent testing):
 - **Chess, agent-native style:** the scene ships board + pieces + a `board_square` geometry oracle — the *rules* stay in the agent's head. It asks where e4 is, moves the piece, zooms in for the move, turns the camera to your side on your turn.
 - **Strict validation in code, loose in schema**, with descriptive errors (“Ambiguous target »tree« matches 3 objects: … use an id”) so the model can self-correct.
 - **`annotations.readOnlyHint** on `describe_scene`; mutating tools auto-snapshot for `undo`.
+- **Agent onboarding, three surfaces.** (1) The `help` tool hands any injected agent the full playbook in one call. (2) A `<script type="application/json" id="agent-manifest">` in the DOM gives DOM-scraping agents the tool list and conventions. (3) A console banner carries the standard `document.modelContext.getTools()` + `executeTool()` recipe for harnesses that drive Chrome without a WebMCP client (CDP-only agents) — the page stays addressable even when the harness isn't.
 - The same handlers power a query-param dev harness (`?agent=1`) — one code path, honestly labeled, never faked.
 
 ## Known limitations

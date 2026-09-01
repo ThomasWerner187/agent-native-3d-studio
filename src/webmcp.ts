@@ -2,7 +2,7 @@ import type { ToolContext } from './tools';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
   frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
-  deleteObjects, boardSquare,
+  deleteObjects, boardSquare, helpTool,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
@@ -35,6 +35,16 @@ export interface ToolDef {
 const TYPES = OBJECT_TYPES as unknown as string[];
 
 export const TOOL_DEFS: ToolDef[] = [
+  {
+    name: 'help',
+    description:
+      'Get the studio playbook: the recommended workflow, all available tools with their key parameters, ' +
+      'and worked recipes (build scenes, cinematic camera paths, playing chess). Call this FIRST if anything ' +
+      'about driving the scene is unclear. Read-only.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+    run: (ctx, args) => helpTool(ctx, args),
+  },
   {
     name: 'describe_scene',
     description:

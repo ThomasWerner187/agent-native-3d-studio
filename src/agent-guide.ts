@@ -1,0 +1,30 @@
+/**
+ * The agent playbook — one document, three surfaces:
+ * 1. the `help` WebMCP tool (for agents with tool injection),
+ * 2. <script type="application/json" id="agent-manifest"> in the DOM
+ *    (for DOM-scraping agents),
+ * 3. the console banner (for CDP/console-driven agents).
+ * Keep the playbook under ~1300 chars so it fits one tool-result budget.
+ */
+
+export const AGENT_PLAYBOOK = [
+  'WORKFLOW: start with describe_scene — objects have ids ("obj_3") and names; both target tools. Mutating tools animate and reply only AFTER the scene settled, with live values + scene_version. undo steps back, so experiment freely.',
+  'BUILD: add_object{type,position{x,z},scale,name} — types: box/sphere/cylinder/plane/tree/rock/lamp/window/chair/table/chessboard/chess_piece. scatter{type,count,area{center_x,center_z,width,depth},exclusion_zones,seed} places many with natural variation. set_material{targets,color"#hex",emissive} makes things glow; set_lighting{preset:golden_hour|night_neon|studio|overcast|moonlit,intensity}.',
+  'CAMERA: frame_camera{target:"scene"|id,angle:front|side|top|three_quarter|low|hero,focal_length,select:false}. camera_path{keyframes:[{target,angle,hold_ms}]} flies sequences — fly-throughs, reveals. Hide the HUD with set_ui{visible:false} for clean shots.',
+  'CHESS: add_object{type:"chessboard"} → board_square{square:"e4"} → add_object{type:"chess_piece",position:<square>,name:"white pawn e2"} → move with transform_object{op:"move",mode:"absolute",x:<e4.x>,z:<e4.z>}. Clear groups: delete_objects{name_contains:"pawn"}. You supply the chess rules; the scene supplies geometry.',
+  'HUMANS: the mouse always works, even mid-call. A human grabbing the camera interrupts agent camera moves — the result then says applied:false.',
+].join('\n');
+
+/**
+ * For agent harnesses that cannot inject WebMCP tools (e.g. CDP-only browser
+ * control): the tools are still reachable through the standard in-page API.
+ * This snippet is the canonical way to discover and call them.
+ */
+export const NO_CLIENT_RECIPE = [
+  '// No WebMCP tool surface in your harness? Call the page tools via the standard in-page API:',
+  'const mc = document.modelContext;',
+  'const tools = await mc.getTools();                    // 15 tools, alphabetically sorted',
+  'const add = tools.find(t => t.name === "add_object");',
+  'await mc.executeTool(add, JSON.stringify({ type: "tree", position: { x: 2, z: 1 } }));',
+  '// every result is a JSON string {ok, scene_version, ...}; read back with describe_scene.',
+].join('\n');

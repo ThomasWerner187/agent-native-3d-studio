@@ -7,6 +7,7 @@ import { registerTools, dispatchTool } from './webmcp';
 import type { ToolContext } from './tools';
 import { initChrome, logToolCall, logInfo, setStatus } from './ui';
 import { initDevAgent } from './devagent';
+import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
 
 /**
  * Boot: scene, mouse interaction, curated starter scene, then WebMCP tools.
@@ -62,6 +63,15 @@ place('rock', -2.2, 3.4, { scale: 0.65, rotY: 160, name: 'flat rock' });
 
 // pin the pristine state for the Reset button (and agents' worst days)
 snapshots.captureBoot();
+
+// --- agent discoverability --------------------------------------------------
+// Agents without a WebMCP-capable harness read the console / DOM manifest.
+console.info(
+  '%c🤖 AGENTS — this page is WebMCP-addressable%c\n' +
+  AGENT_PLAYBOOK + '\n\n' + NO_CLIENT_RECIPE,
+  'font-weight:bold; color:#ffb36b;',
+  'font-weight:normal;',
+);
 
 // --- HUD --------------------------------------------------------------------
 initChrome(() => {

@@ -4,6 +4,7 @@ import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
 import { OBJECT_TYPES, isObjectType } from './factory';
 import type { SnapshotManager } from './snapshot';
+import { AGENT_PLAYBOOK } from './agent-guide';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
   holdCamera, despawn, EASES,
@@ -959,4 +960,12 @@ export function boardSquare(ctx: ToolContext, args: Args): string {
     square_size: round2(cell),
     note: 'Center of the square on the board surface (rank 1 at the board\'s local -z edge). transform_object a piece here with mode absolute.',
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* help — the agent playbook                                           */
+/* ------------------------------------------------------------------ */
+
+export function helpTool(_ctx: ToolContext, _args: Args): string {
+  return JSON.stringify({ ok: true, guide: AGENT_PLAYBOOK });
 }
