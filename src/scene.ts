@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { tween, cancelCameraTween, tweenCamera, updateTweens, type CameraPose } from './anim';
+import { tween, cancelCameraTween, tweenCamera, updateTweens, getEase, type CameraPose } from './anim';
 
 /**
  * three.js setup: renderer, camera, controls, ground and the five
@@ -273,8 +273,8 @@ export class Studio {
   }
 
   /** Animated camera move to a pose. Human input cancels it (see controls 'start'). */
-  flyTo(pose: CameraPose, dur = 950): void {
-    tweenCamera(this.camera, this.controls, pose, dur);
+  flyTo(pose: CameraPose, dur = 950, easing?: string): void {
+    tweenCamera(this.camera, this.controls, pose, dur, getEase(easing));
   }
 }
 

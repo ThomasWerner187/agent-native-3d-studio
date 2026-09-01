@@ -234,3 +234,13 @@ kbd {
   #prompt-card { width: 280px; }
   #hint-bar { display: none; }
 }
+
+/* ---------- cinematic mode (set_ui / H key) ---------- */
+body.ui-hidden .hud {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+body.ui-hidden .hud {
+  transition: opacity 0.4s ease;
+}

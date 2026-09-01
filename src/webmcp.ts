@@ -1,7 +1,7 @@
 import type { ToolContext } from './tools';
 import {
-  describeScene, addObject, transformObject, setMaterial, setLighting, frameCamera, scatter,
-  snapshotTool, undoTool,
+  describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
+  frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
@@ -14,13 +14,18 @@ import { LIGHTING_PRESETS } from './scene';
  *
  * Every mutating tool automatically captures a snapshot right before it
  * runs, so `undo` can always step back — reversibility as a trust primitive.
+ * Annotations describe side effects for hosts and agents.
  */
 
 export interface ToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations?: { readOnlyHint?: boolean };
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+  };
   /** Auto-capture a snapshot before this tool runs. */
   mutating?: boolean;
   run: (ctx: ToolContext, args: Record<string, unknown>) => Promise<string> | string;
@@ -32,9 +37,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'describe_scene',
     description:
-      'Read the full current state of the 3D scene: every object (id, name, type, position, rotation, scale, color), ' +
-      'the camera pose and the active lighting preset. Call this FIRST whenever you need to know what already exists, ' +
-      'before modifying anything, and after changes to verify your work. Read-only.',
+      'Read the current state of the 3D scene at a glance: object counts by type, the first objects with id/name/type/position/rotation/scale/color, the camera pose and the active lighting preset. Read-only. For large scenes use query_scene with pagination instead of relying on the truncated list.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -50,6 +53,30 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     annotations: { readOnlyHint: true },
     run: (ctx, args) => describeScene(ctx, args),
+  },
+  {
+    name: 'query_scene',
+    description:
+      'Query objects with pagination, filters and field selection — the reliable way to see a large scene completely. ' +
+      'Returns total/offset/next_offset so you can page through everything. Optional real bounding boxes per object. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: TYPES, description: 'Only objects of this type.' },
+        name_contains: { type: 'string', description: 'Case-insensitive substring match on object names.' },
+        id_or_name: { type: 'string', description: 'A single object by id or name.' },
+        fields: {
+          type: 'array',
+          description: 'Limit payload: which sections to include. Default: everything.',
+          items: { type: 'string', enum: ['pose', 'material'] },
+        },
+        limit: { type: 'number', minimum: 1, maximum: 200, description: 'Page size. Default 40.' },
+        offset: { type: 'number', minimum: 0, description: 'Skip this many matches. Use next_offset from the previous page.' },
+        include_bounds: { type: 'boolean', description: 'Include real world-space bounding box [minX,minY,minZ,maxX,maxY,maxZ] per object.' },
+      },
+    },
+    annotations: { readOnlyHint: true },
+    run: (ctx, args) => queryScene(ctx, args),
   },
   {
     name: 'add_object',
@@ -81,6 +108,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['type'],
     },
+    annotations: { idempotentHint: false },
     mutating: true,
     run: (ctx, args) => addObject(ctx, args),
   },
@@ -111,6 +139,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['targets', 'op'],
     },
+    annotations: { idempotentHint: false },
     mutating: true,
     run: (ctx, args) => transformObject(ctx, args),
   },
@@ -118,7 +147,8 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'set_material',
     description:
       'Change the look of one or more objects: color, roughness (matte<->smooth), metalness, emissive glow and opacity. ' +
-      'Use emissive for things that glow at night (lamp heads, windows). Colors are hex strings like "#5d7c5a".',
+      'Use emissive for things that glow at night (lamp heads, windows). Colors are hex strings like "#5d7c5a". ' +
+      'Setting the same values repeatedly is safe.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -136,6 +166,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['targets'],
     },
+    annotations: { idempotentHint: true },
     mutating: true,
     run: (ctx, args) => setMaterial(ctx, args),
   },
@@ -144,7 +175,7 @@ export const TOOL_DEFS: ToolDef[] = [
     description:
       'Set the mood of the whole scene with one call: sky, fog, sun and ambient light transition smoothly. ' +
       'Presets: golden_hour (warm sunset), night_neon (dark + cyan/magenta accents), studio (neutral bright), ' +
-      'overcast (soft grey), moonlit (cool blue night). Use intensity to dim or boost.',
+      'overcast (soft grey), moonlit (cool blue night). Use intensity to dim or boost. Same inputs reproduce the same mood.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -157,6 +188,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['preset'],
     },
+    annotations: { idempotentHint: true },
     mutating: true,
     run: (ctx, args) => setLighting(ctx, args),
   },
@@ -165,7 +197,8 @@ export const TOOL_DEFS: ToolDef[] = [
     description:
       'Fly the user’s camera to a composed shot of the whole scene or one object. The move animates for about one ' +
       'second and the tool result reports the pose only after it settled. Use after building something so the user ' +
-      'sees it, or for storytelling angles. If the user grabs the camera mid-flight, the result says so.',
+      'sees it, or for single shots. For sequences of shots use camera_path instead. ' +
+      'If the user grabs the camera mid-flight, the result says so.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -182,16 +215,62 @@ export const TOOL_DEFS: ToolDef[] = [
           maximum: 200,
           description: '35mm-equivalent focal length; 35 = wide, 85 = portrait compression. Omit to keep current fov.',
         },
+        select: {
+          type: 'boolean',
+          description: 'Also select the target object (shows its outline). Default true; pass false for clean cinematic frames.',
+        },
+        easing: { type: 'string', enum: ['smooth', 'cinematic', 'linear'], description: 'Flight feel. Default smooth.' },
       },
     },
+    annotations: { idempotentHint: true },
     run: (ctx, args) => frameCamera(ctx, args),
+  },
+  {
+    name: 'camera_path',
+    description:
+      'Direct a camera sequence: fly through 2-12 keyframed shots, holding on each — a real camera move, not a single cut. ' +
+      'Use to tour a build, reveal a scene, or orbit drama around an object. Plays once by default; the result reports ' +
+      'each completed shot after the whole path settled. The user grabbing the camera interrupts gracefully (reported). ' +
+      'For cinema, pair with set_ui {visible:false} beforehand.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        keyframes: {
+          type: 'array',
+          description: 'The shots in order. Each: {target, angle?, distance?, focal_length?, duration_ms?, hold_ms?}.',
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string', description: 'Object id/name or "scene".' },
+              angle: {
+                type: 'string',
+                enum: ['front', 'side', 'top', 'three_quarter', 'low', 'hero'],
+                description: 'Shot angle. Default three_quarter.',
+              },
+              distance: { type: 'number', minimum: 1, maximum: 90, description: 'Camera distance. Omit to auto-frame.' },
+              focal_length: { type: 'number', minimum: 14, maximum: 200, description: '35mm-equivalent focal length.' },
+              duration_ms: { type: 'number', description: 'Flight time to this shot, ms (300-4000). Default ~950.' },
+              hold_ms: { type: 'number', description: 'Pause on this shot, ms (0-5000). Default 800.' },
+            },
+            required: ['target'],
+          },
+        },
+        easing: { type: 'string', enum: ['smooth', 'cinematic', 'linear'], description: 'Flight feel. Default cinematic.' },
+        loop: { type: 'boolean', description: 'Replay the path (max 3 loops). Default false.' },
+        segment_ms: { type: 'number', minimum: 300, maximum: 4000, description: 'Default flight time for all keyframes.' },
+      },
+      required: ['keyframes'],
+    },
+    annotations: { idempotentHint: false },
+    run: (ctx, args) => cameraPath(ctx, args),
   },
   {
     name: 'scatter',
     description:
       'The power tool: distribute many copies of one type across a rectangular area with natural variation — ' +
-      'forests, boulder fields, lantern rows. Supports exclusion_zones to keep paths, buildings or seating clear. ' +
-      'Instances appear in a staggered animation. Use instead of many add_object calls.',
+      'forests, boulder fields, lantern rows. exclusion_zones keep paths/seating clear; avoid_object_ids dodge ' +
+      'existing objects (with real bounding boxes when footprint="actual_bounds"). Pass a seed to reproduce the exact ' +
+      'same layout later. Instances appear in a staggered animation. Use instead of many add_object calls.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -224,11 +303,39 @@ export const TOOL_DEFS: ToolDef[] = [
             required: ['x', 'z', 'width', 'depth'],
           },
         },
+        avoid_object_ids: {
+          type: 'array',
+          description: 'Keep clear of these existing objects (ids or names).',
+          items: { type: 'string' },
+        },
+        footprint: {
+          type: 'string',
+          enum: ['pad', 'actual_bounds'],
+          description: 'pad = fixed safety margin around each avoided object; actual_bounds = real bounding box. Default pad.',
+        },
+        seed: { type: 'number', description: 'RNG seed for reproducible layouts. Omit to get a random one (returned in the result).' },
       },
       required: ['type', 'count'],
     },
+    annotations: { idempotentHint: true },
     mutating: true,
     run: (ctx, args) => scatter(ctx, args),
+  },
+  {
+    name: 'set_ui',
+    description:
+      'Show or hide the studio HUD (tool log, panels, hints) for a clean cinematic view. Hide it before camera_path ' +
+      'showpieces or final beauty shots; show it again when returning to interactive editing. The user can always ' +
+      'press H to toggle. Does not change the scene itself.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        visible: { type: 'boolean', description: 'true = show the HUD, false = hide it (cinematic).' },
+      },
+      required: ['visible'],
+    },
+    annotations: { idempotentHint: true },
+    run: (ctx, args) => setUi(ctx, args),
   },
   {
     name: 'snapshot',
@@ -241,6 +348,7 @@ export const TOOL_DEFS: ToolDef[] = [
         label: { type: 'string', description: 'Short label for the restore point, e.g. "before redesign".' },
       },
     },
+    annotations: { idempotentHint: true },
     run: (ctx, args) => snapshotTool(ctx, args),
   },
   {
@@ -249,6 +357,7 @@ export const TOOL_DEFS: ToolDef[] = [
       'Revert the scene to the state before the most recent change (each mutating tool auto-saves a restore point). ' +
       'Use whenever the user dislikes a change, or when your own edit turned out wrong. Can be repeated to step back.',
     inputSchema: { type: 'object', properties: {} },
+    annotations: { destructiveHint: true },
     run: (ctx, args) => undoTool(ctx, args),
   },
 ];
@@ -264,7 +373,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     if (MUTATING.has(def.name)) ctx.snapshots.capture(`before ${def.name}`);
     result = await def.run(ctx, args ?? {});
   } catch (e) {
-    result = JSON.stringify({ ok: false, error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
+    result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   }
   log(def.name, args ?? {}, result);
   return result;
@@ -308,7 +417,7 @@ export async function registerTools(ctx: ToolContext, log: ToolLogger): Promise<
   return registered;
 }
 
-/** Dispatch a tool directly (used by the local dev harness). */
+/** Dispatch a tool directly (used by the local dev harness — gated to dev mode). */
 export async function dispatchTool(
   ctx: ToolContext,
   name: string,
@@ -317,7 +426,7 @@ export async function dispatchTool(
 ): Promise<string> {
   const def = TOOL_DEFS.find((t) => t.name === name);
   if (!def) {
-    return JSON.stringify({ ok: false, error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
+    return JSON.stringify({ ok: false, code: 'unknown_tool', error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
   }
   return invoke(ctx, def, args ?? {}, log);
 }

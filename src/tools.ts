@@ -6,6 +6,7 @@ import { OBJECT_TYPES, isObjectType } from './factory';
 import type { SnapshotManager } from './snapshot';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
+  holdCamera, EASES,
 } from './anim';
 
 /**
@@ -19,6 +20,7 @@ import {
  *   stated explicitly via `applied: false` + `note`, with live values
  * - every result carries `scene_version` + `operation_id` so agents can
  *   detect staleness; describe_scene exposes the same version
+ * - failures carry a machine-readable `code` plus a human `error`
  */
 
 export interface ToolContext {
@@ -33,8 +35,20 @@ type Args = Record<string, unknown>;
 const MAX_OUTPUT_OBJECTS = 40;
 const MAX_SCATTER = 200;
 
-function fail(error: string): string {
-  return JSON.stringify({ ok: false, error });
+/** Deterministic PRNG (mulberry32) so seeded scatter runs are reproducible. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function fail(error: string, code = 'invalid_request'): string {
+  return JSON.stringify({ ok: false, code, error });
 }
 
 function newOpId(): string {
@@ -149,10 +163,96 @@ export function describeScene(ctx: ToolContext, args: Args): string {
     lighting: { preset: ctx.studio.currentPreset, intensity: ctx.studio.currentIntensity },
     ground_radius: 60,
     note: entries.length > MAX_OUTPUT_OBJECTS
-      ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use filter.type to narrow down.`
-      : 'All values are the live rendered scene state.',
+      ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use query_scene (limit/offset/filter) for the full, paginated list.`
+      : 'All values are the live rendered scene state. Use query_scene for pagination and per-object bounds.',
   };
   return JSON.stringify(body);
+}
+
+/* ------------------------------------------------------------------ */
+/* query_scene                                                         */
+/* ------------------------------------------------------------------ */
+
+export function queryScene(ctx: ToolContext, args: Args): string {
+  let entries = ctx.store.all();
+
+  const type = args.type;
+  if (type != null) {
+    if (!isObjectType(String(type))) {
+      return fail(`Unknown type filter "${type}". Allowed: ${OBJECT_TYPES.join(', ')}.`, 'unknown_type');
+    }
+    entries = entries.filter((e) => e.type === type);
+  }
+  const nameContains = typeof args.name_contains === 'string' ? args.name_contains.toLowerCase() : null;
+  if (nameContains) entries = entries.filter((e) => e.name.toLowerCase().includes(nameContains));
+  if (args.id_or_name != null) {
+    const r = ctx.store.resolve(String(args.id_or_name));
+    if (!r.ok) return fail(r.error, 'unknown_target');
+    entries = [r.entry];
+  }
+
+  // natural sort by numeric id suffix (obj_2 before obj_10)
+  entries.sort((a, b) => {
+    const na = Number(a.id.replace('obj_', '')) || 0;
+    const nb = Number(b.id.replace('obj_', '')) || 0;
+    return na - nb;
+  });
+
+  const total = entries.length;
+  const limit = clamp(Math.round(num(args.limit) ?? 40), 1, 200);
+  const offset = Math.max(0, Math.round(num(args.offset) ?? 0));
+  const page = entries.slice(offset, offset + limit);
+
+  const fields = Array.isArray(args.fields) ? args.fields.map(String) : null;
+  const want = (f: string) => !fields || fields.includes(f);
+
+  const includeBounds = args.include_bounds === true;
+  const box = includeBounds ? new THREE.Box3() : null;
+
+  const objects = page.map((e) => {
+    const g = e.group;
+    const mat = e.materials[0];
+    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type };
+    if (want('pose')) {
+      const uniform =
+        Math.abs(g.scale.x - g.scale.y) < 0.01 && Math.abs(g.scale.y - g.scale.z) < 0.01
+          ? round2(g.scale.x)
+          : [round2(g.scale.x), round2(g.scale.y), round2(g.scale.z)];
+      o.pose = {
+        p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
+        ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
+        s: uniform,
+      };
+    }
+    if (want('material')) {
+      o.material = mat
+        ? {
+            color: `#${mat.color.getHexString()}`,
+            roughness: round2(mat.roughness),
+            metalness: round2(mat.metalness),
+          }
+        : null;
+    }
+    if (box) {
+      box.setFromObject(g);
+      o.bounds = [
+        round2(box.min.x), round2(box.min.y), round2(box.min.z),
+        round2(box.max.x), round2(box.max.y), round2(box.max.z),
+      ];
+    }
+    return o;
+  });
+
+  return ok(ctx, {
+    total,
+    count: objects.length,
+    offset,
+    limit,
+    objects,
+    ...(offset + objects.length < total
+      ? { next_offset: offset + objects.length, note: `More results — call again with offset=${offset + objects.length}.` }
+      : {}),
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -406,24 +506,28 @@ export async function setLighting(ctx: ToolContext, args: Args): Promise<string>
 }
 
 /* ------------------------------------------------------------------ */
-/* frame_camera                                                        */
+/* frame_camera / camera_path                                          */
 /* ------------------------------------------------------------------ */
 
 const ANGLES = ['front', 'side', 'top', 'three_quarter', 'low', 'hero'] as const;
 
-export async function frameCamera(ctx: ToolContext, args: Args): Promise<string> {
-  const angle = String(args.angle ?? 'three_quarter');
-  if (!(ANGLES as readonly string[]).includes(angle)) {
-    return fail(`Unknown angle "${angle}". Allowed: ${ANGLES.join(', ')}.`);
-  }
-  const distance = num(args.distance);
-  const focal = num(args.focal_length);
-  if (distance != null && (distance < 1 || distance > 90)) return fail('distance must be between 1 and 90.');
-  if (focal != null && (focal < 14 || focal > 200)) return fail('focal_length must be between 14 and 200 (35mm-equivalent mm).');
+interface FramingPose {
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  fov?: number;
+}
 
+/** Shared framing math for frame_camera and camera_path keyframes. */
+function framingPose(
+  ctx: ToolContext,
+  targetArg: string,
+  angle: string,
+  distance: number | undefined,
+  focal: number | undefined,
+): { pose: FramingPose; dist: number; fov: number | undefined; entryId: string | null } | string {
   let center = new THREE.Vector3(0, 0.6, 0);
   let radius = 6;
-  const targetArg = String(args.target ?? 'scene');
+  let entryId: string | null = null;
   if (targetArg === 'scene') {
     const box = new THREE.Box3();
     for (const e of ctx.store.all()) box.expandByObject(e.group);
@@ -434,11 +538,11 @@ export async function frameCamera(ctx: ToolContext, args: Args): Promise<string>
     }
   } else {
     const r = ctx.store.resolve(targetArg);
-    if (!r.ok) return fail(r.error);
+    if (!r.ok) return r.error;
     const box = new THREE.Box3().setFromObject(r.entry.group);
     box.getBoundingSphere(new THREE.Sphere(center));
     radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.6);
-    ctx.select(r.entry.id);
+    entryId = r.entry.id;
   }
 
   const d = distance ?? Math.max(radius * 2.4, 4);
@@ -455,20 +559,36 @@ export async function frameCamera(ctx: ToolContext, args: Args): Promise<string>
   const position = center.clone().addScaledVector(dir, dist);
   position.y = Math.max(position.y, 0.35);
 
-  let fov: number | undefined;
-  if (focal != null) {
-    fov = clamp(THREE.MathUtils.radToDeg(2 * Math.atan(12 / focal)), 15, 90);
+  const fov = focal != null ? clamp(THREE.MathUtils.radToDeg(2 * Math.atan(12 / focal)), 15, 90) : undefined;
+  return { pose: { position, target: center, fov }, dist, fov, entryId };
+}
+
+export async function frameCamera(ctx: ToolContext, args: Args): Promise<string> {
+  const angle = String(args.angle ?? 'three_quarter');
+  if (!(ANGLES as readonly string[]).includes(angle)) {
+    return fail(`Unknown angle "${angle}". Allowed: ${ANGLES.join(', ')}.`, 'out_of_range');
   }
+  const distance = num(args.distance);
+  const focal = num(args.focal_length);
+  if (distance != null && (distance < 1 || distance > 90)) return fail('distance must be between 1 and 90.', 'out_of_range');
+  if (focal != null && (focal < 14 || focal > 200)) return fail('focal_length must be between 14 and 200 (35mm-equivalent mm).', 'out_of_range');
+  const select = args.select !== false;
+
+  const targetArg = String(args.target ?? 'scene');
+  const framed = framingPose(ctx, targetArg, angle, distance, focal);
+  if (typeof framed === 'string') return fail(framed, 'unknown_target');
+  if (select && framed.entryId) ctx.select(framed.entryId);
 
   const opId = newOpId();
-  ctx.studio.flyTo({ position, target: center, fov });
+  ctx.studio.flyTo(framed.pose, 950, typeof args.easing === 'string' ? args.easing : undefined);
+  ctx.store.bump();
 
   const { completed } = await awaitGroup('camera');
   const cam = ctx.studio.camera;
 
   return ok(ctx, {
     operation_id: opId,
-    framing: { target: targetArg, angle, distance: round2(dist), fov: fov ? round2(fov) : 'unchanged' },
+    framing: { target: targetArg, angle, distance: round2(framed.dist), fov: framed.fov ? round2(framed.fov) : 'unchanged', selected: select && framed.entryId != null },
     camera_position: [round2(cam.position.x), round2(cam.position.y), round2(cam.position.z)],
     camera_target: [
       round2(ctx.studio.controls.target.x),
@@ -476,6 +596,117 @@ export async function frameCamera(ctx: ToolContext, args: Args): Promise<string>
       round2(ctx.studio.controls.target.z),
     ],
     ...interruptedNote(completed),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* camera_path — actual direction: a sequence of keyframed shots        */
+/* ------------------------------------------------------------------ */
+
+interface PathKeyframe {
+  label: string;
+  pose: FramingPose;
+  angle: string;
+  dist: number;
+  fov: number | undefined;
+  holdMs: number;
+  durationMs: number;
+}
+
+export async function cameraPath(ctx: ToolContext, args: Args): Promise<string> {
+  const raw = Array.isArray(args.keyframes) ? args.keyframes : [];
+  if (raw.length < 2) return fail('camera_path needs at least 2 keyframes (e.g. two shots to fly between).', 'bad_request');
+  if (raw.length > 12) return fail('At most 12 keyframes per path.', 'out_of_range');
+  const easing = typeof args.easing === 'string' && EASES[args.easing] ? args.easing : 'cinematic';
+  const loop = args.loop === true;
+  const defaultDuration = clamp(Math.round(num(args.segment_ms) ?? 950), 300, 4000);
+
+  // parse and resolve every keyframe up front — fail fast, before moving
+  const frames: PathKeyframe[] = [];
+  for (const [i, item] of raw.entries()) {
+    if (!item || typeof item !== 'object') return fail(`Keyframe ${i} must be an object.`, 'bad_request');
+    const kf = item as Record<string, unknown>;
+    const targetArg = String(kf.target ?? 'scene');
+    const angle = String(kf.angle ?? 'three_quarter');
+    if (!(ANGLES as readonly string[]).includes(angle)) {
+      return fail(`Keyframe ${i}: unknown angle "${angle}". Allowed: ${ANGLES.join(', ')}.`, 'out_of_range');
+    }
+    const distance = num(kf.distance);
+    if (distance != null && (distance < 1 || distance > 90)) return fail(`Keyframe ${i}: distance must be 1..90.`, 'out_of_range');
+    const focal = num(kf.focal_length);
+    if (focal != null && (focal < 14 || focal > 200)) return fail(`Keyframe ${i}: focal_length must be 14..200.`, 'out_of_range');
+    const framed = framingPose(ctx, targetArg, angle, distance, focal);
+    if (typeof framed === 'string') return fail(`Keyframe ${i}: ${framed}`, 'unknown_target');
+    frames.push({
+      label: targetArg,
+      pose: framed.pose,
+      angle,
+      dist: framed.dist,
+      fov: framed.fov,
+      holdMs: clamp(Math.round(num(kf.hold_ms) ?? 800), 0, 5000),
+      durationMs: clamp(Math.round(num(kf.duration_ms) ?? defaultDuration), 300, 4000),
+    });
+  }
+
+  const opId = newOpId();
+  ctx.store.bump();
+
+  const deadline = performance.now() + 90_000; // hard safety cap for loop:true
+  const maxLoops = loop ? 3 : 1;
+  const shots: Array<Record<string, unknown>> = [];
+  let interrupted = false;
+  let loopsRun = 0;
+
+  loop1: for (let l = 0; l < maxLoops; l++) {
+    loopsRun = l + 1;
+    for (let i = 0; i < frames.length; i++) {
+      const kf = frames[i];
+      ctx.studio.flyTo(kf.pose, kf.durationMs, easing);
+      const flight = await awaitGroup('camera');
+      if (!flight.completed) { interrupted = true; break loop1; }
+      shots.push({
+        index: i,
+        target: kf.label,
+        angle: kf.angle,
+        distance: round2(kf.dist),
+        fov: kf.fov ? round2(kf.fov) : 'unchanged',
+        hold_ms: kf.holdMs,
+      });
+      if (kf.holdMs > 0) {
+        holdCamera(kf.holdMs);
+        const held = await awaitGroup('camera');
+        if (!held.completed) { interrupted = true; break loop1; }
+      }
+      if (performance.now() > deadline) { interrupted = true; break loop1; }
+    }
+  }
+
+  const cam = ctx.studio.camera;
+  return ok(ctx, {
+    operation_id: opId,
+    keyframes_total: frames.length,
+    shots_completed: shots.length,
+    loops: maxLoops > 1 ? `${loopsRun} (capped)` : 1,
+    easing,
+    shots: shots.slice(0, 12),
+    camera_position: [round2(cam.position.x), round2(cam.position.y), round2(cam.position.z)],
+    ...interruptedNote(!interrupted),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* set_ui — cinematic mode                                             */
+/* ------------------------------------------------------------------ */
+
+export function setUi(_ctx: ToolContext, args: Args): string {
+  const visible = args.visible;
+  if (typeof visible !== 'boolean') return fail('Parameter visible (boolean) is required — true shows the HUD, false hides it for a clean shot.', 'bad_request');
+  document.body.classList.toggle('ui-hidden', !visible);
+  return JSON.stringify({
+    ok: true,
+    operation_id: newOpId(),
+    ui_visible: visible,
+    note: visible ? 'HUD visible.' : 'HUD hidden (cinematic). The user can press H to bring it back; mouse controls stay active.',
   });
 }
 
@@ -519,15 +750,36 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   for (const raw of zonesRaw) {
     const z = parseZone(raw);
     if (!z) {
-      return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.');
+      return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.', 'bad_request');
     }
     zones.push(z);
   }
 
-  const inZone = (x: number, z: number, pad: number): boolean =>
-    zones.some((zo) =>
-      Math.abs(x - zo.x) < zo.width / 2 + pad && Math.abs(z - zo.z) < zo.depth / 2 + pad,
-    );
+  // optional seeded RNG: same seed ⇒ identical layout (reproducible scenes/demos)
+  const seed = Math.round(num(args.seed) ?? Math.floor(Math.random() * 0xffffffff));
+  const rng = mulberry32(seed);
+
+  // optional object avoidance; footprint 'actual_bounds' uses the 2D projection
+  // of each object's real bounding box instead of a fixed pad around its origin
+  const avoidRaw = Array.isArray(args.avoid_object_ids) ? args.avoid_object_ids.map(String) : [];
+  const actualBounds = args.footprint === 'actual_bounds';
+  const avoids: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
+  for (const q of avoidRaw) {
+    const r = ctx.store.resolve(q);
+    if (!r.ok) return fail(`avoid_object_ids: ${r.error}`, 'unknown_target');
+    if (actualBounds) {
+      const box = new THREE.Box3().setFromObject(r.entry.group);
+      avoids.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
+    } else {
+      const p = r.entry.group.position;
+      avoids.push({ minX: p.x - 0.6, maxX: p.x + 0.6, minZ: p.z - 0.6, maxZ: p.z + 0.6 });
+    }
+  }
+  const boundPad = 0.25;
+
+  const inZone = (x: number, z: number, posPad: number): boolean =>
+    zones.some((zo) => Math.abs(x - zo.x) < zo.width / 2 + posPad && Math.abs(z - zo.z) < zo.depth / 2 + posPad) ||
+    avoids.some((b) => x > b.minX - boundPad && x < b.maxX + boundPad && z > b.minZ - boundPad && z < b.maxZ + boundPad);
 
   const opId = newOpId();
 
@@ -536,7 +788,7 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   const rows = Math.ceil(count / cols);
   const cellW = width / cols;
   const cellD = depth / rows;
-  const pad = 0.5;
+  const posPad = actualBounds ? 0.25 : 0.5;
 
   const ids: string[] = [];
   const spawnGroups: string[] = [];
@@ -547,19 +799,19 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
 
   for (let r = 0; r < rows && placed < count; r++) {
     for (let c = 0; c < cols && placed < count; c++) {
-      let x = centerX - width / 2 + cellW * (c + 0.5) + (Math.random() - 0.5) * cellW * jitter;
-      let z = centerZ - depth / 2 + cellD * (r + 0.5) + (Math.random() - 0.5) * cellD * jitter;
-      if (inZone(x, z, pad)) {
+      let x = centerX - width / 2 + cellW * (c + 0.5) + (rng() - 0.5) * cellW * jitter;
+      let z = centerZ - depth / 2 + cellD * (r + 0.5) + (rng() - 0.5) * cellD * jitter;
+      if (inZone(x, z, posPad)) {
         let found = false;
         for (let t = 0; t < 6; t++) {
-          x = centerX + (Math.random() - 0.5) * width;
-          z = centerZ + (Math.random() - 0.5) * depth;
-          if (!inZone(x, z, pad)) { found = true; break; }
+          x = centerX + (rng() - 0.5) * width;
+          z = centerZ + (rng() - 0.5) * depth;
+          if (!inZone(x, z, posPad)) { found = true; break; }
         }
         if (!found) { skipped++; continue; }
       }
-      const s = Math.max(0.35, 1 + (Math.random() * 2 - 1) * scaleVariance);
-      const rot = Math.random() * 360 * rotationVariance;
+      const s = Math.max(0.35, 1 + (rng() * 2 - 1) * scaleVariance);
+      const rot = rng() * 360 * rotationVariance;
       const entry = ctx.store.spawn(type, { scale: s, rotationYDeg: rot });
       entry.group.position.set(round2(x), 0, round2(z));
       ctx.studio.scene.add(entry.group);
@@ -579,6 +831,8 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
     added: placed,
     skipped_excluded: skipped,
     type,
+    seed,
+    footprint: actualBounds ? 'actual_bounds' : 'pad',
     area: { center_x: centerX, center_z: centerZ, width, depth },
     ids: ids.slice(0, 60),
     ...(ids.length > 60 ? { note: `Showing first 60 of ${ids.length} ids.` } : {}),

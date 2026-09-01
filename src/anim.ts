@@ -7,13 +7,26 @@ import * as THREE from 'three';
 
 type Ease = (k: number) => number;
 
+const linear: Ease = (k) => k;
 const easeOutCubic: Ease = (k) => 1 - Math.pow(1 - k, 3);
 const easeInOutCubic: Ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+/** Perlin smootherstep — the "cinematic" camera feel: extra-gentle ends. */
+const smootherstep: Ease = (k) => k * k * k * (k * (k * 6 - 15) + 10);
 const easeOutBack: Ease = (k) => {
   const c1 = 1.70158;
   const c3 = c1 + 1;
   return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2);
 };
+
+export const EASES: Record<string, Ease> = {
+  linear,
+  smooth: easeInOutCubic,
+  cinematic: smootherstep,
+};
+
+export function getEase(name?: string): Ease {
+  return (name && EASES[name]) || easeInOutCubic;
+}
 
 interface Tween {
   startAt: number;
@@ -199,6 +212,7 @@ export function tweenCamera(
   controls: { target: THREE.Vector3; update: () => void },
   to: CameraPose,
   dur = 900,
+  ease: Ease = easeInOutCubic,
 ): void {
   const fromPos = camera.position.clone();
   const fromTarget = controls.target.clone();
@@ -207,7 +221,7 @@ export function tweenCamera(
   const group = 'camera';
   tween({
     dur,
-    ease: easeInOutCubic,
+    ease,
     group,
     update: (k) => {
       camera.position.lerpVectors(fromPos, to.position, k);
@@ -219,6 +233,14 @@ export function tweenCamera(
       controls.update();
     },
   });
+}
+
+/**
+ * A cancellable pause in the 'camera' tween group: used for holds between
+ * camera_path keyframes. A human grabbing the camera resolves it early.
+ */
+export function holdCamera(ms: number): void {
+  tween({ dur: ms, ease: linear, update: () => {}, group: 'camera' });
 }
 
 /** Any user input on the controls cancels an in-flight camera tween. */

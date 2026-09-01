@@ -102,11 +102,16 @@ export class Interaction {
   }
 
   private onKey(ev: KeyboardEvent): void {
+    const target = ev.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && this.selected) {
       ev.preventDefault();
       this.deleteSelected();
     }
     if (ev.key === 'Escape') this.select(null);
+    if (ev.key === 'h' || ev.key === 'H') {
+      document.body.classList.toggle('ui-hidden');
+    }
   }
 
   select(id: string | null): void {

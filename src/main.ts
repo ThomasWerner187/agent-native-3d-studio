@@ -73,6 +73,8 @@ initChrome(() => {
 });
 
 // --- WebMCP -----------------------------------------------------------------
+const devMode = new URLSearchParams(location.search).has('agent') || import.meta.env.DEV;
+
 void (async () => {
   const count = await registerTools(ctx, logToolCall);
   if (count > 0) {
@@ -86,11 +88,12 @@ void (async () => {
       'Mouse interaction works everywhere; local tool testing via ?agent=1.',
     );
   }
-  initDevAgent(ctx, logToolCall);
+  // dev-only bridges: never exposed in production builds
+  if (devMode) {
+    (window as unknown as Record<string, unknown>).__tool = async (name: string, args: Record<string, unknown>) =>
+      dispatchTool(ctx, name, args, logToolCall);
+    (window as unknown as Record<string, unknown>).__scene = async () =>
+      JSON.parse(await dispatchTool(ctx, 'describe_scene', {}, () => {}));
+    initDevAgent(ctx, logToolCall);
+  }
 })();
-
-// console hook for quick checks (also handy on stage)
-(window as unknown as Record<string, unknown>).__tool = async (name: string, args: Record<string, unknown>) =>
-  dispatchTool(ctx, name, args, logToolCall);
-(window as unknown as Record<string, unknown>).__scene = async () =>
-  JSON.parse(await dispatchTool(ctx, 'describe_scene', {}, () => {}));
