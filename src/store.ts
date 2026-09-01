@@ -65,9 +65,8 @@ export class SceneStore {
     } = {},
   ): SceneEntry {
     const built = buildObject(type, opts.variant, (this.typeCounters.get(type) ?? 0) + 1);
-    let scale = built.group.scale;
-    if (typeof opts.scale === 'number') scale = built.group.scale.setScalar(opts.scale);
-    else if (opts.scale) scale = built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);
+    if (typeof opts.scale === 'number') built.group.scale.setScalar(opts.scale);
+    else if (opts.scale) built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);
     if (opts.rotationYDeg) built.group.rotation.y = THREE.MathUtils.degToRad(opts.rotationYDeg);
 
     if (opts.forceId != null) {

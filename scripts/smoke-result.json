@@ -1,5 +1,68 @@
 {
-  "at": "2026-09-01T19:44:16.722Z",
-  "verified": 20,
-  "total": 20
+  "at": "2026-09-01T20:05:27.804Z",
+  "invocation": {
+    "verified": 20,
+    "total": 20
+  },
+  "behavior": {
+    "passed": 11,
+    "total": 11,
+    "checks": [
+      {
+        "name": "add_object increases contents",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "add_object lands at requested position",
+        "pass": true,
+        "detail": "{\"p\":[3,0,3],\"ry\":0,\"s\":1}"
+      },
+      {
+        "name": "transform_object moves live position",
+        "pass": true,
+        "detail": "{\"p\":[-2,0,5],\"ry\":0,\"s\":1}"
+      },
+      {
+        "name": "set_material changes material",
+        "pass": true,
+        "detail": "{\"color\":\"#88aaff\",\"roughness\":0.85,\"metalness\":0}"
+      },
+      {
+        "name": "set_lighting changes preset",
+        "pass": true,
+        "detail": "night_neon"
+      },
+      {
+        "name": "delete_objects removes the target",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "undo restores deleted object",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "export/import round-trips scene",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "invalid calls fail without mutating",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "batch applies as one",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "single undo rolls back whole batch",
+        "pass": true,
+        "detail": ""
+      }
+    ]
+  }
 }

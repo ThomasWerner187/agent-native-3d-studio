@@ -112,9 +112,92 @@ try {
   }
   await badPage.close();
 
+
+  // --- behavioral correctness: verify observable state, not just {ok:true} ---
+  const badPage2 = await browser.newPage();
+  const behavioral = [];
+  const check = (name, pass, detail = '') => {
+    behavioral.push({ name, pass, detail });
+    console.log(`${pass ? ' ✓' : '✗'} [behavior] ${name}${pass ? '' : ' — ' + detail}`);
+  };
+  await badPage2.goto(`${BASE}/?agent=1`);
+  await badPage2.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  const run = (tool, args) => badPage2.evaluate(([t, a]) => window.__tool(t, a), [tool, args]);
+  const j = (raw) => JSON.parse(raw);
+  const describe = async () => j(await run('describe_scene', {}));
+
+  // add_object really adds + places where asked
+  const d0 = await describe();
+  const add = j(await run('add_object', { type: 'box', name: 'behavior box', position: { x: 3, z: 3 } }));
+  const d1 = await describe();
+  check('add_object increases contents', d1.object_count === d0.object_count + 1);
+  const q1 = j(await run('query_scene', { id_or_name: add.id, fields: ['pose'] }));
+  const pose = q1.objects?.[0]?.pose;
+  check('add_object lands at requested position', !!pose && Math.abs(pose.p[0] - 3) < 0.01 && Math.abs(pose.p[2] - 3) < 0.01, JSON.stringify(pose));
+
+  // transform moves the live object
+  await run('transform_object', { targets: add.id, op: 'move', mode: 'absolute', x: -2, z: 5 });
+  const q2 = j(await run('query_scene', { id_or_name: add.id, fields: ['pose'] }));
+  check('transform_object moves live position', Math.abs(q2.objects?.[0]?.pose.p[0] - -2) < 0.01 && Math.abs(q2.objects?.[0]?.pose.p[2] - 5) < 0.01, JSON.stringify(q2.objects?.[0]?.pose));
+
+  // set_material changes material state
+  await run('set_material', { targets: add.id, color: '#88aaff' });
+  const q3 = j(await run('query_scene', { id_or_name: add.id, fields: ['material'] }));
+  check('set_material changes material', (q3.objects?.[0]?.material?.color ?? '').toLowerCase() === '#88aaff', JSON.stringify(q3.objects?.[0]?.material));
+
+  // set_lighting changes preset
+  await run('set_lighting', { preset: 'night_neon' });
+  const d2 = await describe();
+  check('set_lighting changes preset', d2.lighting?.preset === 'night_neon', d2.lighting?.preset);
+
+  // delete removes exactly the target; undo restores it
+  await run('delete_objects', { targets: add.id });
+  const d3 = await describe();
+  const gone = j(await run('query_scene', { id_or_name: add.id }));
+  check('delete_objects removes the target', d3.object_count === d0.object_count && gone.ok === false);
+  await run('undo', {});
+  const d4 = await describe();
+  const back = j(await run('query_scene', { id_or_name: add.id }));
+  check('undo restores deleted object', d4.object_count === d1.object_count && back.ok === true);
+
+  // export/import round-trips the same scene
+  const exp = j(await run('export_scene', {}));
+  const beforeRoundtrip = await describe();
+  const imp = j(await run('import_scene', { url: exp.url ?? '' }));
+  const afterImport = await describe();
+  check('export/import round-trips scene', imp.ok === true && afterImport.object_count === beforeRoundtrip.object_count);
+
+  // invalid calls never mutate the scene
+  const d5 = await describe();
+  const bad1 = j(await run('add_object', { type: 'unicorn' }));
+  const bad2 = j(await run('transform_object', { targets: 'obj_9999', op: 'move', x: 1 }));
+  const bad3 = j(await run('chess_move', { piece: 'obj_1', to: 'zz' }));
+  const d6 = await describe();
+  check('invalid calls fail without mutating', bad1.ok === false && bad2.ok === false && bad3.ok === false && d6.object_count === d5.object_count && d6.version === d5.version);
+
+  // batch reverts as one logical unit
+  const pre = await describe();
+  const b = j(await run('batch', { ops: [
+    { tool: 'add_object', args: { type: 'rock', name: 'batch probe' } },
+    { tool: 'set_lighting', args: { preset: 'moonlit' } },
+  ]}));
+  const mid = await describe();
+  check('batch applies as one', b.ok === true && b.failed === 0 && mid.object_count === pre.object_count + 1 && mid.lighting?.preset === 'moonlit');
+  await run('undo', {});
+  const post = await describe();
+  check('single undo rolls back whole batch', post.object_count === pre.object_count && post.lighting?.preset === pre.lighting?.preset);
+
+  const passCount = behavioral.filter((b2) => b2.pass).length;
+  console.log(`\n[behavior] ${passCount}/${behavioral.length} semantic checks passed`);
+  await badPage2.close();
+
   await browser.close();
   console.log(`\n${names.length - failures}/${names.length} tools verified`);
-  writeFileSync('scripts/smoke-result.json', JSON.stringify({ at: new Date().toISOString(), verified: names.length - failures, total: names.length }, null, 2));
+  writeFileSync('scripts/smoke-result.json', JSON.stringify({
+    at: new Date().toISOString(),
+    invocation: { verified: names.length - failures, total: names.length },
+    behavior: { passed: passCount, total: behavioral.length, checks: behavioral },
+  }, null, 2));
   process.exitCode = failures ? 1 : 0;
 } catch (e) {
   console.error('SMOKE FAILED:', e.message);

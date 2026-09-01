@@ -389,7 +389,7 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     annotations: { destructiveHint: true },
     mutating: true,
-    run: (ctx, args) => undoTool(ctx, args),
+    run: (ctx, args) => deleteObjects(ctx, args),
   },
   {
     name: 'export_scene',

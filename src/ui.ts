@@ -26,7 +26,7 @@ export function registerActivityFx(fx: ActivityFx): void {
 }
 
 /** Human-readable story line for a tool call — the raw JSON stays expandable. */
-function activityLine(tool: string, args: Record<string, unknown>, result?: string): string {
+function activityLine(tool: string, args: Record<string, unknown>): string {
   const targets = typeof args.targets === 'string' ? args.targets : Array.isArray(args.targets) ? `${args.targets.length} objects` : 'objects';
   switch (tool) {
     case 'help': return '📖 Reading the studio playbook';
@@ -90,7 +90,7 @@ function renderEntry(entry: LogEntry): HTMLElement {
   head.innerHTML = `<span class="dot"></span><span class="t">${fmtTime(entry.time)}</span>`;
   const story = document.createElement('span');
   story.className = 'story';
-  story.textContent = activityLine(entry.tool, entry.args ?? {}, entry.result);
+  story.textContent = activityLine(entry.tool, entry.args ?? {});
   head.appendChild(story);
   div.appendChild(head);
 

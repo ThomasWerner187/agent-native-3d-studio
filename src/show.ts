@@ -13,9 +13,6 @@
  * Any pointer input on the canvas pauses the show: the human takes control.
  */
 
-interface Glyph {
-  [row: string]: string[];
-}
 const G: Record<string, string[]> = {
   O: ['###', '#.#', '#.#', '#.#', '###'],
   P: ['###', '#.#', '###', '#..', '#..'],
@@ -94,7 +91,6 @@ export class AgentShow {
     if (this.running) return;
     this.running = true;
     this.cancelled = false;
-    const collected: string[] = [];
     try {
       // ---- act 1: a bright meadow -----------------------------------------
       this.deps.clearToMeadow();
@@ -159,20 +155,21 @@ export class AgentShow {
       await this.step('set_lighting', { preset: 'moonlit' });
       await this.sleep(1600);
       if (this.cancelled) return;
-      const glow = await this.step('scatter', {
+      await this.step('scatter', {
         type: 'rock', count: 22, seed: 77,
         area: { center_x: -2, center_z: -3, width: 20, depth: 18 },
         exclusion_zones: LOGO_ZONES, scale_variance: 0.6,
       });
-      try {
-        const parsed = glow ? (JSON.parse(glow) as { results?: Array<{ id?: string }> }) : null;
-        const ids = (parsed?.results ?? []).map((r) => r?.id).filter((x): x is string => typeof x === 'string');
-        collected.push(...ids);
-      } catch { /* ids optional */ }
-      if (this.cancelled) return;
-      if (collected.length) {
-        await this.step('set_material', { targets: collected, emissive: '#ffb36b', emissive_intensity: 1.8, color: '#33281d' });
-      }
+      await this.step('batch', {
+        ops: Array.from({ length: 22 }, (_, i) => ({
+          tool: 'add_object',
+          args: { type: 'rock', name: `glow stone ${i + 1}`, animate: false, scale: 0.5 + (i % 3) * 0.2, position: { x: -6 + (i % 11) * 1.15, z: -8 + Math.floor(i / 11) * 2.4 } },
+        })),
+      });
+      await this.step('set_material', {
+        targets: Array.from({ length: 22 }, (_, i) => `glow stone ${i + 1}`),
+        emissive: '#ffb36b', emissive_intensity: 1.8, color: '#33281d',
+      });
       await this.step('frame_camera', { target: 'camp table', angle: 'three_quarter', focal_length: 38, select: false });
       await this.step('set_music', { on: true, volume: 0.5 });
       await this.sleep(2000);
@@ -182,8 +179,8 @@ export class AgentShow {
       await this.step('set_ui', { visible: false });
       await this.step('camera_path', {
         keyframes: [
-          { target: 'scene', angle: 'three_quarter', focal_length: 40, duration_ms: 2600 },
-          { target: 'scene', angle: 'low', focal_length: 36, duration_ms: 2200 },
+          { target: 'camp table', angle: 'three_quarter', focal_length: 40, duration_ms: 2600 },
+          { target: 'camp table', angle: 'low', focal_length: 34, duration_ms: 2200 },
           { target: 'scene', angle: 'top', focal_length: 44, duration_ms: 3800, hold_ms: 600 },
         ],
       });
@@ -193,7 +190,6 @@ export class AgentShow {
       const webmcp = wordPixels('WEBMCP', 3.8);
       for (const [word, pixels] of [['OPENAI', openai], ['WEBMCP', webmcp]] as const) {
         if (this.cancelled) return;
-        const ids: string[] = [];
         await this.step('batch', {
           ops: pixels.map((p, i) => ({
             tool: 'add_object',
