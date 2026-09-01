@@ -1,3 +1,12 @@
-# Local Netlify folder
+# deps / build
+node_modules/
+dist/
+
+# local netlify
 .netlify
 .playwright-mcp/
+
+# junk
+*.log
+.DS_Store
+*.tmp.*
