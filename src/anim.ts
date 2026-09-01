@@ -26,6 +26,36 @@ interface Tween {
 
 const tweens: Tween[] = [];
 
+type GroupWaiter = (status: { completed: boolean }) => void;
+const groupWaiters = new Map<string, GroupWaiter[]>();
+
+function flushGroup(group: string, completed: boolean): void {
+  const waiters = groupWaiters.get(group);
+  if (!waiters) return;
+  groupWaiters.delete(group);
+  for (const w of waiters) w({ completed });
+}
+
+function groupHasActiveTweens(group: string): boolean {
+  return tweens.some((t) => t.group === group);
+}
+
+/**
+ * Resolves when every tween in the group has finished — {completed: true} —
+ * or immediately reports {completed: false} if the group is cancelled
+ * (e.g. a human grabbed the camera, or a newer call superseded this one).
+ * Mutating tools await this so they only report success once the visible
+ * scene state has actually settled.
+ */
+export function awaitGroup(group: string): Promise<{ completed: boolean }> {
+  if (!groupHasActiveTweens(group)) return Promise.resolve({ completed: true });
+  return new Promise((resolve) => {
+    const list = groupWaiters.get(group) ?? [];
+    list.push(resolve);
+    groupWaiters.set(group, list);
+  });
+}
+
 export function tween(opts: {
   dur: number;
   delay?: number;
@@ -50,6 +80,7 @@ export function cancelGroup(group: string): void {
   for (let i = tweens.length - 1; i >= 0; i--) {
     if (tweens[i].group === group) tweens.splice(i, 1);
   }
+  flushGroup(group, false);
 }
 
 export function updateTweens(now: number): void {
@@ -59,8 +90,10 @@ export function updateTweens(now: number): void {
     const k = Math.min(1, (now - t.startAt) / t.dur);
     t.update(t.ease(k));
     if (k >= 1) {
+      const group = t.group;
       tweens.splice(i, 1);
       t.done?.();
+      if (group && !groupHasActiveTweens(group)) flushGroup(group, true);
     }
   }
 }

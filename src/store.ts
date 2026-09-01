@@ -21,9 +21,20 @@ export class SceneStore {
   private objects = new Map<string, SceneEntry>();
   private idCounter = 0;
   private typeCounters = new Map<ObjectType, number>();
+  /** Increments on every content mutation; returned by tools and describe_scene. */
+  version = 0;
+
+  /** Highest id handed out (read for snapshot serialization). */
+  get idCount(): number {
+    return this.idCounter;
+  }
 
   get size(): number {
     return this.objects.size;
+  }
+
+  bump(): number {
+    return ++this.version;
   }
 
   all(): SceneEntry[] {
@@ -41,7 +52,13 @@ export class SceneStore {
 
   spawn(
     type: ObjectType,
-    opts: { name?: string; scale?: number | { x: number; y: number; z: number }; rotationYDeg?: number } = {},
+    opts: {
+      name?: string;
+      scale?: number | { x: number; y: number; z: number };
+      rotationYDeg?: number;
+      /** Used when restoring snapshots so object ids stay stable. */
+      forceId?: string;
+    } = {},
   ): SceneEntry {
     const built = buildObject(type);
     let scale = built.group.scale;
@@ -49,12 +66,16 @@ export class SceneStore {
     else if (opts.scale) scale = built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);
     if (opts.rotationYDeg) built.group.rotation.y = THREE.MathUtils.degToRad(opts.rotationYDeg);
 
-    const id = `obj_${++this.idCounter}`;
-    const n = (this.typeCounters.get(type) ?? 0) + 1;
-    this.typeCounters.set(type, n);
+    if (opts.forceId != null) {
+      const n = Number(opts.forceId.replace('obj_', ''));
+      if (Number.isFinite(n)) this.idCounter = Math.max(this.idCounter, n);
+    }
+    const id = opts.forceId ?? `obj_${++this.idCounter}`;
+    const n2 = (this.typeCounters.get(type) ?? 0) + 1;
+    this.typeCounters.set(type, n2);
     const entry: SceneEntry = {
       id,
-      name: opts.name?.trim() || `${type} ${n}`,
+      name: opts.name?.trim() || `${type} ${n2}`,
       type,
       group: built.group,
       materials: built.materials,
@@ -66,6 +87,13 @@ export class SceneStore {
 
   remove(id: string): boolean {
     return this.objects.delete(id);
+  }
+
+  clear(): void {
+    this.objects.clear();
+    this.typeCounters.clear();
+    this.idCounter = 0;
+    this.version = 0;
   }
 
   /**

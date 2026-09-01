@@ -90,6 +90,7 @@ export class Interaction {
       this.studio.controls.enabled = true;
       if (this.dragging) {
         this.dragging = false;
+        this.store.bump(); // human moved an object — let agents detect the change
       } else {
         const hitId = this.pick(ev);
         if (hitId) this.select(hitId);
@@ -132,6 +133,7 @@ export class Interaction {
     if (!entry) return;
     this.select(null);
     this.store.remove(id);
+    this.store.bump();
     despawn(entry.group, () => this.studio.scene.remove(entry.group));
   }
 }

@@ -104,7 +104,7 @@ export function buildObject(type: ObjectType): BuiltObject {
       const poleMat = stdMat('#4f4a45', 0.7, 0.3);
       const headMat = stdMat(def.color, def.roughness);
       headMat.emissive = new THREE.Color('#ffb45e');
-      headMat.emissiveIntensity = 1.4;
+      headMat.emissiveIntensity = 0.85;
       const base = mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.08, 16), poleMat);
       base.position.y = 0.04;
       const pole = mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.6, 10), poleMat);

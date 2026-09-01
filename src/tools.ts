@@ -3,20 +3,28 @@ import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
 import { OBJECT_TYPES, isObjectType } from './factory';
+import type { SnapshotManager } from './snapshot';
 import {
-  spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor,
+  spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
 } from './anim';
 
 /**
- * Tool implementations. These are pure scene-graph operations shared by the
- * real WebMCP registration (webmcp.ts) and the local dev harness (?agent=1).
- * Every tool validates strictly in code and returns a SHORT structured JSON
- * string so the agent can iterate on what it just did.
+ * Tool implementations — pure scene-graph operations shared by the real
+ * WebMCP registration (webmcp.ts) and the local dev harness (?agent=1).
+ *
+ * Reliability contract (learned from live agent testing):
+ * - every mutating tool AWAITS its animation and only then reports success
+ * - reported values are the live rendered scene state, not intent
+ * - if a human (or a newer command) interrupted the transition, that is
+ *   stated explicitly via `applied: false` + `note`, with live values
+ * - every result carries `scene_version` + `operation_id` so agents can
+ *   detect staleness; describe_scene exposes the same version
  */
 
 export interface ToolContext {
   studio: Studio;
   store: SceneStore;
+  snapshots: SnapshotManager;
   select: (id: string | null) => void;
 }
 
@@ -29,8 +37,17 @@ function fail(error: string): string {
   return JSON.stringify({ ok: false, error });
 }
 
-function ok(result: Record<string, unknown>): string {
-  return JSON.stringify({ ok: true, ...result });
+function newOpId(): string {
+  return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function ok(ctx: ToolContext, result: Record<string, unknown>): string {
+  return JSON.stringify({
+    ok: true,
+    operation_id: result.operation_id,
+    scene_version: ctx.store.version,
+    ...result,
+  });
 }
 
 function num(v: unknown): number | undefined {
@@ -60,6 +77,15 @@ function resolveTargets(ctx: ToolContext, raw: unknown): { ids: string[]; names:
     }
   }
   return { ids, names };
+}
+
+function interruptedNote(completed: boolean): Record<string, unknown> {
+  return completed
+    ? {}
+    : {
+        applied: false,
+        note: 'The transition was interrupted before it finished (user took over, or a newer command superseded it). All values reported are the current live scene state.',
+      };
 }
 
 /* ------------------------------------------------------------------ */
@@ -107,6 +133,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
   const cam = ctx.studio.camera;
   const body: Record<string, unknown> = {
     ok: true,
+    scene_version: ctx.store.version,
     object_count: entries.length,
     counts,
     objects: compact,
@@ -120,11 +147,11 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       fov: round2(cam.fov),
     },
     lighting: { preset: ctx.studio.currentPreset, intensity: ctx.studio.currentIntensity },
-    ground_radius: 40,
+    ground_radius: 60,
+    note: entries.length > MAX_OUTPUT_OBJECTS
+      ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use filter.type to narrow down.`
+      : 'All values are the live rendered scene state.',
   };
-  if (entries.length > MAX_OUTPUT_OBJECTS) {
-    body.note = `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use filter.type to narrow down.`;
-  }
   return JSON.stringify(body);
 }
 
@@ -132,7 +159,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
 /* add_object                                                          */
 /* ------------------------------------------------------------------ */
 
-export function addObject(ctx: ToolContext, args: Args): string {
+export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   const type = String(args.type ?? '');
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
@@ -145,8 +172,8 @@ export function addObject(ctx: ToolContext, args: Args): string {
     x = spot.x;
     z = spot.z;
   }
-  x = clamp(x, -38, 38);
-  z = clamp(z, -38, 38);
+  x = clamp(x, -58, 58);
+  z = clamp(z, -58, 58);
 
   let scale: number | { x: number; y: number; z: number } | undefined;
   if (typeof args.scale === 'number') {
@@ -160,6 +187,7 @@ export function addObject(ctx: ToolContext, args: Args): string {
     };
   }
 
+  const opId = newOpId();
   const entry = ctx.store.spawn(type, {
     name: typeof args.name === 'string' ? args.name : undefined,
     scale,
@@ -168,12 +196,17 @@ export function addObject(ctx: ToolContext, args: Args): string {
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
   spawnPop(entry.group);
+  ctx.store.bump();
 
-  return ok({
+  await awaitGroup(`spawn:${entry.group.uuid}`);
+
+  return ok(ctx, {
+    operation_id: opId,
     id: entry.id,
     name: entry.name,
     type: entry.type,
-    position: { x, y: 0, z },
+    position: { x: round2(entry.group.position.x), y: 0, z: round2(entry.group.position.z) },
+    scale: round2(entry.group.scale.x),
   });
 }
 
@@ -181,7 +214,7 @@ export function addObject(ctx: ToolContext, args: Args): string {
 /* transform_object                                                    */
 /* ------------------------------------------------------------------ */
 
-export function transformObject(ctx: ToolContext, args: Args): string {
+export async function transformObject(ctx: ToolContext, args: Args): Promise<string> {
   const targets = resolveTargets(ctx, args.targets);
   if (typeof targets === 'string') return fail(targets);
 
@@ -202,24 +235,18 @@ export function transformObject(ctx: ToolContext, args: Args): string {
     return fail(`Provide at least one of x, y, z${op === 'scale' ? ' or uniform' : ''}.`);
   }
 
-  const updated: Array<Record<string, unknown>> = [];
+  const opId = newOpId();
+  const groups: string[] = [];
   for (const id of targets.ids) {
-    const entry = ctx.store.get(id)!;
-    const g = entry.group;
-    // report the state AFTER the animation, not the pre-tween snapshot
-    const reportPos = { x: g.position.x, y: g.position.y, z: g.position.z };
-    let reportRy = THREE.MathUtils.radToDeg(g.rotation.y);
-    const reportScale = { x: g.scale.x, y: g.scale.y, z: g.scale.z };
+    const g = ctx.store.get(id)!.group;
     if (op === 'move') {
       const to = {
-        x: mode === 'absolute' ? (x != null ? clamp(x, -38, 38) : undefined) : (x ?? 0) + g.position.x,
-        z: mode === 'absolute' ? (z != null ? clamp(z, -38, 38) : undefined) : (z ?? 0) + g.position.z,
+        x: mode === 'absolute' ? (x != null ? clamp(x, -58, 58) : undefined) : (x ?? 0) + g.position.x,
+        z: mode === 'absolute' ? (z != null ? clamp(z, -58, 58) : undefined) : (z ?? 0) + g.position.z,
         y: mode === 'relative' ? Math.max(0, (y ?? 0) + g.position.y) : y != null ? Math.max(0, y) : undefined,
       };
       moveObject(g, to);
-      reportPos.x = to.x ?? reportPos.x;
-      reportPos.y = to.y ?? reportPos.y;
-      reportPos.z = to.z ?? reportPos.z;
+      groups.push(`pos:${g.uuid}`);
     } else if (op === 'rotate') {
       const dx = x ?? 0, dy = y ?? 0, dz = z ?? 0;
       if (mode === 'relative') {
@@ -228,15 +255,14 @@ export function transformObject(ctx: ToolContext, args: Args): string {
           y: g.rotation.y + THREE.MathUtils.degToRad(dy),
           z: g.rotation.z + THREE.MathUtils.degToRad(dz),
         });
-        reportRy = reportRy + dy;
       } else {
         rotateObject(g, {
           x: x != null ? THREE.MathUtils.degToRad(x) : undefined,
           y: y != null ? THREE.MathUtils.degToRad(y) : undefined,
           z: z != null ? THREE.MathUtils.degToRad(z) : undefined,
         });
-        if (y != null) reportRy = y;
       }
+      groups.push(`rot:${g.uuid}`);
     } else {
       const factor = mode === 'relative'
         ? { x: uniform ?? (x ?? 1), y: uniform ?? (y ?? 1), z: uniform ?? (z ?? 1) }
@@ -245,24 +271,41 @@ export function transformObject(ctx: ToolContext, args: Args): string {
       const ny = clamp(mode === 'relative' ? g.scale.y * factor.y : factor.y, 0.1, 8);
       const nz = clamp(mode === 'relative' ? g.scale.z * factor.z : factor.z, 0.1, 8);
       scaleObject(g, { x: nx, y: ny, z: nz });
-      reportScale.x = nx; reportScale.y = ny; reportScale.z = nz;
+      groups.push(`scale:${g.uuid}`);
     }
-    updated.push({
+  }
+  ctx.store.bump();
+
+  const results = await Promise.all(groups.map(awaitGroup));
+  const allCompleted = results.every((r) => r.completed);
+
+  const updated = targets.ids.map((id) => {
+    const entry = ctx.store.get(id)!;
+    const g = entry.group;
+    return {
       id,
       name: entry.name,
-      p: [round2(reportPos.x), round2(reportPos.y), round2(reportPos.z)],
-      ry: round2(reportRy),
-      s: round2(reportScale.x),
-    });
-  }
-  return ok({ op, mode, count: updated.length, updated: updated.slice(0, 25) });
+      p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
+      ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
+      s: round2(g.scale.x),
+    };
+  });
+
+  return ok(ctx, {
+    operation_id: opId,
+    op,
+    mode,
+    count: updated.length,
+    updated: updated.slice(0, 25),
+    ...interruptedNote(allCompleted),
+  });
 }
 
 /* ------------------------------------------------------------------ */
 /* set_material                                                        */
 /* ------------------------------------------------------------------ */
 
-export function setMaterial(ctx: ToolContext, args: Args): string {
+export async function setMaterial(ctx: ToolContext, args: Args): Promise<string> {
   const targets = resolveTargets(ctx, args.targets);
   if (typeof targets === 'string') return fail(targets);
 
@@ -288,13 +331,21 @@ export function setMaterial(ctx: ToolContext, args: Args): string {
     return fail('Provide at least one of: color, roughness, metalness, emissive, emissive_intensity, opacity.');
   }
 
+  const opId = newOpId();
+  const groups: string[] = [];
   for (const id of targets.ids) {
     const entry = ctx.store.get(id)!;
     for (const mat of entry.materials) {
-      if (isHex(color)) fadeMaterialColor(mat, 'color', color);
+      if (isHex(color)) {
+        fadeMaterialColor(mat, 'color', color);
+        groups.push(`col:${mat.uuid}:color`);
+      }
       if (roughness != null) mat.roughness = roughness;
       if (metalness != null) mat.metalness = metalness;
-      if (emissive != null) fadeMaterialColor(mat, 'emissive', emissive);
+      if (emissive != null) {
+        fadeMaterialColor(mat, 'emissive', emissive);
+        groups.push(`col:${mat.uuid}:emissive`);
+      }
       if (emissiveIntensity != null) mat.emissiveIntensity = emissiveIntensity;
       if (opacity != null) {
         mat.transparent = opacity < 1;
@@ -306,19 +357,30 @@ export function setMaterial(ctx: ToolContext, args: Args): string {
     const light = entry.group.userData.light as THREE.PointLight | undefined;
     if (light) {
       const headMat = entry.materials[2] ?? entry.materials[0];
-      const k = headMat.emissiveIntensity / 1.4;
+      const k = headMat.emissiveIntensity / 0.85;
       light.intensity = 6 * clamp(k, 0, 4);
       light.color.copy(headMat.emissive);
     }
   }
-  return ok({ count: targets.ids.length, updated: targets.ids, names: targets.names });
+  ctx.store.bump();
+
+  const results = await Promise.all(groups.map(awaitGroup));
+  const allCompleted = results.every((r) => r.completed);
+
+  return ok(ctx, {
+    operation_id: opId,
+    count: targets.ids.length,
+    updated: targets.ids,
+    names: targets.names,
+    ...interruptedNote(allCompleted),
+  });
 }
 
 /* ------------------------------------------------------------------ */
 /* set_lighting                                                        */
 /* ------------------------------------------------------------------ */
 
-export function setLighting(ctx: ToolContext, args: Args): string {
+export async function setLighting(ctx: ToolContext, args: Args): Promise<string> {
   const preset = String(args.preset ?? '');
   if (!(LIGHTING_PRESETS as readonly string[]).includes(preset)) {
     return fail(`Unknown preset "${preset}". Allowed: ${LIGHTING_PRESETS.join(', ')}.`);
@@ -327,8 +389,20 @@ export function setLighting(ctx: ToolContext, args: Args): string {
   if (intensity < 0 || intensity > 2) return fail('intensity must be between 0 and 2.');
   const azimuth = num(args.azimuth);
   if (azimuth != null && (azimuth < -360 || azimuth > 360)) return fail('azimuth must be between -360 and 360 degrees.');
+
+  const opId = newOpId();
   ctx.studio.applyLighting(preset as LightingPreset, intensity, azimuth);
-  return ok({ preset, intensity, azimuth: azimuth ?? 'unchanged' });
+  ctx.store.bump();
+
+  const { completed } = await awaitGroup('lighting');
+
+  return ok(ctx, {
+    operation_id: opId,
+    preset,
+    intensity,
+    azimuth: azimuth ?? 'unchanged',
+    ...interruptedNote(completed),
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,20 +411,28 @@ export function setLighting(ctx: ToolContext, args: Args): string {
 
 const ANGLES = ['front', 'side', 'top', 'three_quarter', 'low', 'hero'] as const;
 
-export function frameCamera(ctx: ToolContext, args: Args): string {
+export async function frameCamera(ctx: ToolContext, args: Args): Promise<string> {
   const angle = String(args.angle ?? 'three_quarter');
   if (!(ANGLES as readonly string[]).includes(angle)) {
     return fail(`Unknown angle "${angle}". Allowed: ${ANGLES.join(', ')}.`);
   }
   const distance = num(args.distance);
   const focal = num(args.focal_length);
-  if (distance != null && (distance < 1 || distance > 80)) return fail('distance must be between 1 and 80.');
+  if (distance != null && (distance < 1 || distance > 90)) return fail('distance must be between 1 and 90.');
   if (focal != null && (focal < 14 || focal > 200)) return fail('focal_length must be between 14 and 200 (35mm-equivalent mm).');
 
   let center = new THREE.Vector3(0, 0.6, 0);
   let radius = 6;
   const targetArg = String(args.target ?? 'scene');
-  if (targetArg !== 'scene') {
+  if (targetArg === 'scene') {
+    const box = new THREE.Box3();
+    for (const e of ctx.store.all()) box.expandByObject(e.group);
+    if (!box.isEmpty()) {
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      center = sphere.center;
+      radius = Math.max(sphere.radius, 4);
+    }
+  } else {
     const r = ctx.store.resolve(targetArg);
     if (!r.ok) return fail(r.error);
     const box = new THREE.Box3().setFromObject(r.entry.group);
@@ -359,7 +441,7 @@ export function frameCamera(ctx: ToolContext, args: Args): string {
     ctx.select(r.entry.id);
   }
 
-  const d = distance ?? Math.max(radius * 2.6, 4);
+  const d = distance ?? Math.max(radius * 2.4, 4);
   const dirs: Record<(typeof ANGLES)[number], THREE.Vector3> = {
     front: new THREE.Vector3(0, 0.22, 1),
     side: new THREE.Vector3(1, 0.22, 0),
@@ -378,11 +460,22 @@ export function frameCamera(ctx: ToolContext, args: Args): string {
     fov = clamp(THREE.MathUtils.radToDeg(2 * Math.atan(12 / focal)), 15, 90);
   }
 
+  const opId = newOpId();
   ctx.studio.flyTo({ position, target: center, fov });
 
-  return ok({
+  const { completed } = await awaitGroup('camera');
+  const cam = ctx.studio.camera;
+
+  return ok(ctx, {
+    operation_id: opId,
     framing: { target: targetArg, angle, distance: round2(dist), fov: fov ? round2(fov) : 'unchanged' },
-    camera_position: [round2(position.x), round2(position.y), round2(position.z)],
+    camera_position: [round2(cam.position.x), round2(cam.position.y), round2(cam.position.z)],
+    camera_target: [
+      round2(ctx.studio.controls.target.x),
+      round2(ctx.studio.controls.target.y),
+      round2(ctx.studio.controls.target.z),
+    ],
+    ...interruptedNote(completed),
   });
 }
 
@@ -403,7 +496,7 @@ function parseZone(raw: unknown): Zone | null {
   return { x, z: zz, width: Math.abs(w), depth: Math.abs(d) };
 }
 
-export function scatter(ctx: ToolContext, args: Args): string {
+export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   const type = String(args.type ?? '');
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
@@ -412,10 +505,10 @@ export function scatter(ctx: ToolContext, args: Args): string {
   if (count < 1 || count > MAX_SCATTER) return fail(`count must be between 1 and ${MAX_SCATTER}.`);
 
   const areaRaw = (args.area ?? {}) as Record<string, unknown>;
-  const centerX = clamp(num(areaRaw.center_x) ?? 0, -38, 38);
-  const centerZ = clamp(num(areaRaw.center_z) ?? 0, -38, 38);
-  const width = clamp(num(areaRaw.width) ?? 10, 0.5, 76);
-  const depth = clamp(num(areaRaw.depth) ?? 10, 0.5, 76);
+  const centerX = clamp(num(areaRaw.center_x) ?? 0, -58, 58);
+  const centerZ = clamp(num(areaRaw.center_z) ?? 0, -58, 58);
+  const width = clamp(num(areaRaw.width) ?? 10, 0.5, 110);
+  const depth = clamp(num(areaRaw.depth) ?? 10, 0.5, 110);
 
   const jitter = clamp(num(args.jitter) ?? 0.75, 0, 1);
   const scaleVariance = clamp(num(args.scale_variance) ?? 0.2, 0, 1);
@@ -436,6 +529,8 @@ export function scatter(ctx: ToolContext, args: Args): string {
       Math.abs(x - zo.x) < zo.width / 2 + pad && Math.abs(z - zo.z) < zo.depth / 2 + pad,
     );
 
+  const opId = newOpId();
+
   // jittered grid keeps even coverage; exclusions fall back to random retry spots
   const cols = Math.ceil(Math.sqrt((count * width) / Math.max(depth, 0.001)));
   const rows = Math.ceil(count / cols);
@@ -444,6 +539,7 @@ export function scatter(ctx: ToolContext, args: Args): string {
   const pad = 0.5;
 
   const ids: string[] = [];
+  const spawnGroups: string[] = [];
   let skipped = 0;
   let placed = 0;
   let delayIndex = 0;
@@ -468,18 +564,51 @@ export function scatter(ctx: ToolContext, args: Args): string {
       entry.group.position.set(round2(x), 0, round2(z));
       ctx.studio.scene.add(entry.group);
       spawnPop(entry.group, delayIndex * stagger);
+      spawnGroups.push(`spawn:${entry.group.uuid}`);
       ids.push(entry.id);
       placed++;
       delayIndex++;
     }
   }
+  ctx.store.bump();
 
-  return ok({
+  await Promise.all(spawnGroups.map(awaitGroup));
+
+  return ok(ctx, {
+    operation_id: opId,
     added: placed,
     skipped_excluded: skipped,
     type,
     area: { center_x: centerX, center_z: centerZ, width, depth },
     ids: ids.slice(0, 60),
     ...(ids.length > 60 ? { note: `Showing first 60 of ${ids.length} ids.` } : {}),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* snapshot / undo                                                     */
+/* ------------------------------------------------------------------ */
+
+export function snapshotTool(ctx: ToolContext, args: Args): string {
+  const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim().slice(0, 40) : 'manual';
+  const id = ctx.snapshots.capture(label);
+  return ok(ctx, {
+    operation_id: newOpId(),
+    snapshot_id: id,
+    label,
+    objects: ctx.store.size,
+    note: 'Scene captured. Use undo to return to it.',
+  });
+}
+
+export async function undoTool(ctx: ToolContext, _args: Args): Promise<string> {
+  const result = ctx.snapshots.undo();
+  if (!result.ok) return fail(result.error ?? 'undo failed');
+  await awaitGroup('lighting');
+  return ok(ctx, {
+    operation_id: newOpId(),
+    restored_snapshot_id: result.snapshot_id,
+    from_operation: result.label,
+    objects: ctx.store.size,
   });
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { tween, cancelCameraTween, tweenCamera, type CameraPose } from './anim';
+import { tween, cancelCameraTween, tweenCamera, updateTweens, type CameraPose } from './anim';
 
 /**
  * three.js setup: renderer, camera, controls, ground and the five
@@ -17,6 +17,8 @@ export function isLightingPreset(p: string): p is LightingPreset {
 
 interface PresetDef {
   background: string;
+  /** Vertical sky gradient: top color and horizon color. */
+  skyTop: string;
   fog: [string, number, number];
   sun: { color: string; intensity: number; position: [number, number, number] };
   hemi: { sky: string; ground: string; intensity: number };
@@ -27,13 +29,15 @@ interface PresetDef {
 const PRESETS: Record<LightingPreset, PresetDef> = {
   golden_hour: {
     background: '#eec48f',
+    skyTop: '#8fa8c4',
     fog: ['#eec48f', 26, 58],
-    sun: { color: '#ffb070', intensity: 3.2, position: [18, 9, 8] },
-    hemi: { sky: '#ffd9b0', ground: '#8a6f5a', intensity: 0.75 },
+    sun: { color: '#ffb070', intensity: 3.6, position: [18, 9, 8] },
+    hemi: { sky: '#ffd9b0', ground: '#8a6f5a', intensity: 0.85 },
     ambient: { color: '#fff0dd', intensity: 0.35 },
   },
   night_neon: {
     background: '#161c30',
+    skyTop: '#0a0f1e',
     fog: ['#161c30', 18, 46],
     sun: { color: '#7f9fff', intensity: 0.5, position: [-12, 14, -8] },
     hemi: { sky: '#33406e', ground: '#0e1220', intensity: 0.4 },
@@ -45,6 +49,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   },
   studio: {
     background: '#ddd6ca',
+    skyTop: '#e9e4da',
     fog: ['#ddd6ca', 34, 70],
     sun: { color: '#ffffff', intensity: 2.6, position: [10, 16, 10] },
     hemi: { sky: '#ffffff', ground: '#b8ada0', intensity: 0.9 },
@@ -52,6 +57,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   },
   overcast: {
     background: '#b6b2aa',
+    skyTop: '#a3a09a',
     fog: ['#b6b2aa', 22, 54],
     sun: { color: '#d9d4c8', intensity: 1.3, position: [8, 18, 4] },
     hemi: { sky: '#cfcabe', ground: '#8f887c', intensity: 0.95 },
@@ -59,6 +65,7 @@ const PRESETS: Record<LightingPreset, PresetDef> = {
   },
   moonlit: {
     background: '#1a2338',
+    skyTop: '#0d1524',
     fog: ['#1a2338', 16, 44],
     sun: { color: '#a9c4ff', intensity: 1.0, position: [-14, 12, -6] },
     hemi: { sky: '#46598c', ground: '#1a2030', intensity: 0.35 },
@@ -80,6 +87,10 @@ export class Studio {
   currentPreset: LightingPreset = 'golden_hour';
   currentIntensity = 1;
 
+  private skyCanvas: HTMLCanvasElement;
+  private skyTexture: THREE.CanvasTexture;
+  private lastSkyTop = new THREE.Color('#8fa8c4');
+  private lastSkyHorizon = new THREE.Color('#eec48f');
   private clock = new THREE.Clock();
   private frameCallbacks: Array<(dt: number) => void> = [];
 
@@ -90,10 +101,18 @@ export class Studio {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.1;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
+
+    // vertical gradient sky, drawn on a tiny canvas and repainted during transitions
+    this.skyCanvas = document.createElement('canvas');
+    this.skyCanvas.width = 2;
+    this.skyCanvas.height = 256;
+    this.skyTexture = new THREE.CanvasTexture(this.skyCanvas);
+    this.skyTexture.colorSpace = THREE.SRGBColorSpace;
+    this.scene.background = this.skyTexture;
 
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 300);
     this.camera.position.set(9.5, 5.6, 11.5);
@@ -128,9 +147,10 @@ export class Studio {
 
     this.scene.add(this.hemi, this.ambient, this.sun, this.accentGroup);
 
-    // warm sage meadow
+    // warm sage meadow with subtle radial variation baked into a canvas texture
     const groundMat = new THREE.MeshStandardMaterial({ color: '#96a47b', roughness: 1, metalness: 0 });
-    this.ground = new THREE.Mesh(new THREE.CircleGeometry(40, 72), groundMat);
+    groundMat.map = makeGroundTexture();
+    this.ground = new THREE.Mesh(new THREE.CircleGeometry(60, 72), groundMat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
@@ -145,6 +165,7 @@ export class Studio {
   }
 
   private frame(): void {
+    updateTweens(performance.now());
     const dt = this.clock.getDelta();
     for (const cb of this.frameCallbacks) cb(dt);
     this.controls.update();
@@ -172,9 +193,11 @@ export class Studio {
       toSunPos.set(Math.cos(az) * r, p.sun.position[1], Math.sin(az) * r);
     }
 
-    const fromBg = (this.scene.background as THREE.Color ?? new THREE.Color(p.background)).clone();
-    const toBg = new THREE.Color(p.background);
-    const fromFogColor = (this.scene.fog as THREE.Fog | null)?.color.clone() ?? toBg.clone();
+    const fromSkyTop = this.lastSkyTop.clone();
+    const toSkyTop = new THREE.Color(p.skyTop);
+    const fromSkyHorizon = this.lastSkyHorizon.clone();
+    const toSkyHorizon = new THREE.Color(p.background);
+    const fromFogColor = (this.scene.fog as THREE.Fog | null)?.color.clone() ?? toSkyHorizon.clone();
     const toFogColor = new THREE.Color(p.fog[0]);
     const fromFogNear = (this.scene.fog as THREE.Fog | null)?.near ?? p.fog[1];
     const fromFogFar = (this.scene.fog as THREE.Fog | null)?.far ?? p.fog[2];
@@ -197,15 +220,19 @@ export class Studio {
     const fromAmbInt = this.ambient.intensity;
     const toAmbInt = p.ambient.intensity * k;
 
-    if (!this.scene.background) this.scene.background = new THREE.Color();
     if (!this.scene.fog) this.scene.fog = new THREE.Fog(p.fog[0], p.fog[1], p.fog[2]);
     const fog = this.scene.fog as THREE.Fog;
+
+    this.drawSky(fromSkyTop, fromSkyHorizon);
 
     tween({
       dur: 700,
       group: 'lighting',
       update: (t) => {
-        (this.scene.background as THREE.Color).copy(fromBg).lerp(toBg, t);
+        this.drawSky(
+          fromSkyTop.clone().lerp(toSkyTop, t),
+          fromSkyHorizon.clone().lerp(toSkyHorizon, t),
+        );
         fog.color.copy(fromFogColor).lerp(toFogColor, t);
         fog.near = THREE.MathUtils.lerp(fromFogNear, p.fog[1], t);
         fog.far = THREE.MathUtils.lerp(fromFogFar, p.fog[2], t);
@@ -231,8 +258,48 @@ export class Studio {
     });
   }
 
+  /** Repaint the sky gradient (screen-space canvas texture). */
+  private drawSky(top: THREE.Color, horizon: THREE.Color): void {
+    this.lastSkyTop.copy(top);
+    this.lastSkyHorizon.copy(horizon);
+    const ctx = this.skyCanvas.getContext('2d')!;
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, `#${top.getHexString()}`);
+    grad.addColorStop(0.55, `#${top.getHexString()}`);
+    grad.addColorStop(1, `#${horizon.getHexString()}`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 2, 256);
+    this.skyTexture.needsUpdate = true;
+  }
+
   /** Animated camera move to a pose. Human input cancels it (see controls 'start'). */
   flyTo(pose: CameraPose, dur = 950): void {
     tweenCamera(this.camera, this.controls, pose, dur);
   }
+}
+
+/** Soft mottled meadow texture: radial falloff + scattered blotches. */
+function makeGroundTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const base = g.createRadialGradient(256, 256, 40, 256, 256, 256);
+  base.addColorStop(0, '#a3b184');
+  base.addColorStop(0.6, '#96a47b');
+  base.addColorStop(1, '#83936c');
+  g.fillStyle = base;
+  g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 260; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const r = 6 + Math.random() * 26;
+    const light = Math.random() > 0.5;
+    g.fillStyle = light ? 'rgba(196, 205, 160, 0.05)' : 'rgba(74, 88, 60, 0.05)';
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

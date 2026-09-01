@@ -64,9 +64,11 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
       return;
     }
     const t0 = performance.now();
-    const result = dispatchTool(ctx, toolSel.value, args, log);
-    const ms = (performance.now() - t0).toFixed(1);
-    out.textContent = `← ${ms} ms\n` + (() => { try { return JSON.stringify(JSON.parse(result), null, 1); } catch { return result; } })();
+    out.textContent = '…';
+    void dispatchTool(ctx, toolSel.value, args, log).then((result) => {
+      const ms = (performance.now() - t0).toFixed(1);
+      out.textContent = `← ${ms} ms\n` + (() => { try { return JSON.stringify(JSON.parse(result), null, 1); } catch { return result; } })();
+    });
   });
 
   $<HTMLButtonElement>('#dev-help').addEventListener('click', () => {
@@ -75,6 +77,6 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
   });
 
   // console access: __tool('add_object', {...})
-  (window as unknown as Record<string, unknown>).__tool = (name: string, args: Record<string, unknown>) =>
+  (window as unknown as Record<string, unknown>).__devtool = async (name: string, args: Record<string, unknown>) =>
     dispatchTool(ctx, name, args, log);
 }

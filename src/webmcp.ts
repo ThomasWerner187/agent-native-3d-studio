@@ -1,15 +1,19 @@
 import type { ToolContext } from './tools';
 import {
   describeScene, addObject, transformObject, setMaterial, setLighting, frameCamera, scatter,
+  snapshotTool, undoTool,
 } from './tools';
 import { OBJECT_TYPES } from './factory';
 import { LIGHTING_PRESETS } from './scene';
 
 /**
- * Registration of the seven studio tools via the WebMCP imperative API:
+ * Registration of the studio tools via the WebMCP imperative API:
  *   document.modelContext.registerTool(...)
  * This module is the ONLY place that talks to document.modelContext.
  * The same implementations are reused by the local dev harness (?agent=1).
+ *
+ * Every mutating tool automatically captures a snapshot right before it
+ * runs, so `undo` can always step back — reversibility as a trust primitive.
  */
 
 export interface ToolDef {
@@ -17,7 +21,9 @@ export interface ToolDef {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations?: { readOnlyHint?: boolean };
-  run: (ctx: ToolContext, args: Record<string, unknown>) => string;
+  /** Auto-capture a snapshot before this tool runs. */
+  mutating?: boolean;
+  run: (ctx: ToolContext, args: Record<string, unknown>) => Promise<string> | string;
 }
 
 const TYPES = OBJECT_TYPES as unknown as string[];
@@ -59,8 +65,8 @@ export const TOOL_DEFS: ToolDef[] = [
           type: 'object',
           description: 'Ground position. Omit to auto-place near the scene center.',
           properties: {
-            x: { type: 'number', description: 'World x, range about -38..38.' },
-            z: { type: 'number', description: 'World z, range about -38..38.' },
+            x: { type: 'number', description: 'World x, range about -58..58.' },
+            z: { type: 'number', description: 'World z, range about -58..58.' },
           },
         },
         scale: {
@@ -75,13 +81,15 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['type'],
     },
+    mutating: true,
     run: (ctx, args) => addObject(ctx, args),
   },
   {
     name: 'transform_object',
     description:
       'Move, rotate or scale one or more existing objects. Accepts a single id/name or an array for batch edits. ' +
-      'Rotations are in degrees. Use describe_scene first to learn ids and current values.',
+      'Rotations are in degrees. Waits until the animated transition has settled, then reports the resulting live ' +
+      'positions. Use describe_scene first to learn ids and current values.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -103,6 +111,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['targets', 'op'],
     },
+    mutating: true,
     run: (ctx, args) => transformObject(ctx, args),
   },
   {
@@ -127,6 +136,7 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['targets'],
     },
+    mutating: true,
     run: (ctx, args) => setMaterial(ctx, args),
   },
   {
@@ -147,14 +157,15 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['preset'],
     },
+    mutating: true,
     run: (ctx, args) => setLighting(ctx, args),
   },
   {
     name: 'frame_camera',
     description:
-      'Fly the user’s camera to a composed shot of the whole scene or one object. Animated, not a hard cut. ' +
-      'Use after building something so the user sees it, or for storytelling angles. ' +
-      'The user can grab the camera at any time and overrides this.',
+      'Fly the user’s camera to a composed shot of the whole scene or one object. The move animates for about one ' +
+      'second and the tool result reports the pose only after it settled. Use after building something so the user ' +
+      'sees it, or for storytelling angles. If the user grabs the camera mid-flight, the result says so.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -164,7 +175,7 @@ export const TOOL_DEFS: ToolDef[] = [
           enum: ['front', 'side', 'top', 'three_quarter', 'low', 'hero'],
           description: 'three_quarter is a safe default; hero is a low dramatic close shot.',
         },
-        distance: { type: 'number', minimum: 1, maximum: 80, description: 'Camera distance in meters. Omit to auto-frame.' },
+        distance: { type: 'number', minimum: 1, maximum: 90, description: 'Camera distance in meters. Omit to auto-frame.' },
         focal_length: {
           type: 'number',
           minimum: 14,
@@ -216,11 +227,48 @@ export const TOOL_DEFS: ToolDef[] = [
       },
       required: ['type', 'count'],
     },
+    mutating: true,
     run: (ctx, args) => scatter(ctx, args),
+  },
+  {
+    name: 'snapshot',
+    description:
+      'Save a restore point of the current scene (all objects, materials, lighting, camera). Call it before a risky ' +
+      'sequence you want to be able to step back to, e.g. before a big redesign. undo steps back through these.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        label: { type: 'string', description: 'Short label for the restore point, e.g. "before redesign".' },
+      },
+    },
+    run: (ctx, args) => snapshotTool(ctx, args),
+  },
+  {
+    name: 'undo',
+    description:
+      'Revert the scene to the state before the most recent change (each mutating tool auto-saves a restore point). ' +
+      'Use whenever the user dislikes a change, or when your own edit turned out wrong. Can be repeated to step back.',
+    inputSchema: { type: 'object', properties: {} },
+    run: (ctx, args) => undoTool(ctx, args),
   },
 ];
 
+const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
+
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
+
+/** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
+async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger): Promise<string> {
+  let result: string;
+  try {
+    if (MUTATING.has(def.name)) ctx.snapshots.capture(`before ${def.name}`);
+    result = await def.run(ctx, args ?? {});
+  } catch (e) {
+    result = JSON.stringify({ ok: false, error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
+  }
+  log(def.name, args ?? {}, result);
+  return result;
+}
 
 /**
  * Registers all tools. Returns the number of tools successfully registered,
@@ -241,16 +289,9 @@ export async function registerTools(ctx: ToolContext, log: ToolLogger): Promise<
           description: def.description,
           inputSchema: def.inputSchema,
           ...(def.annotations ? { annotations: def.annotations } : {}),
-          execute: (input, execCtx) => {
+          execute: async (input, execCtx) => {
             void execCtx;
-            let result: string;
-            try {
-              result = def.run(ctx, input ?? {});
-            } catch (e) {
-              result = JSON.stringify({ ok: false, error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
-            }
-            log(def.name, input ?? {}, result);
-            return result;
+            return invoke(ctx, def, input ?? {}, log);
           },
         },
         { signal: controller.signal },
@@ -268,17 +309,15 @@ export async function registerTools(ctx: ToolContext, log: ToolLogger): Promise<
 }
 
 /** Dispatch a tool directly (used by the local dev harness). */
-export function dispatchTool(ctx: ToolContext, name: string, args: Record<string, unknown>, log: ToolLogger): string {
+export async function dispatchTool(
+  ctx: ToolContext,
+  name: string,
+  args: Record<string, unknown>,
+  log: ToolLogger,
+): Promise<string> {
   const def = TOOL_DEFS.find((t) => t.name === name);
   if (!def) {
     return JSON.stringify({ ok: false, error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
   }
-  let result: string;
-  try {
-    result = def.run(ctx, args ?? {});
-  } catch (e) {
-    result = JSON.stringify({ ok: false, error: `Tool "${name}" failed: ${e instanceof Error ? e.message : String(e)}` });
-  }
-  log(name, args ?? {}, result);
-  return result;
+  return invoke(ctx, def, args ?? {}, log);
 }

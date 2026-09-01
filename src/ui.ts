@@ -105,13 +105,16 @@ export function setStatus(kind: 'live' | 'none' | 'checking', toolCount?: number
   }
 }
 
-export function initChrome(): void {
+export function initChrome(onReset?: () => void): void {
   // collapse toggle
   const panel = el('tool-log');
   el('tool-log-toggle').addEventListener('click', () => {
     panel.classList.toggle('collapsed');
     el('tool-log-toggle').textContent = panel.classList.contains('collapsed') ? '+' : '–';
   });
+
+  // reset to boot state
+  el('scene-reset').addEventListener('click', () => onReset?.());
 
   // prompt card
   const card = el('prompt-card');

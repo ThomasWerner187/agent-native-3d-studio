@@ -1,0 +1,5 @@
+[  207734ms] ReferenceError: updateTweens is not defined
+    at Studio.frame (http://localhost:5173/src/scene.ts?t=1788268761322:128:5)
+    at http://localhost:5173/src/scene.ts?t=1788268761322:122:47
+    at onAnimationFrame (http://localhost:5173/node_modules/.vite/deps/chunk-SCGUQBHX.js?v=e75483ba:40488:37)
+    at onAnimationFrame (http://localhost:5173/node_modules/.vite/deps/chunk-SCGUQBHX.js?v=e75483ba:31354:5)
