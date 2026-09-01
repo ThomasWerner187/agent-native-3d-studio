@@ -34,13 +34,23 @@ export interface ToolDef {
 
 const TYPES = OBJECT_TYPES as unknown as string[];
 
+/**
+ * CDP-only harnesses (Codex/ChatGPT driving Chrome without a WebMCP client)
+ * read the getTools() listing before anything else — so every description
+ * carries the exact in-page invocation pattern. This kills the #1 failure
+ * mode we observed live: calling executeTool() with a tool NAME instead of
+ * the registered tool object (fails, costs the agent a recovery turn).
+ * Keep every description + this suffix within Chrome's 500-char budget.
+ */
+const CDP_RECIPE = (name: string) =>
+  ' Recipe: mc=document.modelContext; mc.executeTool((await mc.getTools()).find(t=>t.name=="' + name + '"),JSON.stringify(args)).';
+
 export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'help',
     description:
-      'Get the studio playbook: the recommended workflow, all available tools with their key parameters, ' +
-      'and worked recipes (build scenes, cinematic camera paths, playing chess). Call this FIRST if anything ' +
-      'about driving the scene is unclear. Read-only.',
+      'START HERE. One call returns the studio playbook: workflow conventions, build/camera/chess recipes, ' +
+      'and how to invoke tools correctly from any harness. Read-only.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     run: (ctx, args) => helpTool(ctx, args),
@@ -251,9 +261,8 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'camera_path',
     description:
       'Direct a camera sequence: fly through 2-12 keyframed shots, holding on each — a real camera move, not a single cut. ' +
-      'Use to tour a build, reveal a scene, or orbit drama around an object. Plays once by default; the result reports ' +
-      'each completed shot after the whole path settled. The user grabbing the camera interrupts gracefully (reported). ' +
-      'For cinema, pair with set_ui {visible:false} beforehand.',
+      'Use to tour a build, reveal a scene, or orbit drama. Plays once; the result reports each completed shot. ' +
+      'A user grabbing the camera interrupts gracefully (reported). Pair with set_ui {visible:false} for cinema.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -290,9 +299,8 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'scatter',
     description:
       'The power tool: distribute many copies of one type across a rectangular area with natural variation — ' +
-      'forests, boulder fields, lantern rows. exclusion_zones keep paths/seating clear; avoid_object_ids dodge ' +
-      'existing objects (with real bounding boxes when footprint="actual_bounds"). Pass a seed to reproduce the exact ' +
-      'same layout later. Instances appear in a staggered animation. Use instead of many add_object calls.',
+      'forests, boulder fields, lantern rows. exclusion_zones keep paths clear; avoid_object_ids dodge existing ' +
+      'objects. Pass a seed to reproduce the exact layout. Use instead of many add_object calls.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -421,6 +429,9 @@ export const TOOL_DEFS: ToolDef[] = [
     run: (ctx, args) => undoTool(ctx, args),
   },
 ];
+
+// Append the in-page call recipe to every description (see CDP_RECIPE above).
+for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
 
 const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
 
