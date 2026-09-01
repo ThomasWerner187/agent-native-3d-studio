@@ -295,3 +295,14 @@ body.ui-hidden .hud {
   #prompt-card { max-height: 38vh; overflow: auto; }
   .show-btn { bottom: 92px; font-size: 13px; }
 }
+
+/* full payload view: readable, scrollable, never truncated */
+.log-raw pre, .log-raw .log-args, .log-raw .log-result {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+}

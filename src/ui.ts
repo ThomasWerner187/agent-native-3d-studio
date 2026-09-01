@@ -102,9 +102,10 @@ function renderEntry(entry: LogEntry): HTMLElement {
   if (entry.args && Object.keys(entry.args).length > 0) {
     const args = document.createElement('div');
     args.className = 'log-args';
-    // No truncation here: the details view exists to hold the full payload.
+    // No truncation here: the details view exists to hold the full payload,
+    // pretty-printed so an 8-op batch is actually readable.
     try {
-      args.textContent = JSON.stringify(entry.args);
+      args.textContent = JSON.stringify(entry.args, null, 2);
     } catch {
       args.textContent = compactJson(entry.args);
     }
