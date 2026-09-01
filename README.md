@@ -1,6 +1,6 @@
 # Agent-Native 3D Scene Studio
 
-A cozy 3D scene studio in the browser where a human and an AI agent build the **same live scene at the same time** — the agent through [WebMCP](https://developer.chrome.com/docs/ai/webmcp) tools (editing, scattering, lighting, lofi music — and directing real cinematic camera paths), you through the mouse, both without ever blocking the other.
+**Every canvas application on the web is agent-inoperable today.** A WebGL canvas is a single empty `<canvas>` element to any agent — no DOM to read, no button to click, nothing to scrape. CAD tools, GIS and mapping, medical imaging, DAWs, video editors, data-visualization dashboards, game engines, design tools like Figma's canvas: an AI agent cannot touch any of them, no matter how good the model is. [WebMCP](https://developer.chrome.com/docs/ai/webmcp) is the first API that changes that — and this studio is the working proof case: a live three.js scene where an AI agent builds, lights, scores and *directs* while a human keeps full mouse control at the same time. Nothing here is simulated; every agent action goes through real WebMCP tool calls you can inspect in the on-page log.
 
 **20 seconds, no setup:** paste this into the agent and watch (or open the page and just grab the camera — after 25 idle seconds it drifts into a slow cinematic orbit on its own):
 
@@ -14,7 +14,11 @@ A cozy 3D scene studio in the browser where a human and an AI agent build the **
 
 ## Why this needs WebMCP (not just benefits from it)
 
-A WebGL canvas is a single, empty element to any agent. There is no DOM to read, no button to click, no text to scrape — the entire application state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. Without WebMCP this application is not merely *slow* for an agent to operate, it is **inoperable**; the best an agent can do is blindly drag pixels across a canvas. Most WebMCP demos put tools on top of a DOM the agent could always have actuated anyway — for them WebMCP is an accelerant. Here it is the *prerequisite*: twenty structured scene tools turn an inaccessible black box into a collaborative canvas — up to and including film-style camera direction — while the human keeps full mouse control at all times.
+The entire application state — objects, transforms, materials, camera, light — lives in the three.js scene graph, invisible to any DOM-based agent. The best an agent can do without WebMCP is blindly drag pixels across a screenshot. Most WebMCP demos put tools on top of a page the agent could always have actuated through the DOM anyway — for them, WebMCP is an accelerant. Here it is the **prerequisite**: without it the studio does not exist for an agent at all. Twenty structured tools turn that black box into a shared workspace:
+
+- **The scatter before/after.** "Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area clear" is roughly **twenty minutes of manual click-place-adjust work** — and **zero** for an agent without WebMCP, because there is nothing to click. With `scatter{type:"tree",count:40,exclusion_zones:[…],seed:42}` it is one sentence, executed in seconds, reproducible via the seed.
+- **Measured: agent wall-clock is model turns, not the scene.** In a live Codex run, 8 successful tool calls took **3 min 12 s** wall-clock while total scene animation was **under 3 s**. The time went into orientation and one failed call — model turns, not rendering. That measurement is why `batch` exists (1–12 tool operations in one call, one snapshot, whole-batch undo): the biggest speed lever for agents is fewer round trips, and every WebMCP tool author will hit the same wall. This is concrete API feedback to the Chrome team, from the only class of app where it could be measured this cleanly.
+- **Reversibility is the trust primitive.** Every mutating tool auto-captures a restore point; `undo` steps back, ↺ resets, `export_scene`/`import_scene` turn any state into a share link that opens for anyone — no backend.
 
 ## Try it live
 
