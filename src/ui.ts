@@ -166,7 +166,11 @@ export function setStatus(kind: 'live' | 'none' | 'checking', toolCount?: number
   const text = chip.querySelector('.status-text')!;
   if (kind === 'live') {
     text.textContent = `WebMCP live · ${toolCount} tools`;
-    chip.title = 'This page has registered its tools via document.modelContext. Open an agent to drive the scene.';
+    chip.title =
+      'This page has registered its tools via document.modelContext. Open an agent to drive the scene. ' +
+      'If your harness cannot inject these tools, evaluate JavaScript in this page: ' +
+      'const mc = document.modelContext; await mc.executeTool((await mc.getTools()).find(t => t.name === "help"), "{}"); ' +
+      '— the full recipe is printed in the tool log panel.';
   } else if (kind === 'none') {
     text.textContent = 'WebMCP unavailable here';
     chip.title =

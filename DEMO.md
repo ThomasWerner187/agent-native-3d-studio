@@ -106,3 +106,21 @@ with the exact invocation recipe (all within the 500-char budget).
 - **chess_move + board_square**: agent-vs-itself chess with follow/hero cameras — the most surprising beat.
 - **set_music**: three self-made Suno tracks; "…and put some lofi on" lands every time.
 - Full tool smoke test: `npm run smoke` → `20/20 tools verified` (`scripts/smoke-result.json`, CI runs it on every push).
+
+## Driving Codex/ChatGPT when the harness cannot inject WebMCP tools
+
+There are two different Codex surfaces, and they behave differently:
+
+- **The ChatGPT sidebar inside Chrome** — has the "Chrome control skill" and can evaluate JS in the page. It finds the tools itself (`getTools()` + `executeTool()`); a plain prompt like *"Drive the 3D scene using its WebMCP tools…"* works (verified: 8-call neon-chess run, 3m12s baseline).
+- **Desktop/Codex sessions without injection** — they read the page (they quote the green "WebMCP live · 20 tools" chip) but have no injected tool surface, and some will *refuse* instead of using the in-page path (observed: "this session exposes none of those tools for invocation"). The page now carries the recipe as readable text — the **agent bridge** in the tool-log panel and the status chip tooltip — so point the agent at it explicitly.
+
+**Prompt that works for the refusing surfaces** (say "evaluate JavaScript in the page", never just "use the webmcp tool"):
+
+> Using only this page's WebMCP tools — callable from the page's JS context:
+> `const mc = document.modelContext; const tools = await mc.getTools(); const call = (name, args) => mc.executeTool(tools.find(t => t.name === name), JSON.stringify(args));`
+> First run `await call("help", {})` and read the playbook. Then, still without any DOM clicks:
+> 1. Delete the pixel word "OPENAI" (`delete_objects { name_contains: "OPENAI px" }`) and build the word "THOMAS" the same way (boxes named "THOMAS px N", `animate: false`, same warm glow via one `set_material` over the new names).
+> 2. Place 2 more chess pieces on the forest board (`add_object type:"chess_piece"` with `piece` and `side`), and play 2 real moves with `board_square` + `chess_move`.
+> 3. Finish on a top hero shot of the board.
+
+Never write "use the webmcp tool" (singular) — agents look for a literal tool named "webmcp", find none, and refuse.

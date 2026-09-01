@@ -306,3 +306,25 @@ body.ui-hidden .hud {
   font-size: 10.5px;
   line-height: 1.45;
 }
+
+/* agent bridge: readable recipe for harnesses without tool injection */
+.agent-bridge {
+  border-top: 1px solid rgba(255, 214, 170, 0.15);
+  padding: 8px 12px 10px;
+  font-size: 10.5px;
+  color: var(--ink-dim);
+}
+.agent-bridge-title { font-weight: 700; color: #ffb36b; letter-spacing: 0.02em; }
+.agent-bridge-body { margin-top: 3px; line-height: 1.4; }
+.agent-bridge-code {
+  margin: 6px 0 4px;
+  padding: 7px 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: #ffd9a8;
+}
+.ui-hidden .agent-bridge { display: none; }

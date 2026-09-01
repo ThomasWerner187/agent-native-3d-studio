@@ -36,6 +36,15 @@
         <div id="tool-log-entries" class="panel-body">
           <div class="log-empty">No tool calls yet.<br />Open an agent (e.g. the Model Context Tool Inspector) and ask it to build something.</div>
         </div>
+        <div id="agent-bridge" class="agent-bridge">
+          <div class="agent-bridge-title">AGENTS — no WebMCP client in your harness?</div>
+          <div class="agent-bridge-body">The tools are not injected into your context, but they are callable from this page's JS context. Evaluate exactly this in the page:</div>
+          <pre class="agent-bridge-code">const mc = document.modelContext;
+const tools = await mc.getTools();        // 20 tools
+const help = tools.find(t => t.name === "help");
+await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre>
+          <div class="agent-bridge-body">Call every tool this way — pass <code>JSON.stringify(args)</code> as the second argument. Results are JSON strings with <code>ok</code>, <code>result</code> and <code>scene_version_after</code>.</div>
+        </div>
       </aside>
 
       <!-- one story, not nine prompts -->
