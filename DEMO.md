@@ -61,3 +61,36 @@ Verified results: move lands exactly on the square coordinate (±0.01), `delete_
 { "tool": "describe_scene", "input": {} }
 { "tool": "undo", "input": {} }
 ```
+
+
+## Agent speed test (Codex / CDP-only harness)
+
+Baseline (2026-09-01, before the description-recipe fix): **3m 12s** end-to-end for
+"night_neon + chessboard + white king + black queen + hero shot" — 8 successful tool
+calls, zero scene errors. The wall-clock went into model turns, not the scene
+(scene animations total <3s). Wasted turns observed:
+1. Tab resolution (ChatGPT-internal, not page-fixable).
+2. Failed first `executeTool()` — passed the tool *name*; the API needs the
+   registered tool *object* from `getTools()`. Cost: fail + recovery turn.
+3. One turn reading tool schemas.
+The agent never looked at the console recipe, the DOM manifest or `help` —
+it read the `getTools()` listing. Fix shipped: every tool description now ends
+with the exact invocation recipe (all within the 500-char budget).
+
+**How to re-run the timed test (~30 s of setup):**
+1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 15 tools").
+2. Open the ChatGPT sidebar → New chat.
+3. Paste and send:
+   > Drive the 3D scene in the current browser tab using its WebMCP tools. Steps:
+   > (1) Switch the lighting to the night_neon preset. (2) Add a chessboard, then
+   > place a white king and a black queen on two of its squares. (3) Frame the
+   > chessboard for a hero shot. Report each tool call and its JSON result.
+4. Measure: sidebar "You said" timestamp → first `ok:true` in the page Tool Log.
+   Compare against 3m 12s; check the sidebar transcript for a failed-call turn
+   (there should be none now).
+
+**Retro questions for Codex** (paste into the same chat after the run):
+> Answer briefly, don't touch the scene: (1) What cost you the most turns in that
+> run? (2) The tool descriptions each end with a call recipe now — did you see and
+> use it? (3) What single page change would cut your time-to-first-successful-call
+> the most?
