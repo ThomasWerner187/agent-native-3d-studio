@@ -1,12 +1,12 @@
 {
-  "at": "2026-09-02T16:50:39.431Z",
+  "at": "2026-09-02T19:10:07.052Z",
   "invocation": {
-    "verified": 20,
-    "total": 20
+    "verified": 23,
+    "total": 23
   },
   "behavior": {
-    "passed": 12,
-    "total": 12,
+    "passed": 21,
+    "total": 21,
     "checks": [
       {
         "name": "add_object increases contents",
@@ -49,6 +49,11 @@
         "detail": "{\"before\":5,\"after\":6}"
       },
       {
+        "name": "scene links preserve every material and lantern light",
+        "pass": true,
+        "detail": ""
+      },
+      {
         "name": "invalid calls fail without mutating",
         "pass": true,
         "detail": ""
@@ -67,6 +72,46 @@
         "name": "stale expected_scene_version rejected",
         "pass": true,
         "detail": "\"Stale observation: you saw scene_version 12, but the scene is now 7 (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
+      },
+      {
+        "name": "mouse drag exposes selected camp and human edit",
+        "pass": true,
+        "detail": "[{\"id\":\"obj_11\",\"name\":\"camp\",\"position\":[2.3080730595461487,0,-0.9985320702576963],\"revision\":1}]"
+      },
+      {
+        "name": "layout adapts scenery and preserves live human camp",
+        "pass": true,
+        "detail": "{\"ok\":true,\"operation_id\":\"op_mtkh0iu5_eo2vgx\",\"actor\":\"demo\",\"scene_version_before\":10,\"scene_version_after\":11,\"applied\":true,\"duration_ms\":965,\"result\":{\"ok\":true,\"layout_id\":\"layout_1\",\"anchor_id\":\"obj_11\",\"anchor_position\":[2.3080730595461487,0,-0.9985320702576963],\"preserved_ids\":[\"obj_11\",\"obj_45\",\"obj_46\",\"obj_47\"],\"moved_ids\":[\"obj_1\",\"obj_2\",\"obj_3\",\"obj_4\",\"obj_5\",\"obj_6\",\"obj_7\",\"obj_8\",\"obj_9\",\"obj_10\",\"obj_12\",\"obj_13\",\"obj_15\",\"obj_16\",\"obj_18\",\"obj_19\",\"obj_20\",\"obj_21\",\"obj_26\",\"obj_27\",\"obj_28\",\"obj_29\",\"obj_32\",\"obj_33\",\"obj_34\",\"obj_35\",\"obj_36\",\"obj_37\",\"obj_38\",\"obj_39\",\"obj_40\",\"obj_41\",\"obj_42\",\"obj_43\",\"obj_44\"],\"scene_version\":11,\"note\":\"Live camp placement and human edits preserved. undo_layout reverts only these positions.\"}}"
+      },
+      {
+        "name": "selective undo keeps later edits and human camp",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "selective undo restores layout positions but keeps materials",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "redo reapplies only the reverted layout positions",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "invalid layout is side-effect free",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "local harness reports demo provenance",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "mobile controls fit without intro overlap",
+        "pass": true,
+        "detail": "{\"fits\":true,\"separated\":true}"
       }
     ]
   }

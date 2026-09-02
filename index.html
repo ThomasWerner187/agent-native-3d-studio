@@ -1,118 +1,61 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent-Native 3D Scene Studio</title>
-    <meta name="description" content="A 3D scene studio where a human and an AI agent work on the same live scene — via WebMCP." />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>" />
-  </head>
-  <body>
-    <div id="app">
-      <canvas id="viewport"></canvas>
-
-      <!-- top-left brand + WebMCP status -->
-      <header class="hud hud-top">
-        <div class="brand">
-          <div class="brand-title">Agent-Native 3D Scene Studio</div>
-          <div class="brand-sub">human + agent, one live scene</div>
-        </div>
-        <div id="webmcp-status" class="status-chip status-checking" title="WebMCP availability">
-          <span class="status-dot"></span>
-          <span class="status-text">checking WebMCP…</span>
-        </div>
-      </header>
-
-      <!-- tool log, right side -->
-      <aside id="tool-log" class="hud panel">
-        <div class="panel-head">
-          <span class="panel-title">Tool Log</span>
-          <span class="panel-sub">webmcp calls, live</span>
-          <button id="scene-share" class="mini-btn" title="Copy a link to this exact scene — opens anywhere, no WebMCP needed" aria-label="Copy scene share link">⧉</button>
-          <button id="music-toggle" class="mini-btn" title="Lofi on/off — self-made Suno tracks" aria-label="Toggle lofi music">♪</button>
-          <button id="scene-reset" class="mini-btn" title="Reset the scene to its original state" aria-label="Reset scene">↺</button>
-          <button id="tool-log-toggle" class="mini-btn" title="Collapse" aria-label="Collapse tool log">–</button>
-        </div>
-        <div id="tool-log-entries" class="panel-body">
-          <div class="log-empty">No tool calls yet.<br />Open an agent (e.g. the Model Context Tool Inspector) and ask it to build something.</div>
-        </div>
-        <div id="agent-bridge" class="agent-bridge">
-          <div class="agent-bridge-title">AGENTS — no WebMCP client in your harness?</div>
-          <div class="agent-bridge-body">The tools are not injected into your context, but they are callable from this page's JS context. Evaluate exactly this in the page:</div>
-          <pre class="agent-bridge-code">const mc = document.modelContext;
-const tools = await mc.getTools();        // 20 tools
-const help = tools.find(t => t.name === "help");
-await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre>
-          <div class="agent-bridge-body">Call every tool this way — pass <code>JSON.stringify(args)</code> as the second argument. Results are JSON strings with <code>ok</code>, <code>result</code> and <code>scene_version_after</code>.</div>
-        </div>
-      </aside>
-
-      <!-- one story, not nine prompts -->
-      <div id="prompt-card" class="hud panel">
-        <div class="panel-head">
-          <span class="panel-title">Try it with an agent</span>
-          <button id="prompt-card-close" class="mini-btn" title="Dismiss" aria-label="Dismiss prompts">×</button>
-        </div>
-        <div class="panel-body prompts">
-          <p class="story-line">Describe a world. Watch an agent write and direct it — <strong>while you keep control.</strong></p>
-          <button class="prompt hero-prompt" data-copy="Plant an avenue of trees along both sides of the stone path, add a few boulders between them, then fly an exciting camera flight right through the avenue.">
-            <span>“Plant an avenue of trees along the stone path, then fly an exciting camera flight through it.”</span>
-            <span class="copy-hint">copy</span>
-          </button>
-          <details class="experiments">
-            <summary>More experiments</summary>
-            <button class="prompt" data-copy="Play a short chess game against yourself on the board — 6 legal moves total. After each move, perform it with chess_move and switch the camera to the moving side with a follow angle. Finish on a hero shot of the board.">
-              <span>“Play a short chess game against yourself, switching the camera to the moving side after every move.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Set up a chessboard with pieces on the meadow next to the picnic table — name the pawns after their squares. Zoom in with the camera and play your first move against me, animating the piece.">
-              <span>“Set up a chessboard next to the table, zoom in, and play your first move against me.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Delete all pawns from the chessboard so we play kings-only. Then switch the camera to whichever side's turn it is before every move.">
-              <span>“Delete all pawns — kings-only chess. Switch the camera to whoever's turn it is.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Make it night, let the street lamp glow warm, then hide the UI and give me a cozy cinematic shot of the seating area.">
-              <span>“Make it night, let the lamp glow warm, then hide the UI and give me a cozy cinematic shot.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Set the mood to golden hour, put the lofi music on, and frame the whole scene like a movie still — three quarter angle, portrait lens.">
-              <span>“Set the mood to golden hour, put the lofi music on, and frame the scene like a movie still.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-          </details>
-        </div>
-      </div>
-</div>
-
-      <button id="show-agent" class="hud show-btn">▶ Watch the agent write the scene</button>
-
-      <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true">
-        <div id="show-cue-kicker" class="show-cue-kicker"></div>
-        <div id="show-cue-title" class="show-cue-title"></div>
-        <div id="show-cue-detail" class="show-cue-detail"></div>
-      </div>
-
-      <!-- controls hint, bottom center -->
-      <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete&ensp;·&ensp;<kbd>H</kbd> hide UI&ensp;·&ensp;<a href="?agent=1" class="hint-link">no WebMCP flag? try the built-in harness →</a></div>
-
-      <div id="toast" class="toast"></div>
-
-      <!-- cinematic overlays -->
-      <div class="vignette"></div>
-      <div class="grain"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent-Native 3D Scene Studio</title>
+  <meta name="description" content="Shape a cinematic forest together. Your hands and your browser agent, on one live 3D canvas through WebMCP." />
+  <meta name="theme-color" content="#09151b" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23dcab66' d='M20 3 36 12v16L20 37 4 28V12z'/%3E%3Cpath fill='none' stroke='%230d2228' stroke-width='2' d='m5 12 15 9 15-9M20 21v15'/%3E%3C/svg%3E" />
+</head>
+<body>
+<div id="app">
+  <canvas id="viewport" aria-label="Interactive 3D forest. Drag to orbit; drag an object to move it."></canvas>
+  <header class="hud hud-top">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">◇</span><div><div class="brand-title">Scene Studio</div><div class="brand-sub">Agent-native · WebMCP</div></div></div>
+    <div class="top-actions">
+      <div id="webmcp-status" class="status-chip status-checking"><span class="status-dot"></span><span class="status-text">Connecting tools…</span></div>
+      <button id="scene-share" class="icon-btn" aria-label="Copy scene share link" title="Copy scene share link">↗</button>
+      <button id="music-toggle" class="icon-btn" aria-label="Toggle lofi music" title="Toggle lofi music">♫</button>
+      <button id="quality-toggle" class="quality-btn" aria-pressed="true">Cinematic</button>
     </div>
-    <!--
-      AGENTS: this page drives its 3D scene through WebMCP tools
-      (document.modelContext). If your harness cannot inject WebMCP tools,
-      read this manifest and the console for the standard in-page recipe.
-      Human docs: README.md § "How the WebMCP integration works".
-    -->
+  </header>
+  <section class="hud scene-intro" aria-label="About this scene">
+    <div class="eyebrow"><span></span> A SHARED WORLD</div>
+    <h1>You move it.<br><em>The agent adapts.</em></h1>
+    <p>A place for your ideas.<br>A pair of hands that stays yours.</p>
+    <div class="actor-legend"><span class="human-dot"></span> You <span class="agent-dot"></span> Your agent</div>
+  </section>
+  <aside id="tool-log" class="hud panel">
+    <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool log">−</button></div>
+    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Your canvas is ready.<br>Move the camp, then ask your agent to build around it.</div></div>
+    <details id="agent-bridge" class="agent-bridge"><summary>Connect your agent</summary>
+      <p>Open this page with a WebMCP-aware browser agent. Ask it to read the scene and rearrange the surroundings around your camp.</p>
+      <p>For a compatible JavaScript harness:</p>
+      <pre>const mc = document.modelContext;
+const tools = await mc.getTools();
+await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
+      <a href="?agent=1">Open local tool inspector ↗</a>
+    </details>
+  </aside>
+  <div id="selection-card" class="hud selection-card" hidden><span class="human-dot"></span><span id="selection-name">Camp selected</span><span id="selection-position"></span></div>
+  <section id="prompt-card" class="hud command-bar">
+    <div class="command-main"><span class="prompt-star" aria-hidden="true">✳</span><button class="prompt" data-copy="Read the live scene, including my current selection and human edits. Keep my camp exactly where I placed it. Use arrange_scene to adjust the path, trees and lanterns around it, keeping access clear. Then frame a beautiful shot."><span>Keep my camp here. Build the forest around it.</span><span class="copy-hint">Copy for agent ↗</span></button><button id="prompt-card-close" class="mini-btn" aria-label="Dismiss prompts">×</button></div>
+    <div class="command-caption">Drag the wooden camp to a new spot. Give this prompt to your browser agent.</div>
+  </section>
+  <nav class="hud scene-controls" aria-label="Scene controls">
+    <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Blue hour</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
+    <div class="control-group"><button id="layout-try" title="Run the layout tool locally; no AI model">Try layout</button><button id="layout-undo" disabled>Undo layout</button><button id="layout-redo" disabled>Redo</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
+  </nav>
+  <button id="show-agent" class="hud show-btn">▷ Guided tour</button>
+  <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true"><div id="show-cue-kicker"></div><div id="show-cue-title"></div><div id="show-cue-detail"></div></div>
+  <div id="hint-bar" class="hud">DRAG TO ORBIT <span>·</span> SCROLL TO EXPLORE <span>·</span> H TO HIDE UI</div>
+  <div id="toast" class="toast" role="status"></div><div class="vignette"></div>
+</div>
     <script type="application/json" id="agent-manifest">
     {
       "page": "Agent-Native 3D Scene Studio (three.js)",
-      "tools": "document.modelContext — 20 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
+      "tools": "document.modelContext — 23 tools: help, describe_scene, query_scene, arrange_scene, undo_layout, redo_layout, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
       "start_here": "call the help tool for the full playbook (workflow + recipes)",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
       "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",
@@ -120,5 +63,5 @@ await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre
     }
     </script>
     <script type="module" src="/src/main.ts"></script>
-  </body>
+</body>
 </html>

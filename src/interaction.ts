@@ -4,6 +4,7 @@ import type { SceneStore } from './store';
 import type { SnapshotManager } from './snapshot';
 import { despawn, cancelGroup } from './anim';
 import { disposeObject } from './factory';
+import { logToolCall } from './ui';
 
 /**
  * Mouse interaction: orbit (OrbitControls), click-to-select, drag-to-move.
@@ -23,6 +24,7 @@ export class Interaction {
   private downHitId: string | null = null;
   private dragging = false;
   private dragGlowDone = false;
+  private dragOffset = new THREE.Vector3();
 
   constructor(
     private studio: Studio,
@@ -30,11 +32,22 @@ export class Interaction {
     canvas: HTMLCanvasElement,
     private snapshots: SnapshotManager,
   ) {
-    canvas.addEventListener('pointerdown', (e) => this.onDown(e));
+    canvas.addEventListener('pointerdown', (e) => this.onDown(e), { capture: true });
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
     canvas.addEventListener('pointerup', (e) => this.onUp(e));
+    canvas.addEventListener('pointercancel', (e) => this.onUp(e));
     window.addEventListener('keydown', (e) => this.onKey(e));
-    studio.onFrame(() => this.boxHelper?.update());
+    studio.onFrame(() => {
+      if (this.selected && !store.get(this.selected)) this.select(null);
+      this.boxHelper?.update();
+      const card = document.getElementById('selection-card');
+      const entry = this.selected ? store.get(this.selected) : undefined;
+      if (card) card.hidden = !entry;
+      if (entry) {
+        document.getElementById('selection-name')!.textContent = entry.name;
+        document.getElementById('selection-position')!.textContent = `x ${entry.group.position.x.toFixed(1)} · z ${entry.group.position.z.toFixed(1)} · drag to move`;
+      }
+    });
   }
 
   private pick(ev: PointerEvent): string | null {
@@ -59,6 +72,15 @@ export class Interaction {
     this.downAt = { x: ev.clientX, y: ev.clientY };
     this.downHitId = this.pick(ev);
     this.dragging = false;
+    if (this.downHitId) {
+      // Disable orbit before its pointer handler sees a grab on an object.
+      this.studio.controls.enabled = false;
+      (ev.currentTarget as HTMLCanvasElement).setPointerCapture(ev.pointerId);
+      const hit = this.raycaster.ray.intersectPlane(this.groundPlane, new THREE.Vector3());
+      this.dragOffset.copy(this.store.get(this.downHitId)!.group.position);
+      if (hit) this.dragOffset.sub(hit);
+      this.select(this.downHitId);
+    }
   }
 
   private onMove(ev: PointerEvent): void {
@@ -67,6 +89,7 @@ export class Interaction {
     if (!this.dragging && dist > 5 && this.downHitId) {
       this.dragging = true;
       this.snapshots.capture('before human move');
+      this.store.markHumanEdit(this.downHitId);
       this.studio.controls.enabled = false;
       this.select(this.downHitId);
     }
@@ -89,6 +112,7 @@ export class Interaction {
       this.raycaster.setFromCamera(this.pointer, this.studio.camera);
       const hit = new THREE.Vector3();
       if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
+        hit.add(this.dragOffset);
         const r = Math.hypot(hit.x, hit.z);
         const max = 38;
         if (r > max) hit.multiplyScalar(max / r);
@@ -104,6 +128,10 @@ export class Interaction {
       if (this.dragging) {
         this.dragging = false;
         this.store.bump(); // human moved an object — let agents detect the change
+        const entry = this.downHitId ? this.store.get(this.downHitId) : undefined;
+        if (entry) logToolCall('human_move', { name: entry.name }, JSON.stringify({
+          ok: true, actor: 'human', result: { id: entry.id, position: entry.group.position.toArray(), preserved_by_layout: true },
+        }));
       } else {
         const hitId = this.pick(ev);
         if (hitId) this.select(hitId);
@@ -130,14 +158,17 @@ export class Interaction {
 
   select(id: string | null): void {
     this.selected = id;
+    this.store.selectedId = id;
     if (this.boxHelper) {
       this.studio.scene.remove(this.boxHelper);
+      this.boxHelper.geometry.dispose();
+      (this.boxHelper.material as THREE.Material).dispose();
       this.boxHelper = null;
     }
     if (id) {
       const entry = this.store.get(id);
       if (entry) {
-        this.boxHelper = new THREE.BoxHelper(entry.group, 0xffb36b);
+        this.boxHelper = new THREE.BoxHelper(entry.group, 0x67b7ff);
         (this.boxHelper.material as THREE.LineBasicMaterial).transparent = true;
         (this.boxHelper.material as THREE.LineBasicMaterial).opacity = 0.85;
         this.studio.scene.add(this.boxHelper);
@@ -152,6 +183,7 @@ export class Interaction {
     if (!entry) return;
     this.select(null);
     this.snapshots.capture('before human delete');
+    this.store.markHumanEdit(id);
     this.store.remove(id);
     this.store.bump();
     despawn(entry.group, () => {

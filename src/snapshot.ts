@@ -11,12 +11,26 @@ import { LIGHTING_PRESETS } from './scene';
  * this is that, wired through the same WebMCP tool surface.
  */
 
+interface MaterialState {
+  color: string; roughness: number; metalness: number;
+  emissive: string; emissiveIntensity: number; opacity: number;
+}
+
+function materialState(m: THREE.MeshStandardMaterial): MaterialState {
+  return { color: `#${m.color.getHexString()}`, roughness: m.roughness, metalness: m.metalness,
+    emissive: `#${m.emissive.getHexString()}`, emissiveIntensity: m.emissiveIntensity, opacity: m.opacity };
+}
+
 interface SerializedObject {
   id: string;
   name: string;
   type: string;
   /** Preset variant (chess piece kind) so undo rebuilds the same shape. */
   variant?: string;
+  layoutRole?: 'path' | 'forest' | 'lantern';
+  humanEdited?: boolean;
+  materials?: MaterialState[];
+  lights?: Array<{ color: string; intensity: number }>;
   p: [number, number, number];
   r: [number, number, number];
   s: [number, number, number];
@@ -74,11 +88,17 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
     objects: store.all().map((e) => {
       const g = e.group;
       const m = e.materials[0];
+      const lights: Array<{ color: string; intensity: number }> = [];
+      g.traverse(o => { if (o instanceof THREE.PointLight) lights.push({ color: `#${o.color.getHexString()}`, intensity: o.intensity }); });
       return {
         id: e.id,
         name: e.name,
         type: e.type,
         variant: e.variant,
+        layoutRole: e.layoutRole,
+        humanEdited: e.humanRevision > 0,
+        materials: e.materials.map(materialState),
+        lights,
         p: [g.position.x, g.position.y, g.position.z],
         r: [g.rotation.x, g.rotation.y, g.rotation.z],
         s: [g.scale.x, g.scale.y, g.scale.z],
@@ -109,6 +129,8 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       scale: { x: o.s[0], y: o.s[1], z: o.s[2] },
     });
     entry.group.position.set(o.p[0], o.p[1], o.p[2]);
+    entry.layoutRole = o.layoutRole;
+    if (o.humanEdited) entry.humanRevision = ++store.humanRevision;
     entry.group.rotation.set(o.r[0], o.r[1], o.r[2]);
     studio.scene.add(entry.group);
     const m = entry.materials[0];
@@ -128,6 +150,19 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       light.intensity = 6 * Math.min(4, Math.max(0, m.emissiveIntensity));
       light.color.copy(m.emissive);
     }
+    o.materials?.forEach((state, index) => {
+      const mat = entry.materials[index];
+      if (!mat) return;
+      mat.color.set(state.color); mat.roughness = state.roughness; mat.metalness = state.metalness;
+      mat.emissive.set(state.emissive); mat.emissiveIntensity = state.emissiveIntensity;
+      mat.opacity = state.opacity; mat.transparent = state.opacity < 1; mat.needsUpdate = true;
+    });
+    let lightIndex = 0;
+    entry.group.traverse(object => {
+      if (!(object instanceof THREE.PointLight)) return;
+      const state = o.lights?.[lightIndex++];
+      if (state) { object.color.set(state.color); object.intensity = state.intensity; }
+    });
   }
   store.restoreCounters(data.idCounter, data.version);
 
@@ -299,6 +334,16 @@ export class SnapshotManager {
       highestId = Math.max(highestId, Number(o.id.slice(4)));
       if (typeof o.name !== 'string' || o.name.length > 120) return { ok: false, error: `object "${o.id}" has an invalid name` };
       if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${String(o.type)}"` };
+      if (o.layoutRole != null && !['path', 'forest', 'lantern'].includes(o.layoutRole)) return { ok: false, error: 'invalid layoutRole' };
+      if (o.humanEdited != null && typeof o.humanEdited !== 'boolean') return { ok: false, error: 'invalid humanEdited' };
+      if (o.materials != null && (!Array.isArray(o.materials) || o.materials.length > 64 || o.materials.some(m =>
+        !isRecord(m) || !isHex(m.color) || !isHex(m.emissive) ||
+        !['roughness', 'metalness', 'opacity'].every(k => typeof m[k] === 'number' && Number.isFinite(m[k]) && m[k] >= 0 && m[k] <= 1) ||
+        typeof m.emissiveIntensity !== 'number' || !Number.isFinite(m.emissiveIntensity) || m.emissiveIntensity < 0 || m.emissiveIntensity > 5
+      ))) return { ok: false, error: 'invalid material states' };
+      if (o.lights != null && (!Array.isArray(o.lights) || o.lights.length > 32 || o.lights.some(l =>
+        !isRecord(l) || !isHex(l.color) || typeof l.intensity !== 'number' || !Number.isFinite(l.intensity) || l.intensity < 0 || l.intensity > 100
+      ))) return { ok: false, error: 'invalid light states' };
       if (!isFiniteTuple(o.p) || !isFiniteTuple(o.s)) {
         return { ok: false, error: `object "${o.id}" has a malformed pose/scale` };
       }

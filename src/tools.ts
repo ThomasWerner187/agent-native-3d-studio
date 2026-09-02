@@ -4,6 +4,7 @@ import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
 import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
 import type { SnapshotManager } from './snapshot';
+import type { LayoutManager } from './layout';
 import { AGENT_PLAYBOOK } from './agent-guide';
 import { setMusic, isMusicOn } from './ambience';
 import {
@@ -29,6 +30,7 @@ export interface ToolContext {
   studio: Studio;
   store: SceneStore;
   snapshots: SnapshotManager;
+  layout: LayoutManager;
   select: (id: string | null) => void;
 }
 
@@ -138,6 +140,8 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       id: e.id,
       name: e.name,
       type: e.type,
+      layout_role: e.layoutRole,
+      human_edited: e.humanRevision > 0,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
       s: uniform,
@@ -150,6 +154,13 @@ export function describeScene(ctx: ToolContext, args: Args): string {
   const body: Record<string, unknown> = {
     ok: true,
     scene_version: ctx.store.version,
+    selected_id: ctx.store.selectedId,
+    human_revision: ctx.store.humanRevision,
+    human_edits: ctx.store.all().filter(e => e.humanRevision > 0).map(e => ({
+      id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
+    })),
+    layout: ctx.layout.state,
+    rendering: ctx.studio.frameStats,
     object_count: entries.length,
     counts,
     objects: compact,
@@ -163,7 +174,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       fov: round2(cam.fov),
     },
     lighting: { preset: ctx.studio.currentPreset, intensity: ctx.studio.currentIntensity },
-    ground_radius: 60,
+    ground_radius: ctx.studio.terrain.radius,
     note: entries.length > MAX_OUTPUT_OBJECTS
       ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use query_scene (limit/offset/filter) for the full, paginated list.`
       : 'All values are the live rendered scene state. Use query_scene for pagination and per-object bounds.',
@@ -214,7 +225,7 @@ export function queryScene(ctx: ToolContext, args: Args): string {
   const objects = page.map((e) => {
     const g = e.group;
     const mat = e.materials[0];
-    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type };
+    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type, layout_role: e.layoutRole, human_edited: e.humanRevision > 0 };
     if (e.type === 'chess_piece' && e.variant) o.piece = e.variant;
     if (want('pose')) {
       const uniform =

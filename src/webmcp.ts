@@ -31,6 +31,8 @@ export interface ToolDef {
   };
   /** Auto-capture a snapshot before this tool runs. */
   mutating?: boolean;
+  /** Has its own position journal instead of a whole-scene snapshot. */
+  journaled?: boolean;
   run: (ctx: ToolContext, args: Record<string, unknown>) => Promise<string> | string;
 }
 
@@ -56,6 +58,32 @@ const CDP_RECIPE = (name: string) =>
 
 export const TOOL_DEFS: ToolDef[] = [
   {
+    name: 'arrange_scene',
+    description: 'Adapt the existing diorama path, grove and lanterns to the live camp placement. Preserves the camp, selection and all human-edited objects. Searches around fixed obstacles before changing anything. Returns preserved_ids and moved_ids; undo_layout reverses only its positions.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      anchor: { type: 'string', description: 'Camp id/name. Defaults to selected camp, otherwise camp.' },
+      seed: { type: 'integer', description: 'Deterministic grove variation. Default 42.' },
+      clearance: { type: 'number', minimum: 0.3, maximum: 2, description: 'Extra clearance around camp and path. Default 0.6.' },
+    } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async (ctx, args) => JSON.stringify(await ctx.layout.arrange(args)),
+  },
+  {
+    name: 'undo_layout',
+    description: 'Undo the most recent arrangement, position by position. Keeps the camp, later human edits, material changes and newly created objects. Returns moved_ids and skipped_ids. Use this instead of whole-scene undo for cooperative layouts.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo()),
+  },
+  {
+    name: 'redo_layout',
+    description: 'Reapply the last undone layout, preserving objects changed since the undo. Returns moved_ids and skipped_ids.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo(true)),
+  },
+  {
     name: 'help',
     description:
       'START HERE. One call returns the studio playbook: workflow conventions, build/camera/chess recipes, ' +
@@ -67,7 +95,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'describe_scene',
     description:
-      'Read the current state of the 3D scene at a glance: object counts by type, the first objects with id/name/type/position/rotation/scale/color, the camera pose and the active lighting preset. Read-only. For large scenes use query_scene with pagination instead of relying on the truncated list.',
+      'Read live scene state: selection, human edits, layout undo availability, object counts, positions, camera and lighting. Start here before arranging around a human placement. Large lists are truncated; query_scene paginates and returns bounds. Read-only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -555,7 +583,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot']);
+const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -626,12 +654,17 @@ function invocationId(): string {
 }
 
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
-async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal): Promise<string> {
+async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal, actor: 'agent' | 'human' | 'demo' = 'agent'): Promise<string> {
   ctx.studio.noteActivity();
   const t0 = performance.now();
   const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
   const isMutating = MUTATING.has(def.name);
+  if (ctx.layout.busy && (isMutating || def.name === 'undo')) {
+    const result = JSON.stringify({ ok: false, operation_id: fallbackOperationId, scene_version_before: versionBefore, scene_version_after: ctx.store.version, duration_ms: 0, code: 'layout_busy', actor, applied: false, error: 'A layout is still running. Read the scene after it settles and retry.' });
+    log(def.name, args, result);
+    return result;
+  }
 
   // optimistic concurrency: reject stale plans before touching the scene
   const expected = args?.expected_scene_version;
@@ -641,7 +674,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
       ok: false,
       code,
       operation_id: fallbackOperationId,
-      actor: 'agent',
+      actor,
       scene_version_before: versionBefore,
       scene_version_after: ctx.store.version,
       applied: false,
@@ -666,7 +699,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   }
 
   // exactly one snapshot per logical transaction, taken here (central ownership)
-  const snapId = isMutating ? ctx.snapshots.capture(`before ${def.name}`) : null;
+  const snapId = isMutating && !def.journaled ? ctx.snapshots.capture(`before ${def.name}`) : null;
 
   if (signal?.aborted) {
     if (snapId) ctx.snapshots.discard(snapId);
@@ -674,7 +707,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
       ok: false,
       code: 'cancelled',
       operation_id: fallbackOperationId,
-      actor: 'agent',
+      actor,
       scene_version_before: versionBefore,
       scene_version_after: ctx.store.version,
       applied: false,
@@ -713,7 +746,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   const envelope: Record<string, unknown> = {
     ok,
     operation_id: typeof data.operation_id === 'string' ? data.operation_id : fallbackOperationId,
-    actor: 'agent',
+    actor,
     scene_version_before: versionBefore,
     scene_version_after: ctx.store.version,
     applied: (data.applied as boolean) ?? ok,
@@ -775,10 +808,11 @@ export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   log: ToolLogger,
+  actor: 'agent' | 'human' | 'demo' = 'demo',
 ): Promise<string> {
   const def = TOOL_DEFS.find((t) => t.name === name);
   if (!def) {
     return JSON.stringify({ ok: false, code: 'unknown_tool', error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
   }
-  return invoke(ctx, def, args ?? {}, log);
+  return invoke(ctx, def, args ?? {}, log, undefined, actor);
 }

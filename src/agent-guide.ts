@@ -8,6 +8,7 @@
  */
 
 export const AGENT_PLAYBOOK = [
+  'CO-CREATE: describe_scene includes selected_id, human_edits and layout history. After a human drags the camp, arrange_scene{anchor:"camp",expected_scene_version} adapts the tagged grove/path/lanterns to its LIVE placement, preserving human edits. undo_layout and redo_layout restore ONLY layout positions, skipping later edits. Use these for collaboration; generic undo restores the entire scene. Try layout / Guided tour are local handlers, not AI sessions.',
   'WORKFLOW: start with describe_scene — objects have ids ("obj_3") and names; both target tools. Mutating tools animate and reply only AFTER the scene settled, with live values + scene_version. undo steps back, so experiment freely.',
   'BUILD: add_object{type,position{x,z},scale,name} — types: box/sphere/cylinder/plane/tree/rock/lamp/window/chair/table/chessboard/chess_piece. scatter{type,count,area{cx,cz,w,d},seed} places many with natural variation. set_material{targets,color"#hex",emissive} makes things glow; set_lighting{preset:golden_hour|night_neon|studio|overcast|moonlit,intensity}.',
   'CAMERA: frame_camera{target:"scene"|id,angle:front|side|top|three_quarter|low|hero,select:false}. camera_path{keyframes:[{target,angle,hold_ms}]} flies sequences — fly-throughs, reveals. Hide the HUD with set_ui{visible:false} for clean shots.',
@@ -23,7 +24,7 @@ export const AGENT_PLAYBOOK = [
 export const NO_CLIENT_RECIPE = [
   '// No WebMCP tool surface in your harness? Call the page tools via the standard in-page API:',
   'const mc = document.modelContext;',
-  'const tools = await mc.getTools();                    // 20 tools, alphabetically sorted',
+  'const tools = await mc.getTools();                    // discover the current tools',
   'const add = tools.find(t => t.name === "add_object");',
   'await mc.executeTool(add, JSON.stringify({ type: "tree", position: { x: 2, z: 1 } }));',
   '// every result is a JSON string {ok, scene_version, ...}; read back with describe_scene.',

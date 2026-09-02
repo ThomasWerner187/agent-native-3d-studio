@@ -3,14 +3,19 @@
  * Chrome flag), calls every tool registered in the agent manifest through the
  * same handlers WebMCP exposes, and asserts ok:true.
  *
- * Run: npm run smoke   (starts its own preview server on :4199)
+ * Run: npm run smoke   (starts its own preview server on a free port)
  * Exit code 0 = every tool verified. Writes scripts/smoke-result.json.
  */
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 
-const PORT = 4199;
+// Use a free port so an older developer preview can never mask this build.
+const reservation = createServer();
+await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
+const PORT = reservation.address().port;
+await new Promise(resolve => reservation.close(resolve));
 const BASE = `http://localhost:${PORT}`;
 
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
@@ -18,8 +23,8 @@ await new Promise((r) => setTimeout(r, 1600));
 
 let failures = 0;
 const checked = [];
+let browser;
 try {
-  let browser;
   try {
     browser = await chromium.launch({ channel: 'chrome', headless: true });
   } catch {
@@ -47,6 +52,9 @@ try {
     const r = {};
     r.help = await window.__call('help', {});
     r.describe_scene = await window.__call('describe_scene', {});
+    r.arrange_scene = await window.__call('arrange_scene', { anchor: 'camp' });
+    r.undo_layout = await window.__call('undo_layout', {});
+    r.redo_layout = await window.__call('redo_layout', {});
     r.add_object = await window.__call('add_object', { type: 'tree', name: 'smoke tree' });
     const treeId = r.add_object.result?.id ?? 'obj_1';
     r.query_scene = await window.__call('query_scene', { limit: 5 });
@@ -129,7 +137,7 @@ try {
   await malformedPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
   const malformedScene = await malformedPage.evaluate(() => window.__scene());
   const malformedChip = await malformedPage.evaluate(() => document.querySelector('#webmcp-status .status-text')?.textContent ?? '');
-  const malformedOk = malformedErrors.length === 0 && malformedChip.length > 0 && malformedScene.result?.object_count === 14;
+  const malformedOk = malformedErrors.length === 0 && malformedChip.length > 0 && malformedScene.result?.object_count === id.describe_scene.result.object_count;
   if (malformedOk) {
     console.log(' ✓ malformed-share-link preserves starter scene');
   } else {
@@ -175,6 +183,7 @@ try {
   const behavioral = [];
   const check = (name, pass, detail = '') => {
     behavioral.push({ name, pass, detail });
+    if (!pass) failures++;
     console.log(`${pass ? ' ✓' : '✗'} [behavior] ${name}${pass ? '' : ' — ' + detail}`);
   };
   await badPage2.goto(`${BASE}/?agent=1`);
@@ -231,6 +240,9 @@ try {
       afterImport.scene_version === beforeRoundtrip.scene_version + 1,
     JSON.stringify({ before: beforeRoundtrip.scene_version, after: afterImport.scene_version }),
   );
+  const exportedAgain = j(await run('export_scene', {}));
+  const decodeScene = url => JSON.parse(Buffer.from(url.split('#scene=')[1], 'base64url').toString('utf8'));
+  check('scene links preserve every material and lantern light', JSON.stringify(decodeScene(shareUrl).objects) === JSON.stringify(decodeScene(exportedAgain.result.url).objects));
 
   // invalid calls never mutate the scene
   const d5 = await describe();
@@ -258,6 +270,58 @@ try {
   const afterStale = await describe();
   check('stale expected_scene_version rejected', stale.ok === false && stale.code === 'stale_scene' && afterStale.scene_version === cur.scene_version, JSON.stringify(stale.error ?? ''));
 
+  // Real pointer placement -> semantic layout -> selective undo -> redo.
+  await badPage2.reload();
+  await badPage2.waitForFunction(() => typeof window.__tool === 'function');
+  await run('frame_camera', { target: 'camp', angle: 'top', distance: 18, select: false });
+  await badPage2.mouse.move(640, 360);
+  await badPage2.mouse.down();
+  await badPage2.mouse.move(695, 370, { steps: 12 });
+  await badPage2.mouse.up();
+  const human = await describe();
+  const camp = (j(await run('query_scene', { type: 'camp' })).result.objects)[0];
+  check('mouse drag exposes selected camp and human edit', human.selected_id === camp.id && human.human_edits.some(e => e.id === camp.id), JSON.stringify(human.human_edits));
+  const beforeLayout = (j(await run('query_scene', { limit: 200 })).result.objects);
+  const layout = j(await run('arrange_scene', { anchor: camp.id, expected_scene_version: human.scene_version }));
+  const afterLayout = (j(await run('query_scene', { limit: 200 })).result.objects);
+  check('layout adapts scenery and preserves live human camp', layout.ok && layout.result.moved_ids.length > 5 && JSON.stringify(afterLayout.find(e => e.id === camp.id).pose) === JSON.stringify(camp.pose), JSON.stringify(layout));
+  const changed = layout.result?.moved_ids ?? [];
+  const laterId = changed[0];
+  if (laterId) {
+    await run('transform_object', { targets: laterId, op: 'move', x: 0.4, mode: 'relative' });
+    const later = (j(await run('query_scene', { id_or_name: laterId })).result.objects)[0];
+    await run('set_material', { targets: changed[1], color: '#774499' });
+    const undoLayout = j(await run('undo_layout', {}));
+    const undone = (j(await run('query_scene', { limit: 200 })).result.objects);
+    check('selective undo keeps later edits and human camp', undoLayout.ok && undoLayout.result.skipped_ids.includes(laterId)
+      && JSON.stringify(undone.find(e => e.id === laterId).pose) === JSON.stringify(later.pose)
+      && JSON.stringify(undone.find(e => e.id === camp.id).pose) === JSON.stringify(camp.pose));
+    check('selective undo restores layout positions but keeps materials',
+      undone.filter(e => changed.includes(e.id) && e.id !== laterId).every(e => JSON.stringify(e.pose.p) === JSON.stringify(beforeLayout.find(b => b.id === e.id).pose.p))
+      && undone.find(e => e.id === changed[1]).material.color === '#774499');
+    const redoLayout = j(await run('redo_layout', {}));
+    const redone = (j(await run('query_scene', { limit: 200 })).result.objects);
+    check('redo reapplies only the reverted layout positions', redoLayout.ok
+      && redone.filter(e => redoLayout.result.moved_ids.includes(e.id)).every(e => JSON.stringify(e.pose.p) === JSON.stringify(afterLayout.find(a => a.id === e.id).pose.p))
+      && JSON.stringify(redone.find(e => e.id === laterId).pose) === JSON.stringify(later.pose));
+  }
+  const beforeInvalid = await describe();
+  const invalidLayout = j(await run('arrange_scene', { clearance: -2 }));
+  const afterInvalid = await describe();
+  check('invalid layout is side-effect free', !invalidLayout.ok && beforeInvalid.scene_version === afterInvalid.scene_version && JSON.stringify(beforeInvalid.layout) === JSON.stringify(afterInvalid.layout));
+  check('local harness reports demo provenance', layout.actor === 'demo');
+
+  await badPage2.setViewportSize({ width: 390, height: 844 });
+  await badPage2.goto(BASE);
+  await badPage2.waitForFunction(() => !document.querySelector('#webmcp-status').classList.contains('status-checking'));
+  const phone = await badPage2.evaluate(() => {
+    const intro = document.querySelector('.scene-intro').getBoundingClientRect();
+    const rail = document.querySelector('#tool-log').getBoundingClientRect();
+    return { fits: document.documentElement.scrollWidth <= innerWidth, separated: intro.bottom <= rail.top };
+  });
+  check('mobile controls fit without intro overlap', phone.fits && phone.separated, JSON.stringify(phone));
+  await badPage2.screenshot({ path: 'docs/diorama-mobile.png' });
+
   const passCount = behavioral.filter((b2) => b2.pass).length;
   console.log(`\n[behavior] ${passCount}/${behavioral.length} semantic checks passed`);
   await badPage2.close();
@@ -274,6 +338,7 @@ try {
   console.error('SMOKE FAILED:', e.message);
   process.exitCode = 1;
 } finally {
+  await browser?.close();
   try {
     process.kill(-server.pid);
   } catch {
