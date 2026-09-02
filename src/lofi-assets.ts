@@ -32,7 +32,8 @@ export function cabin(): THREE.Group {
   }
   const face = new THREE.Shape(); face.moveTo(-2.12, 0.5); face.lineTo(2.12, 0.5); face.lineTo(0, 4.48); face.closePath();
   mesh(g, new THREE.ShapeGeometry(face), window, 0, 0, 2.06).castShadow = false;
-  mesh(g, new THREE.ShapeGeometry(face), cedar, 0, 0, -2.08);
+  const backWall = material('#af8055', 'wood', 0.65); backWall.side = THREE.DoubleSide;
+  mesh(g, new THREE.ShapeGeometry(face), backWall, 0, 0, -2.08);
   for (const z of [-2.14, 2.15]) {
     rod(g, end, new THREE.Vector3(-2.2, 0.5, z), new THREE.Vector3(0, 4.65, z), 0.1);
     rod(g, end, new THREE.Vector3(2.2, 0.5, z), new THREE.Vector3(0, 4.65, z), 0.1);

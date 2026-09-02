@@ -2,7 +2,7 @@
 
 **A little world. To slow down in.** Ask your browser agent for a calming lofi scene. A cabin, pond, pines and lanterns appear gradually; music fades in and a cinematic camera keeps drifting. Everything stays editable in the shared three.js scene.
 
-[Lofi review build](https://diorama-review--agent-native-3d-studio.netlify.app) · [Production studio](https://agent-native-3d-studio.netlify.app) · [30-second demo script](DEMO.md) · [Submission description](SUBMISSION.md) · [MIT license](LICENSE)
+[Lofi review build](https://diorama-review--agent-native-3d-studio.netlify.app) · [Production studio](https://agent-native-3d-studio.netlify.app) · [30-second demo script](DEMO.md) · [90-second recording plan](docs/recording-plan.md) · [Submission description](SUBMISSION.md) · [MIT license](LICENSE)
 
 ![The live lofi cabin, pond and cinematic director](docs/lofi-retreat.jpg)
 
