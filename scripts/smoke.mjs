@@ -24,15 +24,25 @@ await new Promise((r) => setTimeout(r, 1600));
 let failures = 0;
 const checked = [];
 let browser;
+const launchOptions = {
+  headless: true,
+  // Explicit software OpenGL on GPU-less CI; no automatic WebGL fallback.
+  // https://chromium.googlesource.com/chromium/src/+/main/docs/gpu/swiftshader.md
+  args: process.env.CI ? ['--use-gl=angle', '--use-angle=swiftshader'] : [],
+};
+const bootTimeout = process.env.CI ? 60_000 : 10_000;
 try {
   try {
-    browser = await chromium.launch({ channel: 'chrome', headless: true });
+    browser = await chromium.launch({ channel: 'chrome', ...launchOptions });
   } catch {
-    browser = await chromium.launch({ headless: true }); // CI: bundled chromium
+    browser = await chromium.launch(launchOptions); // CI: bundled chromium
   }
   const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(90_000);
+  page.on('pageerror', error => console.error('PAGE ERROR:', error.message));
+  page.on('console', message => { if (message.type() === 'error') console.error('BROWSER ERROR:', message.text()); });
   await page.goto(`${BASE}/?agent=1`);
-  await page.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  await page.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
 
   // The agent manifest is the source of truth for the tool list.
   const names = await page.evaluate(() => {
@@ -134,7 +144,7 @@ try {
   const malformedErrors = [];
   malformedPage.on('pageerror', (err) => malformedErrors.push(String(err)));
   await malformedPage.goto(`${BASE}/?agent=1#scene=${malformedShare}`);
-  await malformedPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  await malformedPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
   const malformedScene = await malformedPage.evaluate(() => window.__scene());
   const malformedChip = await malformedPage.evaluate(() => document.querySelector('#webmcp-status .status-text')?.textContent ?? '');
   const malformedOk = malformedErrors.length === 0 && malformedChip.length > 0 && malformedScene.result?.object_count === id.describe_scene.result.object_count;
@@ -164,7 +174,7 @@ try {
   const xssErrors = [];
   xssPage.on('pageerror', (err) => xssErrors.push(String(err)));
   await xssPage.goto(`${BASE}/?agent=1#scene=${xssShare}`);
-  await xssPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  await xssPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
   const xssState = await xssPage.evaluate(() => ({
     probe: !!document.querySelector('#xss-probe'),
     executed: document.body.dataset.xss === '1',
@@ -187,7 +197,7 @@ try {
     console.log(`${pass ? ' ✓' : '✗'} [behavior] ${name}${pass ? '' : ' — ' + detail}`);
   };
   await badPage2.goto(`${BASE}/?agent=1`);
-  await badPage2.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  await badPage2.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
   const run = (tool, args) => badPage2.evaluate(([t, a]) => window.__tool(t, a), [tool, args]);
   const j = (raw) => JSON.parse(raw);
   const describe = async () => (j(await run('describe_scene', {})).result ?? {});
