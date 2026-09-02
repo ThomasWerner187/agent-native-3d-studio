@@ -56,7 +56,7 @@ npm run build
 npm run smoke
 ```
 
-The smoke suite uses its own free preview port, exercises every listed tool and checks observable behavior: pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`; CI runs the same suite.
+The smoke suite uses its own free preview port, exercises every listed tool and checks observable behavior: pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`. GPU-less CI runs the same semantic suite in Performance mode through software OpenGL; the cinematic view is also checked in a hardware-accelerated browser.
 
 Native WebMCP requires a supporting browser/client. In supported Chrome testing builds, enable `chrome://flags/#enable-webmcp-testing`; the status chip reports actual API availability. The scene and local controls also work without WebMCP. `?agent=1` exposes a clearly labeled developer harness for handler tests.
 
@@ -70,4 +70,4 @@ Native WebMCP requires a supporting browser/client. In supported Chrome testing 
 - Chess tools provide geometry and animation, not a chess rules engine.
 - Cinematic rendering costs more than performance mode; frame rate depends on hardware, viewport and scene size.
 
-MIT licensed. Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).
+MIT licensed. Bundled DM Sans and Manrope fonts use their respective SIL Open Font Licenses in [public/fonts](public/fonts). Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).

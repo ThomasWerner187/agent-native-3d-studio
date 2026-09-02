@@ -31,18 +31,32 @@ const launchOptions = {
   args: process.env.CI ? ['--use-gl=angle', '--use-angle=swiftshader'] : [],
 };
 const bootTimeout = process.env.CI ? 60_000 : 10_000;
+async function newTestPage() {
+  // Keep the CSS viewport and pointer geometry; lower only CI's raster cost.
+  const page = await browser.newPage({ deviceScaleFactor: process.env.CI ? 0.5 : 1 });
+  page.setDefaultNavigationTimeout(90_000);
+  return page;
+}
+async function testQuality(page) {
+  // Same scene and tool contract; CI has no hardware GPU for post-processing.
+  if (process.env.CI) await page.getByRole('button', { name: 'Cinematic', exact: true }).click();
+}
 try {
   try {
     browser = await chromium.launch({ channel: 'chrome', ...launchOptions });
   } catch {
     browser = await chromium.launch(launchOptions); // CI: bundled chromium
   }
-  const page = await browser.newPage();
+  const page = await newTestPage();
   page.setDefaultNavigationTimeout(90_000);
   page.on('pageerror', error => console.error('PAGE ERROR:', error.message));
-  page.on('console', message => { if (message.type() === 'error') console.error('BROWSER ERROR:', message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') console.error('BROWSER ERROR:', message.text());
+    else if (message.text().startsWith('SMOKE ')) console.log(message.text());
+  });
   await page.goto(`${BASE}/?agent=1`);
   await page.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
+  await testQuality(page);
 
   // The agent manifest is the source of truth for the tool list.
   const names = await page.evaluate(() => {
@@ -53,7 +67,12 @@ try {
   const id = await page.evaluate(async (names) => {
     window.__results = {};
     window.__call = async (tool, args) => {
-      const raw = await window.__tool(tool, args);
+      console.info('SMOKE running ' + tool);
+      let timeout;
+      const raw = await Promise.race([
+        window.__tool(tool, args),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Tool timed out: ' + tool)), 90_000); }),
+      ]).finally(() => clearTimeout(timeout));
       let parsed;
       try { parsed = JSON.parse(raw); } catch { parsed = { ok: true, raw }; }
       window.__results[tool] = parsed;
@@ -114,11 +133,12 @@ try {
   }
 
   // --- corrupted share link must never take the page down (boot path) -------
+  await page.close(); // Release this renderer before allocating another one.
   const pageErrors = [];
-  const badPage = await browser.newPage();
+  const badPage = await newTestPage();
   badPage.on('pageerror', (err) => pageErrors.push(String(err)));
   await badPage.goto(`${BASE}/?agent=1#scene=not-valid-base64-%%%zzz`);
-  await badPage.waitForTimeout(2500);
+  await badPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
   const chipText = await badPage.evaluate(() => document.querySelector('#webmcp-status .status-text')?.textContent ?? '');
   const logEntries = await badPage.evaluate(() => document.querySelector('#tool-log-entries')?.children.length ?? 0);
   const chipOk = chipText.length > 0 && !chipText.includes('checking');
@@ -140,7 +160,7 @@ try {
     objects: [],
     // camera intentionally missing: boundary validation must reject it
   });
-  const malformedPage = await browser.newPage();
+  const malformedPage = await newTestPage();
   const malformedErrors = [];
   malformedPage.on('pageerror', (err) => malformedErrors.push(String(err)));
   await malformedPage.goto(`${BASE}/?agent=1#scene=${malformedShare}`);
@@ -170,7 +190,7 @@ try {
       p: [0, 0, 0], r: [0, 0, 0], s: [1, 1, 1],
     }],
   });
-  const xssPage = await browser.newPage();
+  const xssPage = await newTestPage();
   const xssErrors = [];
   xssPage.on('pageerror', (err) => xssErrors.push(String(err)));
   await xssPage.goto(`${BASE}/?agent=1#scene=${xssShare}`);
@@ -189,7 +209,7 @@ try {
 
 
   // --- behavioral correctness: verify observable state, not just {ok:true} ---
-  const badPage2 = await browser.newPage();
+  const badPage2 = await newTestPage();
   const behavioral = [];
   const check = (name, pass, detail = '') => {
     behavioral.push({ name, pass, detail });
@@ -198,6 +218,7 @@ try {
   };
   await badPage2.goto(`${BASE}/?agent=1`);
   await badPage2.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
+  await testQuality(badPage2);
   const run = (tool, args) => badPage2.evaluate(([t, a]) => window.__tool(t, a), [tool, args]);
   const j = (raw) => JSON.parse(raw);
   const describe = async () => (j(await run('describe_scene', {})).result ?? {});
@@ -283,6 +304,7 @@ try {
   // Real pointer placement -> semantic layout -> selective undo -> redo.
   await badPage2.reload();
   await badPage2.waitForFunction(() => typeof window.__tool === 'function');
+  await testQuality(badPage2);
   await run('frame_camera', { target: 'camp', angle: 'top', distance: 18, select: false });
   await badPage2.mouse.move(640, 360);
   await badPage2.mouse.down();
