@@ -2,7 +2,7 @@
 
 **Canvas applications expose almost no reliable semantic structure to DOM- and accessibility-tree-based agents.** Vision models can drag pixels over a screenshot, but they get no stable state-and-action contract: no ids, no queries, no reversible operations, no guarantees. CAD tools, GIS and mapping, medical imaging, DAWs, video editors, data-visualization dashboards, game engines, design tools like Figma's canvas — all of them are effectively agent-inoperable today for this reason. [WebMCP](https://developer.chrome.com/docs/ai/webmcp) is the first API that changes that — and this studio is the working proof case: a live three.js scene where an AI agent builds, lights, scores and *directs* while a human keeps full mouse control at the same time. Nothing here is simulated; every agent action goes through real WebMCP tool calls you can inspect in the on-page log.
 
-**20 seconds, no setup:** paste this into the agent and watch (or open the page and just grab the camera — after 25 idle seconds it drifts into a slow cinematic orbit on its own):
+**About 60 seconds, no setup:** press **“▶ Watch the agent write the scene”** and watch the real WebMCP calls build a forest, camp and glowing signature. There is no cloud screensaver at the end: the camera lands on the artifact, then hands control back to you.
 
 > *"Plant an avenue of trees along the stone path, then fly an exciting camera flight through it."*
 
@@ -17,7 +17,7 @@
 The entire application state — objects, transforms, materials, camera, light — lives in the three.js scene graph, invisible to DOM- and accessibility-based actuation. The best a vision-driven agent can do without WebMCP is blindly drag pixels across a screenshot — guessing, with no way to verify what it changed. Most WebMCP demos put tools on top of a page the agent could always have actuated through the DOM anyway — for them, WebMCP is an accelerant. Here it is the **prerequisite**: without it the studio does not exist for an agent at all. Twenty structured tools turn that black box into a shared workspace:
 
 - **The scatter before/after.** "Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area clear" is roughly **twenty minutes of manual click-place-adjust work** — and **zero** for an agent without WebMCP, because there is nothing to click. With `scatter{type:"tree",count:40,exclusion_zones:[…],seed:42}` it is one sentence, executed in seconds, reproducible via the seed.
-- **Measured: agent wall-clock is model turns, not the scene.** In a live Codex run, 8 successful tool calls took **3 min 12 s** wall-clock while total scene animation was **under 3 s**. The time went into orientation and one failed call — model turns, not rendering. That measurement is why `batch` exists (1–12 tool operations in one call, one snapshot, whole-batch undo): the biggest speed lever for agents is fewer round trips, and every WebMCP tool author will hit the same wall. This is concrete API feedback to the Chrome team, from the only class of app where it could be measured this cleanly.
+- **Measured: agent wall-clock is model turns, not the scene.** In a live Codex run, 8 successful tool calls took **3 min 12 s** wall-clock while total scene animation was **under 3 s**. The time went into orientation and one failed call — model turns, not rendering. That measurement is why `batch` exists (1–200 tool operations in one call, one snapshot, whole-batch undo): the biggest speed lever for agents is fewer round trips, and every WebMCP tool author will hit the same wall. This is concrete API feedback to the Chrome team, from the only class of app where it could be measured this cleanly.
 - **Reversibility is the trust primitive.** Every mutating tool auto-captures a restore point; `undo` steps back, ↺ resets, `export_scene`/`import_scene` turn any state into a share link that opens for anyone — no backend.
 
 ## Try it live
@@ -74,7 +74,7 @@ No WebMCP in your browser? The scene still works with the mouse, the chip tells 
 | `set_music` *(bonus)* | Put lofi on/off — three self-made Suno tracks as a playlist (volume). | Agents don't just shape the scene, they set its mood: "put some lofi on" while the camera flies. Browser autoplay policy may hold audio until the first click; the result says so. |
 | `export_scene` *(bonus)* | Export objects + camera + lighting; sets the page URL to a `#scene=...` share link. | Scenes become artifacts: link opens for anyone, no WebMCP, no flag — the judge sees the exact scene. Also the answer to "no persistence": links ARE the persistence. |
 | `import_scene` *(bonus)* | Restore an exported scene (JSON or share link). Captures an undo snapshot first. | Modify a shared scene with the agent, experiment, `undo` back — collaboration on top of artifacts. |
-| `batch` *(bonus)* | Run 1–12 tool calls in one turn: one snapshot, one result, whole-batch undo. | Measurement showed model turns dominate agent wall-clock, not the scene. `batch` is that lesson turned into tool design — a whole setup in one call. |
+| `batch` *(bonus)* | Run 1–200 tool calls in one turn: one snapshot, one result, whole-batch undo. | Measurement showed model turns dominate agent wall-clock, not the scene. `batch` is that lesson turned into tool design — a whole setup in one call. |
 
 ## How the WebMCP integration works
 

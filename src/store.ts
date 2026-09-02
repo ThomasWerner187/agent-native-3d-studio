@@ -39,6 +39,12 @@ export class SceneStore {
     return ++this.version;
   }
 
+  /** Restore serialized counters without exposing the registry map itself. */
+  restoreCounters(idCounter: number, version: number): void {
+    this.idCounter = idCounter;
+    this.version = version;
+  }
+
   all(): SceneEntry[] {
     return [...this.objects.values()];
   }

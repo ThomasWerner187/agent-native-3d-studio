@@ -40,6 +40,18 @@ interface SnapshotData {
   objects: SerializedObject[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteTuple(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
+}
+
+function isHex(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
 export interface Snapshot {
   id: string;
   label: string;
@@ -117,7 +129,7 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       light.color.copy(m.emissive);
     }
   }
-  store.version = data.version;
+  store.restoreCounters(data.idCounter, data.version);
 
   studio.applyLighting(data.lighting.preset as never, data.lighting.intensity);
   studio.camera.position.set(...data.camera.p);
@@ -137,7 +149,20 @@ function migrateExport(raw: Record<string, unknown>): { ok: boolean; data?: Snap
     return { ok: true, data: { ...raw, v: 2, schema_version: 2 } as SnapshotData };
   }
   if (schema === 2 && Array.isArray(raw.objects)) {
-    return { ok: true, data: raw as unknown as SnapshotData };
+    // Public v2 uses snake_case; the in-memory snapshot format uses camelCase.
+    // Normalize once at the boundary so share links and undo use one contract.
+    return {
+      ok: true,
+      data: {
+        v: 2,
+        schema_version: 2,
+        version: raw.scene_version,
+        idCounter: raw.id_counter,
+        lighting: raw.lighting,
+        camera: raw.camera,
+        objects: raw.objects,
+      } as SnapshotData,
+    };
   }
   return { ok: false, error: 'unsupported schema_version (expected 1 or 2)' };
 }
@@ -232,32 +257,65 @@ export class SnapshotManager {
     } catch {
       return { ok: false, error: 'not valid JSON' };
     }
+    if (!isRecord(raw)) return { ok: false, error: 'payload must be a JSON object' };
     const migrated = migrateExport(raw);
     if (!migrated.ok) return { ok: false, error: migrated.error };
     const data = migrated.data as SnapshotData;
 
-    // validate everything before destroying the live scene
+    // Validate everything before destroying the live scene. Imported links are
+    // user-controlled input, not trusted internal snapshots.
     if (!Array.isArray(data.objects) || data.objects.length > MAX_EXPORT_OBJECTS) {
       return { ok: false, error: `objects must be an array with at most 600 entries` };
     }
-    const presets = LIGHTING_PRESETS as readonly string[];
-    if (data.lighting && !presets.includes(data.lighting.preset)) {
-      return { ok: false, error: `unknown lighting preset "${data.lighting.preset}"` };
+    if (!Number.isInteger(data.version) || data.version < 0) {
+      return { ok: false, error: 'scene_version must be a non-negative integer' };
     }
-    if (data.camera) {
+    if (!Number.isInteger(data.idCounter) || data.idCounter < 0) {
+      return { ok: false, error: 'id_counter must be a non-negative integer' };
+    }
+    const presets = LIGHTING_PRESETS as readonly string[];
+    if (!isRecord(data.lighting) || typeof data.lighting.preset !== 'string' || !presets.includes(data.lighting.preset)) {
+      return { ok: false, error: `unknown or missing lighting preset` };
+    }
+    if (typeof data.lighting.intensity !== 'number' || !Number.isFinite(data.lighting.intensity) || data.lighting.intensity < 0 || data.lighting.intensity > 2) {
+      return { ok: false, error: 'lighting.intensity must be a number between 0 and 2' };
+    }
+    if (!isRecord(data.camera)) return { ok: false, error: 'camera is required' };
+    {
       const c = data.camera;
-      if (![c.p, c.t].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n))) || !Number.isFinite(c.fov)) {
+      if (!isFiniteTuple(c.p) || !isFiniteTuple(c.t) || typeof c.fov !== 'number' || !Number.isFinite(c.fov) || c.fov < 10 || c.fov > 120) {
         return { ok: false, error: 'camera must be {p:[x,y,z], t:[x,y,z], fov:number}' };
       }
     }
-    for (const o of data.objects) {
-      if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${o.type}"` };
-      if (![o.p, o.s].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n)))) {
+    const ids = new Set<string>();
+    let highestId = 0;
+    for (const rawObject of data.objects) {
+      if (!isRecord(rawObject)) return { ok: false, error: 'every object must be a JSON object' };
+      const o = rawObject as unknown as SerializedObject;
+      if (typeof o.id !== 'string' || !/^obj_\d+$/.test(o.id) || ids.has(o.id)) {
+        return { ok: false, error: `object ids must be unique and match obj_N (got "${String(o.id)}")` };
+      }
+      ids.add(o.id);
+      highestId = Math.max(highestId, Number(o.id.slice(4)));
+      if (typeof o.name !== 'string' || o.name.length > 120) return { ok: false, error: `object "${o.id}" has an invalid name` };
+      if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${String(o.type)}"` };
+      if (!isFiniteTuple(o.p) || !isFiniteTuple(o.s)) {
         return { ok: false, error: `object "${o.id}" has a malformed pose/scale` };
       }
       if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.01 || n > 10)) {
         return { ok: false, error: `object "${o.id}" out of bounds` };
       }
+      if (!isFiniteTuple(o.r)) return { ok: false, error: `object "${o.id}" has a malformed rotation` };
+      if (o.color != null && !isHex(o.color)) return { ok: false, error: `object "${o.id}" has an invalid color` };
+      if (o.emissive != null && !isHex(o.emissive)) return { ok: false, error: `object "${o.id}" has an invalid emissive color` };
+      if (o.roughness != null && (typeof o.roughness !== 'number' || !Number.isFinite(o.roughness) || o.roughness < 0 || o.roughness > 1)) return { ok: false, error: `object "${o.id}" has invalid roughness` };
+      if (o.metalness != null && (typeof o.metalness !== 'number' || !Number.isFinite(o.metalness) || o.metalness < 0 || o.metalness > 1)) return { ok: false, error: `object "${o.id}" has invalid metalness` };
+      if (o.emissiveIntensity != null && (typeof o.emissiveIntensity !== 'number' || !Number.isFinite(o.emissiveIntensity) || o.emissiveIntensity < 0 || o.emissiveIntensity > 5)) return { ok: false, error: `object "${o.id}" has invalid emissiveIntensity` };
+      if (o.opacity != null && (typeof o.opacity !== 'number' || !Number.isFinite(o.opacity) || o.opacity < 0 || o.opacity > 1)) return { ok: false, error: `object "${o.id}" has invalid opacity` };
+      if (o.type === 'chess_piece' && o.variant != null && !['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'].includes(o.variant)) return { ok: false, error: `object "${o.id}" has an invalid chess piece` };
+    }
+    if (data.idCounter < highestId) {
+      return { ok: false, error: 'id_counter is lower than the highest object id' };
     }
 
     if (opts.captureUndo) this.capture('before import');

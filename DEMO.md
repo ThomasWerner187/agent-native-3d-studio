@@ -6,12 +6,12 @@ Material for the 3-minute submission video and live demos. Beat sheet per submis
 
 | Time | Shot | Action / narration |
 |------|------|--------------------|
-| 0:00–0:15 | **The hook.** Press **“▶ Watch the agent build”**. | “This is an agent building a world — through 20 structured tools, while I keep the mouse.” Tool log fills with real calls: batch-planted avenue, golden hour, lofi, cinematic camera flight. Grab the camera mid-show: “Human took control” — that's the collaboration. |
+| 0:00–0:15 | **The hook.** Press **“▶ Watch the agent write the scene”**. | “This is an agent building a world — through 20 structured tools, while I keep the mouse.” The show writes real OPENAI and WEBMCP letters into the three.js scene, with every batch visible in the Tool Log. Grab the camera mid-show: “Human took control” — that's the collaboration. |
 | 0:15–0:30 | **The problem.** Open DevTools → Elements. Hover the canvas. | “This is what an agent sees when it opens a 3D tool: one empty `<canvas>`. No DOM, no buttons, nothing to scrape. Every object, every light lives in the scene graph — invisible. Without WebMCP this app isn't slow for an agent — it's closed.” |
-| 0:20–1:20 | **The collaboration.** Inspector open next to the studio. Prompt: *“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area. Make it evening.”* | Objects pop in while you talk. Then — while the agent is still calling tools — **grab the camera and drag an object with the mouse.** Say: “The agent works through WebMCP tools on the live scene. My mouse never stops working. We're two users on one state.” |
+| 0:30–1:20 | **The collaboration.** Inspector open next to the studio. Prompt: *“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area. Make it evening.”* | Objects pop in while you talk. Then — while the agent is still calling tools — **grab the camera and drag an object with the mouse.** Say: “The agent works through WebMCP tools on the live scene. My mouse never stops working. We're two users on one state.” |
 | 1:20–2:10 | **The proof.** Prompt: *“Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.”* Orbit the camera during the staggered spawn. | “Forty trees, exclusion zones respected. This takes twenty minutes by hand — and by hand is the ONLY other way, because a canvas is unreachable for agents.” |
 | 2:10–2:40 | **Trust & transparency.** Show the Tool Log panel, then `chrome://webmcp-internals` or the Inspector's tool list. Call `describe_scene` and point at the JSON. Click ↺ (reset) after an agent mistake — or `undo`. | “Every call is visible to the user. Every mutation is reversible. Agents report only after the scene actually settled — scene_version and operation_id included.” |
-| 2:40–3:00 | **The reveal.** Agent: *“Hide the UI, then fly a cinematic tour: window → lamp → hero shot of the table.”* HUD fades, camera glides, hold on the final shot. | “The agent isn't clicking — it's directing. WebMCP turns the open web into an agent platform: today it made a canvas collaborative, tomorrow every site gets an agent interface designed by the people who know it best.” |
+| 2:40–3:00 | **The reveal.** Let the curated show finish: HUD returns while real batches write **OPENAI** and **WEBMCP** pixel by pixel, then the UI fades for a readable top shot and a human-scale hero shot. | “The agent isn't clicking — it's writing and directing. WebMCP turns the open web into an agent platform: today it made a canvas collaborative, tomorrow every site gets an agent interface designed by the people who know it best.” |
 
 ## Recording checklist
 
@@ -100,7 +100,7 @@ with the exact invocation recipe (all within the 500-char budget).
 
 ## Current feature showcase (20 tools — smoke-verified 20/20 via `npm run smoke`)
 
-- **Watch the agent build** (button): the curated 25 s show — best first beat, zero setup.
+- **Watch the agent write the scene** (button): the curated ~60 s show — best first beat, real Tool Log proof, and no cloud screensaver.
 - **batch**: whole setups in one call — "the measured lesson: turns are the bottleneck, not the scene".
 - **export_scene / ⧉ button**: scene becomes a share link that opens for anyone, no WebMCP — persistence without a backend.
 - **chess_move + board_square**: agent-vs-itself chess with follow/hero cameras — the most surprising beat.

@@ -11,19 +11,30 @@ try {
   await page.goto('http://localhost:4196/?agent=1');
   await page.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10000 });
   await page.click('#show-agent');
-  await page.waitForTimeout(15000);
-  await page.screenshot({ path: '/tmp/show-act2-forest.png' }).catch(() => {});
-  await page.waitForTimeout(20000); // t=35s
-  await page.screenshot({ path: '/tmp/show-act4-dusk.png' }).catch(() => {});
-  await page.waitForTimeout(20000); // t=55s
-  await page.screenshot({ path: '/tmp/show-act5-signature.png' }).catch(() => {});
-  for (const [i, t] of [[1, 61000], [2, 64000], [3, 67000], [4, 71000]]) {
-    const wait = t - (61000 - 6000);
-    await page.waitForTimeout(i === 1 ? 6000 : (t - (i === 2 ? 61000 : i === 3 ? 64000 : 67000)));
-    await page.screenshot({ path: `/tmp/show-top-${i}.png` }).catch(() => {});
-  }
+  const captureCue = async (title, path, extraMs = 0) => {
+    await page.waitForFunction((expected) => document.querySelector('#show-cue-title')?.textContent === expected, title, { timeout: 90000 });
+    if (extraMs) await page.waitForTimeout(extraMs);
+    await page.screenshot({ path }).catch(() => {});
+  };
+  await captureCue('Planting the impossible shortcut.', '/tmp/show-act2-forest.png');
+  await captureCue('Now make it cinematic.', '/tmp/show-act4-dusk.png');
+  await captureCue('The canvas has entered the chat.', '/tmp/show-act5-signature.png', 4500);
+  await captureCue('Twenty tools. Zero cloud drama.', '/tmp/show-finale-top.png', 800);
+  await captureCue('Your move.', '/tmp/show-human-handoff.png', 500);
+  const signature = await page.evaluate(async () => {
+    const [openai, webmcp] = await Promise.all([
+      window.__tool('query_scene', { name_contains: 'OPENAI px', limit: 200 }),
+      window.__tool('query_scene', { name_contains: 'WEBMCP px', limit: 200 }),
+    ]);
+    return { openai: JSON.parse(openai), webmcp: JSON.parse(webmcp) };
+  });
   const stories = await page.evaluate(() => [...document.querySelectorAll('#tool-log-entries .story')].slice(0, 14).map(e => e.textContent));
   console.log('pageerrors:', errors.length);
+  console.log('signature:', JSON.stringify({
+    openai: signature.openai.result?.total,
+    webmcp: signature.webmcp.result?.total,
+    final_cue: await page.locator('#show-cue-title').textContent(),
+  }));
   console.log(JSON.stringify(stories, null, 1));
   await context.close();
   await browser.close();

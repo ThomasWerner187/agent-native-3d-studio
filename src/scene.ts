@@ -109,7 +109,7 @@ export class Studio {
     if (this.idleOrbiting) this.idleOrbiting = false;
   }
 
-  /** Start the idle orbit on the next frame (used by the show finale). */
+  /** Explicitly arm the optional idle orbit for a caller that wants ambience. */
   armIdleOrbit(): void {
     this.lastActivity = performance.now() - 26_000;
   }

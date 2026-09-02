@@ -54,7 +54,7 @@ await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre
           <button id="prompt-card-close" class="mini-btn" title="Dismiss" aria-label="Dismiss prompts">×</button>
         </div>
         <div class="panel-body prompts">
-          <p class="story-line">Describe a world. Watch an agent build and direct it — <strong>while you keep control.</strong></p>
+          <p class="story-line">Describe a world. Watch an agent write and direct it — <strong>while you keep control.</strong></p>
           <button class="prompt hero-prompt" data-copy="Plant an avenue of trees along both sides of the stone path, add a few boulders between them, then fly an exciting camera flight right through the avenue.">
             <span>“Plant an avenue of trees along the stone path, then fly an exciting camera flight through it.”</span>
             <span class="copy-hint">copy</span>
@@ -86,7 +86,13 @@ await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre
       </div>
 </div>
 
-      <button id="show-agent" class="hud show-btn">▶ Watch the agent build</button>
+      <button id="show-agent" class="hud show-btn">▶ Watch the agent write the scene</button>
+
+      <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true">
+        <div id="show-cue-kicker" class="show-cue-kicker"></div>
+        <div id="show-cue-title" class="show-cue-title"></div>
+        <div id="show-cue-detail" class="show-cue-detail"></div>
+      </div>
 
       <!-- controls hint, bottom center -->
       <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete&ensp;·&ensp;<kbd>H</kbd> hide UI&ensp;·&ensp;<a href="?agent=1" class="hint-link">no WebMCP flag? try the built-in harness →</a></div>

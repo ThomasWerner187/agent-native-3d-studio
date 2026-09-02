@@ -321,7 +321,9 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   const lazy = args.animate === false;
   if (lazy) {
     // Bulk placement: still pops in (staggered), but the call returns at once.
-    spawnPop(entry.group, Math.random() * 1400);
+    const requestedDelay = num(args.delay_ms);
+    const delay = requestedDelay == null ? Math.random() * 1400 : clamp(requestedDelay, 0, 2000);
+    spawnPop(entry.group, delay);
   } else {
     spawnPop(entry.group);
     await awaitGroup(`spawn:${entry.group.uuid}`);
@@ -578,7 +580,9 @@ function framingPose(
   const dirs: Record<(typeof ANGLES)[number], THREE.Vector3> = {
     front: new THREE.Vector3(0, 0.22, 1),
     side: new THREE.Vector3(1, 0.22, 0),
-    top: new THREE.Vector3(0.001, 1, 0.001),
+    // Keep a tiny +z component to define a stable roll when looking straight
+    // down: world +x stays screen-right and -z stays screen-up.
+    top: new THREE.Vector3(0, 1, 0.001),
     three_quarter: new THREE.Vector3(0.8, 0.55, 0.8),
     low: new THREE.Vector3(0.7, 0.08, 0.7),
     hero: new THREE.Vector3(0.75, 0.2, 0.75),
@@ -1142,9 +1146,6 @@ export async function importScene(ctx: ToolContext, args: Args): Promise<string>
   // invoke() already captured the pre-import snapshot — no nested capture here
   const r = ctx.snapshots.importJson(json);
   if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');
-  const target = new THREE.Vector3(...(JSON.parse(json).camera?.t ?? [0, 0.8, 0]));
-  ctx.studio.controls.target.copy(target);
-  await awaitGroup('camera');
   return ok(ctx, {
     restored: r.restored,
     note: 'Scene replaced. undo returns to the previous state — modify freely from here.',

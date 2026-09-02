@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import type { SceneStore } from './store';
+import type { SnapshotManager } from './snapshot';
 import { despawn, cancelGroup } from './anim';
+import { disposeObject } from './factory';
 
 /**
  * Mouse interaction: orbit (OrbitControls), click-to-select, drag-to-move.
@@ -26,6 +28,7 @@ export class Interaction {
     private studio: Studio,
     private store: SceneStore,
     canvas: HTMLCanvasElement,
+    private snapshots: SnapshotManager,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
@@ -63,6 +66,7 @@ export class Interaction {
     const dist = Math.hypot(ev.clientX - this.downAt.x, ev.clientY - this.downAt.y);
     if (!this.dragging && dist > 5 && this.downHitId) {
       this.dragging = true;
+      this.snapshots.capture('before human move');
       this.studio.controls.enabled = false;
       this.select(this.downHitId);
     }
@@ -147,8 +151,12 @@ export class Interaction {
     const entry = this.store.get(id);
     if (!entry) return;
     this.select(null);
+    this.snapshots.capture('before human delete');
     this.store.remove(id);
     this.store.bump();
-    despawn(entry.group, () => this.studio.scene.remove(entry.group));
+    despawn(entry.group, () => {
+      this.studio.scene.remove(entry.group);
+      disposeObject(entry.group);
+    });
   }
 }

@@ -30,7 +30,7 @@ const ctx: ToolContext = {
   select: (id) => interaction.select(id),
 };
 
-const interaction = new Interaction(studio, store, canvas);
+const interaction = new Interaction(studio, store, canvas, snapshots);
 
 // --- activity storytelling ---------------------------------------------------
 // The tool log tells the story in words; the scene glows where it happens.
@@ -139,10 +139,23 @@ document.getElementById('scene-share')?.addEventListener('click', () => {
   logInfo('Scene link copied to the clipboard — anyone can open it.');
 });
 
-// --- "Watch the agent build" — curated run through the real tool handlers ----
+function setShowCue(kicker: string, title: string, detail: string): void {
+  const cue = document.getElementById('show-cue');
+  const kickerEl = document.getElementById('show-cue-kicker');
+  const titleEl = document.getElementById('show-cue-title');
+  const detailEl = document.getElementById('show-cue-detail');
+  if (!cue || !kickerEl || !titleEl || !detailEl) return;
+  kickerEl.textContent = kicker;
+  titleEl.textContent = title;
+  detailEl.textContent = detail;
+  cue.classList.remove('show-cue-pop');
+  void cue.offsetWidth;
+  cue.classList.add('show-cue-visible', 'show-cue-pop');
+}
+
+// --- "Watch the agent write the scene" — curated real tool run --------------
 const show = new AgentShow({
   call: (tool, args) => dispatchTool(ctx, tool, args, logToolCall),
-  armOrbit: () => studio.armIdleOrbit(),
   clearToMeadow: () => {
     snapshots.resetToBoot();
     for (const e of store.all()) {
@@ -156,18 +169,19 @@ const show = new AgentShow({
   onDone: () => {
     toast('The agent is done — your turn. Grab the camera anytime.');
     const btn = document.getElementById('show-agent');
-    if (btn) btn.textContent = '▶ Watch the agent build';
+    if (btn) btn.textContent = '▶ Watch the agent write the scene';
   },
   onPause: () => {
     toast('Human took control — show paused. Your turn.');
     const btn = document.getElementById('show-agent');
-    if (btn) btn.textContent = '▶ Watch the agent build';
+    if (btn) btn.textContent = '▶ Watch the agent write the scene';
   },
+  onBeat: ({ kicker, title, detail }) => setShowCue(kicker, title, detail),
 });
 document.getElementById('show-agent')?.addEventListener('click', () => {
   if (show.isRunning) return;
   const btn = document.getElementById('show-agent');
-  if (btn) btn.textContent = '… agent building — grab the camera anytime';
+  if (btn) btn.textContent = '… agent writing — grab the camera anytime';
   void show.run();
 });
 canvas.addEventListener('pointerdown', () => {

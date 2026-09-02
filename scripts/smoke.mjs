@@ -48,7 +48,7 @@ try {
     r.help = await window.__call('help', {});
     r.describe_scene = await window.__call('describe_scene', {});
     r.add_object = await window.__call('add_object', { type: 'tree', name: 'smoke tree' });
-    const treeId = r.add_object.id ?? 'obj_1';
+    const treeId = r.add_object.result?.id ?? 'obj_1';
     r.query_scene = await window.__call('query_scene', { limit: 5 });
     r.transform_object = await window.__call('transform_object', { targets: treeId, op: 'move', z: 2 });
     r.set_material = await window.__call('set_material', { targets: treeId, color: '#88aaff' });
@@ -112,6 +112,63 @@ try {
   }
   await badPage.close();
 
+  // --- structurally invalid links must preserve the starter scene ----------
+  const encodeShare = (value) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+  const malformedShare = encodeShare({
+    schema_version: 2,
+    scene_version: 0,
+    id_counter: 0,
+    lighting: { preset: 'golden_hour', intensity: 1 },
+    objects: [],
+    // camera intentionally missing: boundary validation must reject it
+  });
+  const malformedPage = await browser.newPage();
+  const malformedErrors = [];
+  malformedPage.on('pageerror', (err) => malformedErrors.push(String(err)));
+  await malformedPage.goto(`${BASE}/?agent=1#scene=${malformedShare}`);
+  await malformedPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  const malformedScene = await malformedPage.evaluate(() => window.__scene());
+  const malformedChip = await malformedPage.evaluate(() => document.querySelector('#webmcp-status .status-text')?.textContent ?? '');
+  const malformedOk = malformedErrors.length === 0 && malformedChip.length > 0 && malformedScene.result?.object_count === 14;
+  if (malformedOk) {
+    console.log(' ✓ malformed-share-link preserves starter scene');
+  } else {
+    failures++;
+    console.log(`✗ malformed-share-link boot — pageerrors: ${malformedErrors.length}, chip: "${malformedChip}", scene: ${JSON.stringify(malformedScene)}`);
+  }
+  await malformedPage.close();
+
+  // --- imported error text is rendered as text, never executable HTML -------
+  const xssShare = encodeShare({
+    schema_version: 2,
+    scene_version: 0,
+    id_counter: 0,
+    lighting: { preset: 'golden_hour', intensity: 1 },
+    camera: { p: [6.4, 3, 7.6], t: [0, 0.8, 0], fov: 42 },
+    objects: [{
+      id: 'obj_1',
+      name: 'probe',
+      type: '<img id="xss-probe" src=x onerror="document.body.dataset.xss=1">',
+      p: [0, 0, 0], r: [0, 0, 0], s: [1, 1, 1],
+    }],
+  });
+  const xssPage = await browser.newPage();
+  const xssErrors = [];
+  xssPage.on('pageerror', (err) => xssErrors.push(String(err)));
+  await xssPage.goto(`${BASE}/?agent=1#scene=${xssShare}`);
+  await xssPage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: 10_000 });
+  const xssState = await xssPage.evaluate(() => ({
+    probe: !!document.querySelector('#xss-probe'),
+    executed: document.body.dataset.xss === '1',
+  }));
+  if (xssErrors.length === 0 && !xssState.probe && !xssState.executed) {
+    console.log(' ✓ imported error text cannot inject markup');
+  } else {
+    failures++;
+    console.log(`✗ imported error text injection — pageerrors: ${xssErrors.length}, state: ${JSON.stringify(xssState)}`);
+  }
+  await xssPage.close();
+
 
   // --- behavioral correctness: verify observable state, not just {ok:true} ---
   const badPage2 = await browser.newPage();
@@ -167,7 +224,13 @@ try {
   const beforeRoundtrip = await describe();
   const imp = j(await run('import_scene', { url: shareUrl ?? '' }));
   const afterImport = await describe();
-  check('export/import round-trips scene', imp.ok === true && afterImport.object_count === beforeRoundtrip.object_count);
+  check(
+    'export/import round-trips scene and preserves versions',
+    imp.ok === true && afterImport.object_count === beforeRoundtrip.object_count &&
+      Number.isInteger(beforeRoundtrip.scene_version) && Number.isInteger(afterImport.scene_version) &&
+      afterImport.scene_version === beforeRoundtrip.scene_version + 1,
+    JSON.stringify({ before: beforeRoundtrip.scene_version, after: afterImport.scene_version }),
+  );
 
   // invalid calls never mutate the scene
   const d5 = await describe();
@@ -175,7 +238,7 @@ try {
   const bad2 = j(await run('transform_object', { targets: 'obj_9999', op: 'move', x: 1 }));
   const bad3 = j(await run('chess_move', { piece: 'obj_1', to: 'zz' }));
   const d6 = await describe();
-  check('invalid calls fail without mutating', bad1.ok === false && bad2.ok === false && bad3.ok === false && d6.object_count === d5.object_count && d6.version === d5.version);
+  check('invalid calls fail without mutating', bad1.ok === false && bad2.ok === false && bad3.ok === false && d6.object_count === d5.object_count && d6.scene_version === d5.scene_version);
 
   // batch reverts as one logical unit
   const pre = await describe();
@@ -193,7 +256,7 @@ try {
   const cur = await describe();
   const stale = j(await run('transform_object', { targets: cur.objects?.[0]?.id, op: 'move', x: 1, expected_scene_version: cur.scene_version + 5 }));
   const afterStale = await describe();
-  check('stale expected_scene_version rejected', stale.ok === false && stale.code === 'stale_scene' && afterStale.version === cur.version, JSON.stringify(stale.error ?? ''));
+  check('stale expected_scene_version rejected', stale.ok === false && stale.code === 'stale_scene' && afterStale.scene_version === cur.scene_version, JSON.stringify(stale.error ?? ''));
 
   const passCount = behavioral.filter((b2) => b2.pass).length;
   console.log(`\n[behavior] ${passCount}/${behavioral.length} semantic checks passed`);

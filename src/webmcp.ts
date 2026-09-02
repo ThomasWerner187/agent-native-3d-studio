@@ -35,6 +35,13 @@ export interface ToolDef {
 }
 
 const TYPES = OBJECT_TYPES as unknown as string[];
+const EXPECTED_VERSION = {
+  expected_scene_version: {
+    type: 'integer',
+    minimum: 0,
+    description: 'Optional optimistic-lock version from describe_scene/query_scene. Rejects the edit if the scene changed since that observation.',
+  },
+};
 
 /**
  * CDP-only harnesses (Codex/ChatGPT driving Chrome without a WebMCP client)
@@ -111,6 +118,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'The kind of object to add.' },
         piece: {
           type: 'string',
@@ -140,6 +148,7 @@ export const TOOL_DEFS: ToolDef[] = [
         rotation_y: { type: 'number', description: 'Rotation around the vertical axis, in degrees.' },
         name: { type: 'string', description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
         animate: { type: 'boolean', description: 'false = bulk placement: the object pops in staggered, but the call returns immediately instead of waiting for the pop (default true).' },
+        delay_ms: { type: 'number', minimum: 0, maximum: 2000, description: 'animate:false only: delay the pop for authored reveals, in milliseconds.' },
       },
       required: ['type'],
     },
@@ -156,6 +165,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id (e.g. "obj_3") or name — or an array of those to edit many at once.',
@@ -187,6 +197,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id, name, or array of those.',
@@ -214,6 +225,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         preset: { type: 'string', enum: LIGHTING_PRESETS as unknown as string[], description: 'The lighting mood.' },
         intensity: { type: 'number', minimum: 0, maximum: 2, description: '1 = normal, 0.5 = dimmer, 1.5 = brighter.' },
         azimuth: {
@@ -237,6 +249,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         target: { type: 'string', description: 'An object id/name, or "scene" for the whole scene.' },
         angle: {
           type: 'string',
@@ -269,6 +282,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         keyframes: {
           type: 'array',
           description: 'The shots in order. Each: {target, angle?, distance?, focal_length?, duration_ms?, hold_ms?}.',
@@ -307,6 +321,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'What to scatter (usually tree, rock or lamp).' },
         count: { type: 'number', minimum: 1, maximum: 200, description: 'How many instances to place.' },
         area: {
@@ -379,6 +394,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Explicit object id(s)/name(s) to delete.',
@@ -409,6 +425,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         json: { type: 'string', description: 'Scene JSON from export_scene. Omit if you pass url.' },
         url: { type: 'string', description: 'A share link containing #scene=... .' },
       },
@@ -426,6 +443,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         ops: {
           type: 'array',
           minItems: 1,
@@ -472,6 +490,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         piece: { type: 'string', description: 'The piece to move — id (e.g. "obj_17") or name (e.g. "white king e2").' },
         to: { type: 'string', description: 'Target square in algebraic notation, e.g. "e4" (files a-h, ranks 1-8).' },
         board: { type: 'string', description: 'Optional chessboard id/name. Omit to use the chessboard nearest the piece.' },
@@ -602,10 +621,15 @@ const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name))
 
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
 
+function invocationId(): string {
+  return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
 async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal): Promise<string> {
   ctx.studio.noteActivity();
   const t0 = performance.now();
+  const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
   const isMutating = MUTATING.has(def.name);
 
@@ -613,12 +637,29 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   const expected = args?.expected_scene_version;
   if (isMutating && expected != null) {
     const exp = Number(expected);
-    if (Number.isFinite(exp) && exp !== ctx.store.version) {
-      const result = JSON.stringify({
-        ok: false, code: 'stale_scene',
-        error: `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
-        expected_scene_version: exp, actual_scene_version: ctx.store.version,
-      });
+    const failure = (code: string, error: string, extra: Record<string, unknown> = {}) => JSON.stringify({
+      ok: false,
+      code,
+      operation_id: fallbackOperationId,
+      actor: 'agent',
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error,
+      ...extra,
+    });
+    if (!Number.isInteger(exp) || exp < 0) {
+      const result = failure('bad_request', 'expected_scene_version must be a non-negative integer.');
+      log(def.name, args ?? {}, result);
+      return result;
+    }
+    if (exp !== ctx.store.version) {
+      const result = failure(
+        'stale_scene',
+        `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
+        { expected_scene_version: exp, actual_scene_version: ctx.store.version },
+      );
       log(def.name, args ?? {}, result);
       return result;
     }
@@ -629,7 +670,17 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
 
   if (signal?.aborted) {
     if (snapId) ctx.snapshots.discard(snapId);
-    const result = JSON.stringify({ ok: false, code: 'cancelled', error: 'Cancelled before it started.', applied: false });
+    const result = JSON.stringify({
+      ok: false,
+      code: 'cancelled',
+      operation_id: fallbackOperationId,
+      actor: 'agent',
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error: 'Cancelled before it started.',
+    });
     log(def.name, args ?? {}, result);
     return result;
   }
@@ -661,7 +712,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
 
   const envelope: Record<string, unknown> = {
     ok,
-    operation_id: typeof data.operation_id === 'string' ? data.operation_id : undefined,
+    operation_id: typeof data.operation_id === 'string' ? data.operation_id : fallbackOperationId,
     actor: 'agent',
     scene_version_before: versionBefore,
     scene_version_after: ctx.store.version,

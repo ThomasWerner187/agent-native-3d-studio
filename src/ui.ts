@@ -81,7 +81,10 @@ function renderEntry(entry: LogEntry): HTMLElement {
   const div = document.createElement('div');
   div.className = 'log-entry' + (entry.ok === false ? ' err' : '');
   if (entry.tool === '__info') {
-    div.innerHTML = `<div class="log-result">${firstLine(entry.result ?? '', 300)}</div>`;
+    const info = document.createElement('div');
+    info.className = 'log-result';
+    info.textContent = firstLine(entry.result ?? '', 300);
+    div.appendChild(info);
     return div;
   }
   // Story line first; raw args/result stay expandable for debugging.

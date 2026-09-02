@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-01T20:57:58.120Z",
+  "at": "2026-09-02T16:50:39.431Z",
   "invocation": {
     "verified": 20,
     "total": 20
@@ -44,9 +44,9 @@
         "detail": ""
       },
       {
-        "name": "export/import round-trips scene",
+        "name": "export/import round-trips scene and preserves versions",
         "pass": true,
-        "detail": ""
+        "detail": "{\"before\":5,\"after\":6}"
       },
       {
         "name": "invalid calls fail without mutating",
@@ -66,7 +66,7 @@
       {
         "name": "stale expected_scene_version rejected",
         "pass": true,
-        "detail": "\"Stale observation: you saw scene_version 5, but the scene is now NaN (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
+        "detail": "\"Stale observation: you saw scene_version 12, but the scene is now 7 (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
       }
     ]
   }
