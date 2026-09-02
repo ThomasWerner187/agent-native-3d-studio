@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { asset } from './art';
+import { cabin, pond } from './lofi-assets';
+import { batchStaticMeshes } from './geometry';
 
 /**
  * Object factory for primitives + furniture presets.
@@ -10,7 +12,7 @@ import { asset } from './art';
 export const OBJECT_TYPES = [
   'box', 'sphere', 'cylinder', 'plane',
   'tree', 'rock', 'lamp', 'window', 'chair', 'table',
-  'chessboard', 'chess_piece', 'camp',
+  'chessboard', 'chess_piece', 'camp', 'cabin', 'pond',
 ] as const;
 export type ObjectType = (typeof OBJECT_TYPES)[number];
 
@@ -32,6 +34,8 @@ export const DEFAULT_COLORS: Record<ObjectType, { color: string; roughness: numb
   table:    { color: '#9c7a5b', roughness: 0.8,  metalness: 0.0 },
   chessboard:  { color: '#ffffff', roughness: 0.75, metalness: 0.0 },
   chess_piece: { color: '#e8dcc8', roughness: 0.55, metalness: 0.05 },
+  cabin: { color: '#af8055', roughness: 0.65, metalness: 0 },
+  pond: { color: '#2b777a', roughness: 0.19, metalness: 0.58 },
   camp: { color: '#998669', roughness: 0.75, metalness: 0 },
 };
 
@@ -55,6 +59,7 @@ function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, cast = true): THRE
 /** Free GPU resources of a removed object (call AFTER unlinking from the scene). */
 export function disposeObject(root: THREE.Object3D): void {
   root.traverse((o) => {
+    o.userData.dispose?.();
     const m = o as THREE.Mesh;
     if (m.geometry) m.geometry.dispose();
     const mat = m.material as THREE.Material | THREE.Material[] | undefined;
@@ -64,8 +69,9 @@ export function disposeObject(root: THREE.Object3D): void {
 }
 
 export function buildObject(type: ObjectType, variant?: string, seed?: number): BuiltObject {
-  const detailed = asset(type, seed);
+  const detailed = type === 'cabin' ? cabin() : type === 'pond' ? pond(seed ?? 0) : asset(type, seed);
   if (detailed) {
+    batchStaticMeshes(detailed);
     const materials: THREE.MeshStandardMaterial[] = [];
     detailed.traverse((o) => {
       o.userData.rootRef = detailed;

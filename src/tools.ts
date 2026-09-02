@@ -1,3 +1,5 @@
+import type { LofiSession } from './lofi';
+import { musicState } from './ambience';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
@@ -31,6 +33,7 @@ export interface ToolContext {
   store: SceneStore;
   snapshots: SnapshotManager;
   layout: LayoutManager;
+  lofi: LofiSession;
   select: (id: string | null) => void;
 }
 
@@ -160,6 +163,9 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
     })),
     layout: ctx.layout.state,
+    lofi: ctx.lofi.state,
+    camera_motion: ctx.studio.director.state,
+    music: musicState(),
     rendering: ctx.studio.frameStats,
     object_count: entries.length,
     counts,

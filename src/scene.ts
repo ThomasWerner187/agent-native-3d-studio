@@ -7,7 +7,8 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Diorama } from './diorama';
-import { tween, cancelCameraTween, tweenCamera, updateTweens, getEase, type CameraPose } from './anim';
+import { CameraDirector } from './camera-director';
+import { tween, cancelCameraTween, tweenCamera, updateTweens, getEase, hasShadowTweens, type CameraPose } from './anim';
 
 /**
  * three.js setup: renderer, camera, controls, ground and the five
@@ -86,6 +87,7 @@ export class Studio {
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
   readonly ground: THREE.Mesh;
+  readonly director: CameraDirector;
   readonly terrain = new Diorama();
   private composer: EffectComposer;
   private ao: GTAOPass;
@@ -98,12 +100,14 @@ export class Studio {
   private accentGroup: THREE.Group;
   currentPreset: LightingPreset = 'golden_hour';
   currentIntensity = 1;
-  frameStats = { fps: 0, frame_ms: 0 };
+  frameStats = { fps: 0, frame_ms: 0, cpu_submit_ms: 0, draw_calls: 0, triangles: 0, shadow_updates: 0 };
+  private submitTime = 0;
+  private shadowUpdates = 0;
   private sampleTime = 0;
   private sampleFrames = 0;
+  private lastFrameAt = 0;
 
-  private skyCanvas: HTMLCanvasElement;
-  private skyTexture: THREE.CanvasTexture;
+  private skyMaterial: THREE.ShaderMaterial;
   private lastSkyTop = new THREE.Color('#8fa8c4');
   private lastSkyHorizon = new THREE.Color('#eec48f');
   private clock = new THREE.Clock();
@@ -136,26 +140,41 @@ export class Studio {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.cinematic ? 1.5 : 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
+    this.scene.matrixAutoUpdate = false;
+    this.scene.updateMatrix();
     const environment = new RoomEnvironment();
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(environment, 0.04).texture;
     this.scene.environmentIntensity = 0.26;
     environment.dispose(); pmrem.dispose();
 
-    // vertical gradient sky, drawn on a tiny canvas and repainted during transitions
-    this.skyCanvas = document.createElement('canvas');
-    this.skyCanvas.width = 2;
-    this.skyCanvas.height = 256;
-    this.skyTexture = new THREE.CanvasTexture(this.skyCanvas);
-    this.skyTexture.colorSpace = THREE.SRGBColorSpace;
-    this.scene.background = this.skyTexture;
+    // World-space sky: the fog horizon stays aligned through low camera angles.
+    this.skyMaterial = new THREE.ShaderMaterial({
+      uniforms: { skyTop: { value: this.lastSkyTop }, skyHorizon: { value: this.lastSkyHorizon } },
+      side: THREE.BackSide, depthWrite: false, toneMapped: false,
+      vertexShader: `varying vec3 skyPosition;
+        void main() { vec4 world = modelMatrix * vec4(position, 1.0); skyPosition = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world; }`,
+      fragmentShader: `uniform vec3 skyTop; uniform vec3 skyHorizon; varying vec3 skyPosition;
+        void main() { float elevation = normalize(skyPosition - cameraPosition).y;
+          vec3 color = mix(skyHorizon, skyTop, smoothstep(0.0, 0.55, elevation));
+          gl_FragColor = vec4(color, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    });
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(180, 32, 20), this.skyMaterial);
+    sky.renderOrder = -100; sky.frustumCulled = false; sky.matrixAutoUpdate = false;
+    this.scene.add(sky);
 
     this.camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 300);
     this.camera.position.set(16.2, 16.5, 22).multiplyScalar(Math.max(1, 1 / this.camera.aspect));
@@ -171,7 +190,10 @@ export class Studio {
     this.controls.addEventListener('start', () => {
       cancelCameraTween();
       this.noteActivity();
+      this.director.pause('You took the camera');
     });
+
+    this.director = new CameraDirector(this);
 
     this.hemi = new THREE.HemisphereLight('#ffd9b0', '#8a6f5a', 0.75);
     this.ambient = new THREE.AmbientLight('#fff0dd', 0.35);
@@ -263,6 +285,9 @@ export class Studio {
       color: '#ffd27f', size: 0.09, transparent: true, opacity: 0.35,
       blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
     });
+    ffMat.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', 'diffuseColor.a *= 1.0 - smoothstep(0.05, 0.5, length(gl_PointCoord - vec2(0.5)));\n#include <alphatest_fragment>');
+    };
     this.fireflies = new THREE.Points(ffGeo, ffMat);
     this.scene.add(this.fireflies);
   }
@@ -289,18 +314,32 @@ export class Studio {
   }
 
   private frame(): void {
+    const frameStart = performance.now();
+    if (document.hidden) { this.lastFrameAt = 0; this.clock.getDelta(); return; }
+    // Keep full-resolution cinematic rendering; avoid wasting 120 Hz on a slow orbit.
+    const interval = 1000 / 60;
+    if (frameStart - this.lastFrameAt < interval - 0.6) return;
+    this.lastFrameAt = Math.max(this.lastFrameAt + interval, frameStart - 0.5);
+    this.renderer.info.reset();
+    if (hasShadowTweens()) this.invalidateShadows();
     updateTweens(performance.now());
     const dt = this.clock.getDelta();
     this.sampleTime += dt; this.sampleFrames++;
     if (this.sampleTime >= 2) {
-      this.frameStats = { fps: Math.round(this.sampleFrames / this.sampleTime), frame_ms: Math.round(this.sampleTime / this.sampleFrames * 1000) };
+      this.frameStats = { fps: Math.round(this.sampleFrames / this.sampleTime), frame_ms: Math.round(this.sampleTime / this.sampleFrames * 1000), cpu_submit_ms: Math.round(this.submitTime / this.sampleFrames * 100) / 100, draw_calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, shadow_updates: this.shadowUpdates };
+      this.submitTime = 0; this.shadowUpdates = 0;
       this.sampleTime = 0; this.sampleFrames = 0;
     }
     for (const cb of this.frameCallbacks) cb(dt);
     this.updateIdleOrbit(dt);
+    this.director.update(dt);
     this.updateFireflies(dt);
     this.controls.update();
+    if (this.renderer.shadowMap.needsUpdate) this.shadowUpdates++;
     this.composer.render();
+    this.submitTime += performance.now() - frameStart;
+    this.frameStats.draw_calls = this.renderer.info.render.calls;
+    this.frameStats.triangles = this.renderer.info.render.triangles;
   }
 
   private fireflyTime = 0;
@@ -356,15 +395,17 @@ export class Studio {
     this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  invalidateShadows(): void { this.renderer.shadowMap.needsUpdate = true; }
+
   setQuality(cinematic: boolean): void {
-    this.cinematic = cinematic; this.ao.enabled = cinematic;
+    this.cinematic = cinematic; this.ao.enabled = cinematic; this.invalidateShadows();
     const ratio = Math.min(window.devicePixelRatio, cinematic ? 1.5 : 1);
     this.renderer.setPixelRatio(ratio); this.composer.setPixelRatio(ratio);
     this.onResize();
   }
 
   /** Apply a lighting preset, animated over ~700ms. */
-  applyLighting(preset: LightingPreset, intensity = 1, azimuthDeg?: number): void {
+  applyLighting(preset: LightingPreset, intensity = 1, azimuthDeg?: number, duration = 700): void {
     const p = PRESETS[preset];
     this.currentPreset = preset;
     this.currentIntensity = THREE.MathUtils.clamp(intensity, 0, 2);
@@ -381,7 +422,7 @@ export class Studio {
     const fromSkyTop = this.lastSkyTop.clone();
     const toSkyTop = new THREE.Color(p.skyTop);
     const fromSkyHorizon = this.lastSkyHorizon.clone();
-    const toSkyHorizon = new THREE.Color(p.background);
+    const toSkyHorizon = new THREE.Color(p.fog[0]);
     const fromFogColor = (this.scene.fog as THREE.Fog | null)?.color.clone() ?? toSkyHorizon.clone();
     const toFogColor = new THREE.Color(p.fog[0]);
     const fromFogNear = (this.scene.fog as THREE.Fog | null)?.near ?? p.fog[1];
@@ -411,7 +452,7 @@ export class Studio {
     this.drawSky(fromSkyTop, fromSkyHorizon);
 
     tween({
-      dur: 700,
+      dur: duration,
       group: 'lighting',
       update: (t) => {
         this.drawSky(
@@ -444,22 +485,15 @@ export class Studio {
     });
   }
 
-  /** Repaint the sky gradient (screen-space canvas texture). */
+  /** Update sky uniforms; no canvas repaint or texture upload during lighting fades. */
   private drawSky(top: THREE.Color, horizon: THREE.Color): void {
     this.lastSkyTop.copy(top);
     this.lastSkyHorizon.copy(horizon);
-    const ctx = this.skyCanvas.getContext('2d')!;
-    const grad = ctx.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, `#${top.getHexString()}`);
-    grad.addColorStop(0.55, `#${top.getHexString()}`);
-    grad.addColorStop(1, `#${horizon.getHexString()}`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 2, 256);
-    this.skyTexture.needsUpdate = true;
   }
 
   /** Animated camera move to a pose. Human input cancels it (see controls 'start'). */
   flyTo(pose: CameraPose, dur = 950, easing?: string): void {
+    this.director.pause('A new camera shot took control');
     tweenCamera(this.camera, this.controls, pose, dur, getEase(easing));
   }
 }

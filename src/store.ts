@@ -14,6 +14,7 @@ export interface SceneEntry {
   variant?: string;
   layoutRole?: 'path' | 'forest' | 'lantern';
   humanRevision: number;
+  transformCache: Float64Array;
   group: THREE.Group;
   materials: THREE.MeshStandardMaterial[];
 }
@@ -104,12 +105,24 @@ export class SceneStore {
       type,
       variant: opts.variant,
       humanRevision: 0,
+      transformCache: new Float64Array(10).fill(NaN),
       group: built.group,
       materials: built.materials,
     };
+    built.group.matrixAutoUpdate = false;
     built.group.userData.entryId = id;
     this.objects.set(id, entry);
     return entry;
+  }
+
+  /** Only changed editable roots invalidate their world matrices. Static parts stay cached. */
+  syncMatrices(): void {
+    for (const entry of this.objects.values()) {
+      const g = entry.group, p = g.position, q = g.quaternion, s = g.scale, c = entry.transformCache;
+      if (c[0] === p.x && c[1] === p.y && c[2] === p.z && c[3] === q.x && c[4] === q.y && c[5] === q.z && c[6] === q.w && c[7] === s.x && c[8] === s.y && c[9] === s.z) continue;
+      c[0] = p.x; c[1] = p.y; c[2] = p.z; c[3] = q.x; c[4] = q.y; c[5] = q.z; c[6] = q.w; c[7] = s.x; c[8] = s.y; c[9] = s.z;
+      g.updateMatrix();
+    }
   }
 
   remove(id: string): boolean {

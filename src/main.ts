@@ -11,6 +11,8 @@ import { setMusic, isMusicOn, installAudioUnlock } from './ambience';
 import { exportScene } from './tools';
 import { GuidedTour } from './show';
 import { LayoutManager } from './layout';
+import { LofiSession } from './lofi';
+import { initLofiUI } from './lofi-ui';
 import { cancelAllToolTweens } from './anim';
 import * as THREE from 'three';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
@@ -26,11 +28,14 @@ const store = new SceneStore();
 const snapshots = new SnapshotManager(store, studio);
 const layout = new LayoutManager(store, studio);
 
+const lofi = new LofiSession(store, studio, id => interaction.select(id));
+
 const ctx: ToolContext = {
   studio,
   store,
   snapshots,
   layout,
+  lofi,
   select: (id) => interaction.select(id),
 };
 
@@ -77,9 +82,12 @@ place('rock', -4.2, 1.8, { scale: 1.8, name: 'mossy boulder' });
 place('rock', 4.7, -3.8, { scale: 1.5, name: 'ridge stone' });
 let terrainVersion = -1;
 studio.onFrame(() => {
+  store.syncMatrices();
   if (terrainVersion === store.version) return;
   terrainVersion = store.version;
+  studio.invalidateShadows();
   studio.terrain.fit(Math.max(0, ...store.all().map(e => Math.hypot(e.group.position.x, e.group.position.z) + e.group.scale.x)));
+  studio.terrain.clearWater(store.all().filter(e => e.type === 'pond').map(e => e.group));
 });
 
 // pin the pristine state for the Reset button (and agents' worst days)
@@ -125,6 +133,7 @@ console.info(
 // --- HUD --------------------------------------------------------------------
 initChrome(() => {
   show.stop();
+  lofi.stop();
   layout.clear();
   interaction.select(null);
   if (snapshots.resetToBoot()) {
@@ -137,9 +146,9 @@ initChrome(() => {
 // --- Lofi toggle (same tracks the set_music tool plays) ----------------------
 const musicBtn = document.getElementById('music-toggle');
 musicBtn?.addEventListener('click', () => {
-  const r = setMusic(!isMusicOn());
-  musicBtn.classList.toggle('active', r.playing);
-  musicBtn.title = r.playing ? `Lofi on — ${r.track}` : 'Lofi on/off — self-made Suno tracks';
+  const r = setMusic(!isMusicOn(), 0.38);
+  musicBtn.classList.toggle('active', r.requested);
+  musicBtn.title = r.requested ? `Lofi on — ${r.track}` : 'Lofi on/off — self-made Suno tracks';
   logToolCall('set_music', { on: r.playing }, JSON.stringify({ ok: true, playing: r.playing, track: r.track }));
 });
 installAudioUnlock();
@@ -220,7 +229,10 @@ const show = new GuidedTour({
   },
   onBeat: ({ kicker, title, detail }) => setShowCue(kicker, title, detail),
 });
+initLofiUI(ctx, localCall, () => show.stop());
+
 document.getElementById('show-agent')?.addEventListener('click', () => {
+  lofi.stop();
   if (show.isRunning) { show.stop(); return; }
   const btn = document.getElementById('show-agent');
   if (btn) btn.textContent = '■ Stop guided tour';
@@ -228,6 +240,7 @@ document.getElementById('show-agent')?.addEventListener('click', () => {
 });
 canvas.addEventListener('pointerdown', () => {
   if (show.isRunning) show.stop();
+  lofi.humanTakeover();
 }, { capture: true });
 
 // --- WebMCP -----------------------------------------------------------------

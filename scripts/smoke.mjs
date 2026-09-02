@@ -23,6 +23,7 @@ await new Promise((r) => setTimeout(r, 1600));
 
 let failures = 0;
 const checked = [];
+const renderErrors = [];
 let browser;
 const launchOptions = {
   headless: true,
@@ -35,6 +36,8 @@ async function newTestPage() {
   // Keep the CSS viewport and pointer geometry; lower only CI's raster cost.
   const page = await browser.newPage({ deviceScaleFactor: process.env.CI ? 0.5 : 1 });
   page.setDefaultNavigationTimeout(90_000);
+  page.on('pageerror', error => renderErrors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error' && /WebGLProgram|mergeGeometries|GL_INVALID/.test(message.text())) renderErrors.push(message.text()); });
   return page;
 }
 async function testQuality(page) {
@@ -113,6 +116,9 @@ try {
         { tool: 'set_lighting', args: { preset: 'golden_hour' } },
       ],
     });
+    r.set_camera_motion = await window.__call('set_camera_motion', { action: 'start', mode: 'orbit', loop_seconds: 60 });
+    r.compose_lofi_scene = await window.__call('compose_lofi_scene', { music: false, build_seconds: 12 });
+    r.control_lofi = await window.__call('control_lofi', { action: 'stop' });
     return r;
   }, names);
 
@@ -343,6 +349,44 @@ try {
   check('invalid layout is side-effect free', !invalidLayout.ok && beforeInvalid.scene_version === afterInvalid.scene_version && JSON.stringify(beforeInvalid.layout) === JSON.stringify(afterInvalid.layout));
   check('local harness reports demo provenance', layout.actor === 'demo');
 
+  // Lofi is a cancellable background job; observing it must not steal its camera.
+  const beforeLofi = await describe();
+  const invalidLofi = j(await run('compose_lofi_scene', { build_seconds: -1 }));
+  check('invalid lofi composition preserves the scene', !invalidLofi.ok && (await describe()).scene_version === beforeLofi.scene_version);
+  const composition = j(await run('compose_lofi_scene', { build_seconds: 12, music: false, seed: 47 }));
+  check('lofi starts as an observable background session', composition.ok && composition.result.status === 'building' && !!composition.result.session_id && composition.duration_ms < 4000);
+  const competing = j(await run('add_object', { type: 'box' }));
+  check('building rejects competing scene mutations', !competing.ok && competing.code === 'lofi_busy');
+  await run('control_lofi', { action: 'pause' });
+  const pausedLofi = await describe();
+  await badPage2.waitForTimeout(250);
+  const stillPaused = await describe();
+  check('pause freezes the build and music', pausedLofi.lofi.status === 'paused' && stillPaused.lofi.elapsed_seconds === pausedLofi.lofi.elapsed_seconds && !stillPaused.music.requested);
+  await run('control_lofi', { action: 'resume' });
+  await badPage2.waitForFunction(() => document.getElementById('lofi-progress').value === 100, null, { timeout: process.env.CI ? 120_000 : 30_000, polling: 1000 });
+  const builtLofi = await describe();
+  check('lofi completes cabin pond forest light and continuous camera', builtLofi.counts.cabin === 1 && builtLofi.counts.pond === 1 && builtLofi.counts.tree === 26 && builtLofi.lofi.progress === 100 && builtLofi.camera_motion.status === 'running' && !builtLofi.music.requested, JSON.stringify(builtLofi.lofi));
+  const motionBefore = await describe();
+  await badPage2.waitForTimeout(400);
+  const motionAfter = await describe();
+  check('read-only observations leave continuous camera running', motionAfter.camera_motion.elapsed_seconds > motionBefore.camera_motion.elapsed_seconds && JSON.stringify(motionAfter.camera.p) !== JSON.stringify(motionBefore.camera.p));
+  await badPage2.mouse.move(800, 330); await badPage2.mouse.down(); await badPage2.mouse.move(815, 332, { steps: 3 }); await badPage2.mouse.up();
+  check('human pointer input pauses continuous camera', (await describe()).camera_motion.status === 'paused');
+  await run('set_camera_motion', { action: 'resume' });
+  check('camera can explicitly resume after human takeover', (await describe()).camera_motion.status === 'running');
+  await run('control_lofi', { action: 'stop' });
+  const stoppedLofi = await describe();
+  await badPage2.waitForTimeout(200);
+  const afterStop = await describe();
+  check('stop cancels background construction camera and music', afterStop.lofi.status === 'stopped' && afterStop.camera_motion.status === 'stopped' && !afterStop.music.requested && afterStop.scene_version === stoppedLofi.scene_version);
+  await run('undo', {});
+  check('one undo restores the scene before lofi construction', (await describe()).object_count === beforeLofi.object_count);
+  const toCancel = j(await run('compose_lofi_scene', { build_seconds: 12, music: false }));
+  await run('undo', {});
+  await badPage2.waitForTimeout(300);
+  const cancelledLofi = await describe();
+  check('undo during construction prevents later object spawns', toCancel.ok && cancelledLofi.object_count === beforeLofi.object_count && cancelledLofi.lofi.status === 'stopped');
+
   await badPage2.setViewportSize({ width: 390, height: 844 });
   await badPage2.goto(BASE);
   await badPage2.waitForFunction(() => !document.querySelector('#webmcp-status').classList.contains('status-checking'));
@@ -354,15 +398,16 @@ try {
   check('mobile controls fit without intro overlap', phone.fits && phone.separated, JSON.stringify(phone));
   await badPage2.screenshot({ path: 'docs/diorama-mobile.png' });
 
+  check('no shader compilation or asset errors', renderErrors.length === 0, renderErrors.join('\n'));
   const passCount = behavioral.filter((b2) => b2.pass).length;
   console.log(`\n[behavior] ${passCount}/${behavioral.length} semantic checks passed`);
   await badPage2.close();
 
   await browser.close();
-  console.log(`\n${names.length - failures}/${names.length} tools verified`);
+  console.log(`\n${checked.filter(c => c.ok).length}/${names.length} tools verified`);
   writeFileSync('scripts/smoke-result.json', JSON.stringify({
     at: new Date().toISOString(),
-    invocation: { verified: names.length - failures, total: names.length },
+    invocation: { verified: checked.filter(c => c.ok).length, total: names.length },
     behavior: { passed: passCount, total: behavioral.length, checks: behavioral },
   }, null, 2));
   process.exitCode = failures ? 1 : 0;

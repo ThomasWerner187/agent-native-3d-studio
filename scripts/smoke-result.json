@@ -1,12 +1,12 @@
 {
-  "at": "2026-09-02T19:28:20.720Z",
+  "at": "2026-09-02T21:01:29.493Z",
   "invocation": {
-    "verified": 23,
-    "total": 23
+    "verified": 26,
+    "total": 26
   },
   "behavior": {
-    "passed": 21,
-    "total": 21,
+    "passed": 33,
+    "total": 33,
     "checks": [
       {
         "name": "add_object increases contents",
@@ -76,12 +76,12 @@
       {
         "name": "mouse drag exposes selected camp and human edit",
         "pass": true,
-        "detail": "[{\"id\":\"obj_11\",\"name\":\"camp\",\"position\":[2.3080730595461487,0,-0.9985320702576963],\"revision\":1}]"
+        "detail": "[{\"id\":\"obj_11\",\"name\":\"camp\",\"position\":[2.308073060546734,0,-0.9985320700757433],\"revision\":1}]"
       },
       {
         "name": "layout adapts scenery and preserves live human camp",
         "pass": true,
-        "detail": "{\"ok\":true,\"operation_id\":\"op_mtkhnedk_6621vi\",\"actor\":\"demo\",\"scene_version_before\":10,\"scene_version_after\":11,\"applied\":true,\"duration_ms\":960,\"result\":{\"ok\":true,\"layout_id\":\"layout_1\",\"anchor_id\":\"obj_11\",\"anchor_position\":[2.3080730595461487,0,-0.9985320702576963],\"preserved_ids\":[\"obj_11\",\"obj_45\",\"obj_46\",\"obj_47\"],\"moved_ids\":[\"obj_1\",\"obj_2\",\"obj_3\",\"obj_4\",\"obj_5\",\"obj_6\",\"obj_7\",\"obj_8\",\"obj_9\",\"obj_10\",\"obj_12\",\"obj_13\",\"obj_15\",\"obj_16\",\"obj_18\",\"obj_19\",\"obj_20\",\"obj_21\",\"obj_26\",\"obj_27\",\"obj_28\",\"obj_29\",\"obj_32\",\"obj_33\",\"obj_34\",\"obj_35\",\"obj_36\",\"obj_37\",\"obj_38\",\"obj_39\",\"obj_40\",\"obj_41\",\"obj_42\",\"obj_43\",\"obj_44\"],\"scene_version\":11,\"note\":\"Live camp placement and human edits preserved. undo_layout reverts only these positions.\"}}"
+        "detail": "{\"ok\":true,\"operation_id\":\"op_mtkkzgku_wnde34\",\"actor\":\"demo\",\"scene_version_before\":10,\"scene_version_after\":11,\"applied\":true,\"duration_ms\":960,\"result\":{\"ok\":true,\"layout_id\":\"layout_1\",\"anchor_id\":\"obj_11\",\"anchor_position\":[2.308073060546734,0,-0.9985320700757433],\"preserved_ids\":[\"obj_11\",\"obj_45\",\"obj_46\",\"obj_47\"],\"moved_ids\":[\"obj_1\",\"obj_2\",\"obj_3\",\"obj_4\",\"obj_5\",\"obj_6\",\"obj_7\",\"obj_8\",\"obj_9\",\"obj_10\",\"obj_12\",\"obj_13\",\"obj_15\",\"obj_16\",\"obj_18\",\"obj_19\",\"obj_20\",\"obj_21\",\"obj_26\",\"obj_27\",\"obj_28\",\"obj_29\",\"obj_32\",\"obj_33\",\"obj_34\",\"obj_35\",\"obj_36\",\"obj_37\",\"obj_38\",\"obj_39\",\"obj_40\",\"obj_41\",\"obj_42\",\"obj_43\",\"obj_44\"],\"scene_version\":11,\"note\":\"Live camp placement and human edits preserved. undo_layout reverts only these positions.\"}}"
       },
       {
         "name": "selective undo keeps later edits and human camp",
@@ -109,9 +109,69 @@
         "detail": ""
       },
       {
+        "name": "invalid lofi composition preserves the scene",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "lofi starts as an observable background session",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "building rejects competing scene mutations",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "pause freezes the build and music",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "lofi completes cabin pond forest light and continuous camera",
+        "pass": true,
+        "detail": "{\"session_id\":\"lofi_mtkkzjgn\",\"status\":\"playing\",\"mood\":\"moonlit\",\"seed\":47,\"progress\":100,\"elapsed_seconds\":12,\"build_seconds\":12,\"phase\":\"Stay a little longer\",\"objects_created\":43,\"objects_planned\":43,\"reduced_motion\":false,\"camera\":{\"status\":\"running\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":3.4,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":true,\"reason\":\"\"},\"music\":{\"requested\":false,\"playing\":false,\"volume\":0,\"track\":\"Aurora Drift\",\"status\":\"off\",\"note\":\"Music off.\"}}"
+      },
+      {
+        "name": "read-only observations leave continuous camera running",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "human pointer input pauses continuous camera",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "camera can explicitly resume after human takeover",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "stop cancels background construction camera and music",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "one undo restores the scene before lofi construction",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "undo during construction prevents later object spawns",
+        "pass": true,
+        "detail": ""
+      },
+      {
         "name": "mobile controls fit without intro overlap",
         "pass": true,
         "detail": "{\"fits\":true,\"separated\":true}"
+      },
+      {
+        "name": "no shader compilation or asset errors",
+        "pass": true,
+        "detail": ""
       }
     ]
   }

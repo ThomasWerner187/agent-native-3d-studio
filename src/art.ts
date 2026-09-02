@@ -109,12 +109,36 @@ function beam(
   );
 }
 
+/** Fine evergreen silhouettes, shared once across every tree. */
+function needleTexture(): THREE.CanvasTexture {
+  const cached = textures.get('needles');
+  if (cached) return cached;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+  const ctx = c.getContext('2d')!, r = random(771);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 256, 512);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(128, 492); ctx.lineTo(128, 20); ctx.stroke();
+  for (let tier = 0; tier < 26; tier++) {
+    const y = 475 - tier * 16, width = 22 + Math.sin(tier / 26 * Math.PI) * 83;
+    for (const side of [-1, 1]) for (let needle = 0; needle < 5; needle++) {
+      const reach = width * (0.48 + r() * 0.5);
+      ctx.lineWidth = 1.8 + r() * 1.8;
+      ctx.beginPath(); ctx.moveTo(128 + side * needle * 2, y + needle * 3);
+      ctx.lineTo(128 + side * reach, y - 20 - needle * 5 - r() * 18); ctx.stroke();
+    }
+  }
+  const texture = new THREE.CanvasTexture(c); texture.anisotropy = 8;
+  textures.set('needles', texture); return texture;
+}
+
 export function pine(seed: number): THREE.Group {
   const g = new THREE.Group(),
     r = random(123 + seed * 773);
   const h = 3.2 + r() * 1.7;
   const crown = material("#497d72", undefined, 0.92);
   crown.vertexColors = true;
+  crown.alphaMap = needleTexture(); crown.alphaTest = 0.32;
+  crown.side = THREE.DoubleSide; crown.alphaToCoverage = true;
   const bark = material("#766352", "wood");
   const trunk = new THREE.CylinderGeometry(0.045, 0.17, h, 9);
   put(g, trunk, bark, 0, h / 2, 0);
@@ -147,13 +171,10 @@ export function pine(seed: number): THREE.Group {
       branches.push(branch);
       for (let n = 0; n < 5; n++) {
         const t = 0.15 + n / 6;
-        const leaf = new THREE.ConeGeometry(
-          (1 - t * 0.6) * 0.25,
-          0.62 - f * 0.28,
-          5,
-          1,
-        );
-        leaf.scale(1, 1, 0.5);
+        const cardA = new THREE.PlaneGeometry((1 - t * 0.4) * 0.65, 0.75 - f * 0.24);
+        const cardB = cardA.clone(); cardB.rotateY(Math.PI / 2);
+        const leaf = mergeGeometries([cardA, cardB])!;
+        cardA.dispose(); cardB.dispose();
         leaf.rotateZ(-0.75);
         leaf.rotateY(-angle + n * 0.85);
         leaf.translate(

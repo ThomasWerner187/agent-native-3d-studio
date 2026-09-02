@@ -58,6 +58,51 @@ const CDP_RECIPE = (name: string) =>
 
 export const TOOL_DEFS: ToolDef[] = [
   {
+    name: 'compose_lofi_scene',
+    description: 'Create a complete calming cabin-by-the-water scene, replacing the current scene with an undo point. Trees, lanterns, lighting and music arrive gradually; the camera then loops forever. Returns immediately with a session_id. Read describe_scene for progress; control_lofi to pause/stop. Audio may need a click.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      mood: { type: 'string', enum: ['moonlit', 'golden_hour'], description: 'Cool moonlight or warm sunset. Default moonlit.' },
+      build_seconds: { type: 'number', minimum: 12, maximum: 90, description: 'Slow reveal duration. Default 32 seconds.' },
+      seed: { type: 'integer', description: 'Repeatable forest arrangement. Default 42.' },
+      camera: { type: 'string', enum: ['cinematic', 'orbit'], description: 'Infinite camera direction. Default cinematic.' },
+      music: { type: 'boolean', description: 'Queue the local lofi playlist and fade in. Default true.' },
+    } },
+    mutating: true, annotations: { destructiveHint: true },
+    run: (ctx, args) => JSON.stringify(ctx.lofi.start(args)),
+  },
+  {
+    name: 'control_lofi',
+    description: 'Pause, resume or stop the ongoing lofi session. Pause freezes construction and camera, and pauses music. Stop keeps constructed objects for editing. undo restores the scene before composition. No background scene writes after stopping.',
+    inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'stop'] } }, required: ['action'] },
+    run: (ctx, args) => {
+      if (!['pause', 'resume', 'stop'].includes(String(args.action))) return fail('action must be pause, resume or stop.');
+      if (args.action === 'resume' && !ctx.lofi.resume()) return fail('No paused lofi session to resume.');
+      if (args.action === 'pause') ctx.lofi.pause();
+      if (args.action === 'stop') ctx.lofi.stop();
+      return ok(ctx, { lofi: ctx.lofi.state });
+    },
+  },
+  {
+    name: 'set_camera_motion',
+    description: 'Start an infinite background orbit or cinematic camera, or pause/resume/stop it. Returns immediately. Cinematic varies height, distance and target continuously. Human dragging pauses it; explicit resume blends back gently. Works on any scene. Read describe_scene for live camera_motion.',
+    inputSchema: { type: 'object', properties: {
+      action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
+      mode: { type: 'string', enum: ['orbit', 'cinematic'] },
+      loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One full circuit. Default 240 seconds.' },
+    }, required: ['action'] },
+    run: (ctx, args) => {
+      const action = args.action, mode = args.mode ?? 'cinematic', period = args.loop_seconds ?? 240;
+      if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
+      const director = ctx.studio.director;
+      if (action === 'start') { ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic'); director.start(mode as 'orbit' | 'cinematic', period); }
+      if (action === 'pause') director.pause();
+      if (action === 'stop') director.stop();
+      if (action === 'resume' && !director.resume()) return fail('No paused camera motion to resume.');
+      return ok(ctx, { camera_motion: director.state });
+    },
+  },
+  {
     name: 'arrange_scene',
     description: 'Adapt the existing diorama path, grove and lanterns to the live camp placement. Preserves the camp, selection and all human-edited objects. Searches around fixed obstacles before changing anything. Returns preserved_ids and moved_ids; undo_layout reverses only its positions.',
     inputSchema: { type: 'object', properties: {
@@ -583,7 +628,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout']);
+const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -656,6 +701,7 @@ function invocationId(): string {
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
 async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal, actor: 'agent' | 'human' | 'demo' = 'agent'): Promise<string> {
   ctx.studio.noteActivity();
+  ctx.store.syncMatrices();
   const t0 = performance.now();
   const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
@@ -664,6 +710,13 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     const result = JSON.stringify({ ok: false, operation_id: fallbackOperationId, scene_version_before: versionBefore, scene_version_after: ctx.store.version, duration_ms: 0, code: 'layout_busy', actor, applied: false, error: 'A layout is still running. Read the scene after it settles and retry.' });
     log(def.name, args, result);
     return result;
+  }
+
+  if (ctx.lofi.building && isMutating) {
+    const result = JSON.stringify({ ok: false, code: 'lofi_busy', operation_id: fallbackOperationId, actor, applied: false,
+      scene_version_before: versionBefore, scene_version_after: versionBefore, duration_ms: 0,
+      error: 'Lofi construction is active. Read describe_scene, or control_lofi stop before editing. undo restores the original scene.' });
+    log(def.name, args, result); return result;
   }
 
   // optimistic concurrency: reject stale plans before touching the scene
@@ -727,6 +780,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   } finally {
     signal?.removeEventListener('abort', onAbort);
+    ctx.store.syncMatrices();
   }
 
   // uniform operation envelope: every invocation reports the same metadata

@@ -45,7 +45,9 @@ export class Interaction {
       if (card) card.hidden = !entry;
       if (entry) {
         document.getElementById('selection-name')!.textContent = entry.name;
-        document.getElementById('selection-position')!.textContent = `x ${entry.group.position.x.toFixed(1)} · z ${entry.group.position.z.toFixed(1)} · drag to move`;
+        const label = document.getElementById('selection-position')!;
+        const text = `x ${entry.group.position.x.toFixed(1)} · z ${entry.group.position.z.toFixed(1)} · drag to move`;
+        if (label.textContent !== text) label.textContent = text;
       }
     });
   }
@@ -118,6 +120,7 @@ export class Interaction {
         if (r > max) hit.multiplyScalar(max / r);
         entry.group.position.x = hit.x;
         entry.group.position.z = hit.z;
+        this.studio.invalidateShadows();
       }
     }
   }

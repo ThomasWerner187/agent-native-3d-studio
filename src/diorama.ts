@@ -7,6 +7,8 @@ export class Diorama {
   readonly group = new THREE.Group();
   readonly ground: THREE.Mesh;
   radius = 11;
+  private grass: THREE.InstancedMesh;
+  private grassMatrices: Float32Array;
 
   constructor() {
     const r = random(4801);
@@ -110,6 +112,26 @@ export class Diorama {
       grass.setColorAt(i, color);
     }
     this.group.add(grass);
+    this.grass = grass;
+    this.grassMatrices = new Float32Array(grass.instanceMatrix.array);
+    this.group.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate = false; });
+  }
+
+  /** Keep vegetation out of real pond footprints, including moved/imported ponds. */
+  clearWater(ponds: THREE.Group[]): void {
+    this.group.updateMatrixWorld(true);
+    const inverses = ponds.map(pond => { pond.updateMatrixWorld(true); return pond.matrixWorld.clone().invert(); });
+    const matrix = new THREE.Matrix4(), local = new THREE.Vector3(), world = new THREE.Vector3();
+    for (let i = 0; i < this.grass.count; i++) {
+      matrix.fromArray(this.grassMatrices, i * 16);
+      world.setFromMatrixPosition(matrix).applyMatrix4(this.group.matrixWorld);
+      if (inverses.some(inverse => {
+        local.copy(world).applyMatrix4(inverse);
+        return (local.x / 3.4) ** 2 + (local.z / 2.45) ** 2 < 1;
+      })) matrix.scale(new THREE.Vector3(0, 0, 0));
+      this.grass.setMatrixAt(i, matrix);
+    }
+    this.grass.instanceMatrix.needsUpdate = true;
   }
 
   fit(extent: number): void {
@@ -117,5 +139,6 @@ export class Diorama {
     if (Math.abs(radius - this.radius) < 0.1) return;
     this.radius = radius;
     this.group.scale.set(radius / 11, 1, radius / 11);
+    this.group.updateMatrix();
   }
 }
