@@ -254,3 +254,8 @@ export function cancelAllToolTweens(): void {
   const groups = new Set(tweens.map((t) => t.group).filter((g): g is string => !!g));
   for (const g of groups) cancelGroup(g);
 }
+
+/** Camera-only movement and HUD outlines cannot change the sun's shadow map. */
+export function hasShadowTweens(): boolean {
+  return tweens.some(t => !!t.group && t.group !== 'camera');
+}

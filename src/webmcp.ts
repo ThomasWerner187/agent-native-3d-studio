@@ -31,10 +31,19 @@ export interface ToolDef {
   };
   /** Auto-capture a snapshot before this tool runs. */
   mutating?: boolean;
+  /** Has its own position journal instead of a whole-scene snapshot. */
+  journaled?: boolean;
   run: (ctx: ToolContext, args: Record<string, unknown>) => Promise<string> | string;
 }
 
 const TYPES = OBJECT_TYPES as unknown as string[];
+const EXPECTED_VERSION = {
+  expected_scene_version: {
+    type: 'integer',
+    minimum: 0,
+    description: 'Optional optimistic-lock version from describe_scene/query_scene. Rejects the edit if the scene changed since that observation.',
+  },
+};
 
 /**
  * CDP-only harnesses (Codex/ChatGPT driving Chrome without a WebMCP client)
@@ -49,6 +58,77 @@ const CDP_RECIPE = (name: string) =>
 
 export const TOOL_DEFS: ToolDef[] = [
   {
+    name: 'compose_lofi_scene',
+    description: 'Create a complete calming cabin-by-the-water scene, replacing the current scene with an undo point. Trees, lanterns, lighting and music arrive gradually; the camera then loops forever. Returns immediately with a session_id. Read describe_scene for progress; control_lofi to pause/stop. Audio may need a click.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      mood: { type: 'string', enum: ['moonlit', 'golden_hour'], description: 'Cool moonlight or warm sunset. Default moonlit.' },
+      build_seconds: { type: 'number', minimum: 12, maximum: 90, description: 'Slow reveal duration. Default 32 seconds.' },
+      seed: { type: 'integer', description: 'Repeatable forest arrangement. Default 42.' },
+      camera: { type: 'string', enum: ['cinematic', 'orbit'], description: 'Infinite camera direction. Default cinematic.' },
+      music: { type: 'boolean', description: 'Queue the local lofi playlist and fade in. Default true.' },
+    } },
+    mutating: true, annotations: { destructiveHint: true },
+    run: (ctx, args) => JSON.stringify(ctx.lofi.start(args)),
+  },
+  {
+    name: 'control_lofi',
+    description: 'Pause, resume or stop the ongoing lofi session. Pause freezes construction and camera, and pauses music. Stop keeps constructed objects for editing. undo restores the scene before composition. No background scene writes after stopping.',
+    inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'stop'] } }, required: ['action'] },
+    run: (ctx, args) => {
+      if (!['pause', 'resume', 'stop'].includes(String(args.action))) return fail('action must be pause, resume or stop.');
+      if (args.action === 'resume' && !ctx.lofi.resume()) return fail('No paused lofi session to resume.');
+      if (args.action === 'pause') ctx.lofi.pause();
+      if (args.action === 'stop') ctx.lofi.stop();
+      return ok(ctx, { lofi: ctx.lofi.state });
+    },
+  },
+  {
+    name: 'set_camera_motion',
+    description: 'Start an infinite background orbit or cinematic camera, or pause/resume/stop it. Returns immediately. Cinematic varies height, distance and target continuously. Human dragging pauses it; explicit resume blends back gently. Works on any scene. Read describe_scene for live camera_motion.',
+    inputSchema: { type: 'object', properties: {
+      action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
+      mode: { type: 'string', enum: ['orbit', 'cinematic'] },
+      loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One full circuit. Default 240 seconds.' },
+    }, required: ['action'] },
+    run: (ctx, args) => {
+      const action = args.action, mode = args.mode ?? 'cinematic', period = args.loop_seconds ?? 240;
+      if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
+      const director = ctx.studio.director;
+      if (action === 'start') { ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic'); director.start(mode as 'orbit' | 'cinematic', period); }
+      if (action === 'pause') director.pause();
+      if (action === 'stop') director.stop();
+      if (action === 'resume' && !director.resume()) return fail('No paused camera motion to resume.');
+      return ok(ctx, { camera_motion: director.state });
+    },
+  },
+  {
+    name: 'arrange_scene',
+    description: 'Adapt the existing diorama path, grove and lanterns to the live camp placement. Preserves the camp, selection and all human-edited objects. Searches around fixed obstacles before changing anything. Returns preserved_ids and moved_ids; undo_layout reverses only its positions.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      anchor: { type: 'string', description: 'Camp id/name. Defaults to selected camp, otherwise camp.' },
+      seed: { type: 'integer', description: 'Deterministic grove variation. Default 42.' },
+      clearance: { type: 'number', minimum: 0.3, maximum: 2, description: 'Extra clearance around camp and path. Default 0.6.' },
+    } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async (ctx, args) => JSON.stringify(await ctx.layout.arrange(args)),
+  },
+  {
+    name: 'undo_layout',
+    description: 'Undo the most recent arrangement, position by position. Keeps the camp, later human edits, material changes and newly created objects. Returns moved_ids and skipped_ids. Use this instead of whole-scene undo for cooperative layouts.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo()),
+  },
+  {
+    name: 'redo_layout',
+    description: 'Reapply the last undone layout, preserving objects changed since the undo. Returns moved_ids and skipped_ids.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo(true)),
+  },
+  {
     name: 'help',
     description:
       'START HERE. One call returns the studio playbook: workflow conventions, build/camera/chess recipes, ' +
@@ -60,7 +140,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'describe_scene',
     description:
-      'Read the current state of the 3D scene at a glance: object counts by type, the first objects with id/name/type/position/rotation/scale/color, the camera pose and the active lighting preset. Read-only. For large scenes use query_scene with pagination instead of relying on the truncated list.',
+      'Read live scene state: selection, human edits, layout undo availability, object counts, positions, camera and lighting. Start here before arranging around a human placement. Large lists are truncated; query_scene paginates and returns bounds. Read-only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -111,6 +191,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'The kind of object to add.' },
         piece: {
           type: 'string',
@@ -140,6 +221,7 @@ export const TOOL_DEFS: ToolDef[] = [
         rotation_y: { type: 'number', description: 'Rotation around the vertical axis, in degrees.' },
         name: { type: 'string', description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
         animate: { type: 'boolean', description: 'false = bulk placement: the object pops in staggered, but the call returns immediately instead of waiting for the pop (default true).' },
+        delay_ms: { type: 'number', minimum: 0, maximum: 2000, description: 'animate:false only: delay the pop for authored reveals, in milliseconds.' },
       },
       required: ['type'],
     },
@@ -156,6 +238,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id (e.g. "obj_3") or name — or an array of those to edit many at once.',
@@ -187,6 +270,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id, name, or array of those.',
@@ -214,6 +298,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         preset: { type: 'string', enum: LIGHTING_PRESETS as unknown as string[], description: 'The lighting mood.' },
         intensity: { type: 'number', minimum: 0, maximum: 2, description: '1 = normal, 0.5 = dimmer, 1.5 = brighter.' },
         azimuth: {
@@ -237,6 +322,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         target: { type: 'string', description: 'An object id/name, or "scene" for the whole scene.' },
         angle: {
           type: 'string',
@@ -269,6 +355,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         keyframes: {
           type: 'array',
           description: 'The shots in order. Each: {target, angle?, distance?, focal_length?, duration_ms?, hold_ms?}.',
@@ -307,6 +394,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'What to scatter (usually tree, rock or lamp).' },
         count: { type: 'number', minimum: 1, maximum: 200, description: 'How many instances to place.' },
         area: {
@@ -379,6 +467,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Explicit object id(s)/name(s) to delete.',
@@ -409,6 +498,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         json: { type: 'string', description: 'Scene JSON from export_scene. Omit if you pass url.' },
         url: { type: 'string', description: 'A share link containing #scene=... .' },
       },
@@ -426,6 +516,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         ops: {
           type: 'array',
           minItems: 1,
@@ -472,6 +563,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         piece: { type: 'string', description: 'The piece to move — id (e.g. "obj_17") or name (e.g. "white king e2").' },
         to: { type: 'string', description: 'Target square in algebraic notation, e.g. "e4" (files a-h, ranks 1-8).' },
         board: { type: 'string', description: 'Optional chessboard id/name. Omit to use the chessboard nearest the piece.' },
@@ -536,7 +628,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot']);
+const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -602,34 +694,79 @@ const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name))
 
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
 
+function invocationId(): string {
+  return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
-async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal): Promise<string> {
+async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal, actor: 'agent' | 'human' | 'demo' = 'agent'): Promise<string> {
   ctx.studio.noteActivity();
+  ctx.store.syncMatrices();
   const t0 = performance.now();
+  const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
   const isMutating = MUTATING.has(def.name);
+  if (ctx.layout.busy && (isMutating || def.name === 'undo')) {
+    const result = JSON.stringify({ ok: false, operation_id: fallbackOperationId, scene_version_before: versionBefore, scene_version_after: ctx.store.version, duration_ms: 0, code: 'layout_busy', actor, applied: false, error: 'A layout is still running. Read the scene after it settles and retry.' });
+    log(def.name, args, result);
+    return result;
+  }
+
+  if (ctx.lofi.building && isMutating) {
+    const result = JSON.stringify({ ok: false, code: 'lofi_busy', operation_id: fallbackOperationId, actor, applied: false,
+      scene_version_before: versionBefore, scene_version_after: versionBefore, duration_ms: 0,
+      error: 'Lofi construction is active. Read describe_scene, or control_lofi stop before editing. undo restores the original scene.' });
+    log(def.name, args, result); return result;
+  }
 
   // optimistic concurrency: reject stale plans before touching the scene
   const expected = args?.expected_scene_version;
   if (isMutating && expected != null) {
     const exp = Number(expected);
-    if (Number.isFinite(exp) && exp !== ctx.store.version) {
-      const result = JSON.stringify({
-        ok: false, code: 'stale_scene',
-        error: `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
-        expected_scene_version: exp, actual_scene_version: ctx.store.version,
-      });
+    const failure = (code: string, error: string, extra: Record<string, unknown> = {}) => JSON.stringify({
+      ok: false,
+      code,
+      operation_id: fallbackOperationId,
+      actor,
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error,
+      ...extra,
+    });
+    if (!Number.isInteger(exp) || exp < 0) {
+      const result = failure('bad_request', 'expected_scene_version must be a non-negative integer.');
+      log(def.name, args ?? {}, result);
+      return result;
+    }
+    if (exp !== ctx.store.version) {
+      const result = failure(
+        'stale_scene',
+        `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
+        { expected_scene_version: exp, actual_scene_version: ctx.store.version },
+      );
       log(def.name, args ?? {}, result);
       return result;
     }
   }
 
   // exactly one snapshot per logical transaction, taken here (central ownership)
-  const snapId = isMutating ? ctx.snapshots.capture(`before ${def.name}`) : null;
+  const snapId = isMutating && !def.journaled ? ctx.snapshots.capture(`before ${def.name}`) : null;
 
   if (signal?.aborted) {
     if (snapId) ctx.snapshots.discard(snapId);
-    const result = JSON.stringify({ ok: false, code: 'cancelled', error: 'Cancelled before it started.', applied: false });
+    const result = JSON.stringify({
+      ok: false,
+      code: 'cancelled',
+      operation_id: fallbackOperationId,
+      actor,
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error: 'Cancelled before it started.',
+    });
     log(def.name, args ?? {}, result);
     return result;
   }
@@ -643,6 +780,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   } finally {
     signal?.removeEventListener('abort', onAbort);
+    ctx.store.syncMatrices();
   }
 
   // uniform operation envelope: every invocation reports the same metadata
@@ -661,8 +799,8 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
 
   const envelope: Record<string, unknown> = {
     ok,
-    operation_id: typeof data.operation_id === 'string' ? data.operation_id : undefined,
-    actor: 'agent',
+    operation_id: typeof data.operation_id === 'string' ? data.operation_id : fallbackOperationId,
+    actor,
     scene_version_before: versionBefore,
     scene_version_after: ctx.store.version,
     applied: (data.applied as boolean) ?? ok,
@@ -724,10 +862,11 @@ export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   log: ToolLogger,
+  actor: 'agent' | 'human' | 'demo' = 'demo',
 ): Promise<string> {
   const def = TOOL_DEFS.find((t) => t.name === name);
   if (!def) {
     return JSON.stringify({ ok: false, code: 'unknown_tool', error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
   }
-  return invoke(ctx, def, args ?? {}, log);
+  return invoke(ctx, def, args ?? {}, log, undefined, actor);
 }

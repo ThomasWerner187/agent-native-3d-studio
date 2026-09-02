@@ -1,12 +1,12 @@
 {
-  "at": "2026-09-01T20:57:58.120Z",
+  "at": "2026-09-02T21:30:25.606Z",
   "invocation": {
-    "verified": 20,
-    "total": 20
+    "verified": 26,
+    "total": 26
   },
   "behavior": {
-    "passed": 12,
-    "total": 12,
+    "passed": 33,
+    "total": 33,
     "checks": [
       {
         "name": "add_object increases contents",
@@ -44,7 +44,12 @@
         "detail": ""
       },
       {
-        "name": "export/import round-trips scene",
+        "name": "export/import round-trips scene and preserves versions",
+        "pass": true,
+        "detail": "{\"before\":5,\"after\":6}"
+      },
+      {
+        "name": "scene links preserve every material and lantern light",
         "pass": true,
         "detail": ""
       },
@@ -66,7 +71,107 @@
       {
         "name": "stale expected_scene_version rejected",
         "pass": true,
-        "detail": "\"Stale observation: you saw scene_version 5, but the scene is now NaN (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
+        "detail": "\"Stale observation: you saw scene_version 12, but the scene is now 7 (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.\""
+      },
+      {
+        "name": "mouse drag exposes selected camp and human edit",
+        "pass": true,
+        "detail": "[{\"id\":\"obj_11\",\"name\":\"camp\",\"position\":[2.308073060546734,0,-0.9985320700757433],\"revision\":1}]"
+      },
+      {
+        "name": "layout adapts scenery and preserves live human camp",
+        "pass": true,
+        "detail": "{\"ok\":true,\"operation_id\":\"op_mtkm0pii_3epkg3\",\"actor\":\"demo\",\"scene_version_before\":10,\"scene_version_after\":11,\"applied\":true,\"duration_ms\":963,\"result\":{\"ok\":true,\"layout_id\":\"layout_1\",\"anchor_id\":\"obj_11\",\"anchor_position\":[2.308073060546734,0,-0.9985320700757433],\"preserved_ids\":[\"obj_11\",\"obj_45\",\"obj_46\",\"obj_47\"],\"moved_ids\":[\"obj_1\",\"obj_2\",\"obj_3\",\"obj_4\",\"obj_5\",\"obj_6\",\"obj_7\",\"obj_8\",\"obj_9\",\"obj_10\",\"obj_12\",\"obj_13\",\"obj_15\",\"obj_16\",\"obj_18\",\"obj_19\",\"obj_20\",\"obj_21\",\"obj_26\",\"obj_27\",\"obj_28\",\"obj_29\",\"obj_32\",\"obj_33\",\"obj_34\",\"obj_35\",\"obj_36\",\"obj_37\",\"obj_38\",\"obj_39\",\"obj_40\",\"obj_41\",\"obj_42\",\"obj_43\",\"obj_44\"],\"scene_version\":11,\"note\":\"Live camp placement and human edits preserved. undo_layout reverts only these positions.\"}}"
+      },
+      {
+        "name": "selective undo keeps later edits and human camp",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "selective undo restores layout positions but keeps materials",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "redo reapplies only the reverted layout positions",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "invalid layout is side-effect free",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "local harness reports demo provenance",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "invalid lofi composition preserves the scene",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "lofi starts as an observable background session",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "building rejects competing scene mutations",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "pause freezes the build and music",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "lofi completes cabin pond forest light and continuous camera",
+        "pass": true,
+        "detail": "{\"session_id\":\"lofi_mtkm0sfa\",\"status\":\"playing\",\"mood\":\"moonlit\",\"seed\":47,\"progress\":100,\"elapsed_seconds\":12,\"build_seconds\":12,\"phase\":\"Stay a little longer\",\"objects_created\":43,\"objects_planned\":43,\"reduced_motion\":false,\"camera\":{\"status\":\"running\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":2.5,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":true,\"reason\":\"\"},\"music\":{\"requested\":false,\"playing\":false,\"volume\":0,\"track\":\"Aurora Drift\",\"status\":\"off\",\"note\":\"Music off.\"}}"
+      },
+      {
+        "name": "read-only observations leave continuous camera running",
+        "pass": true,
+        "detail": "{\"before\":{\"status\":\"running\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":2.5,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":true,\"reason\":\"\"},\"after\":{\"status\":\"running\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":3,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":true,\"reason\":\"\"}}"
+      },
+      {
+        "name": "human pointer input pauses continuous camera",
+        "pass": true,
+        "detail": "{\"camera\":{\"status\":\"paused\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":3.1,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":true,\"reason\":\"You took the camera\"},\"versionBefore\":60,\"versionAfter\":60}"
+      },
+      {
+        "name": "camera can explicitly resume after human takeover",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "stop cancels background construction camera and music",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "one undo restores the scene before lofi construction",
+        "pass": true,
+        "detail": "{\"expected\":47,\"actual\":47}"
+      },
+      {
+        "name": "undo during construction prevents later object spawns",
+        "pass": true,
+        "detail": "{\"expected\":47,\"actual\":47,\"lofi\":{\"session_id\":\"lofi_mtkm137z\",\"status\":\"stopped\",\"mood\":\"moonlit\",\"seed\":42,\"progress\":0,\"elapsed_seconds\":0,\"build_seconds\":12,\"phase\":\"Session stopped\",\"objects_created\":0,\"objects_planned\":43,\"reduced_motion\":false,\"camera\":{\"status\":\"stopped\",\"mode\":\"cinematic\",\"loop_seconds\":240,\"elapsed_seconds\":3.1,\"loops\":0,\"shot\":\"Lakeside approach\",\"infinite\":false,\"reason\":\"\"},\"music\":{\"requested\":false,\"playing\":false,\"volume\":0,\"track\":\"Aurora Drift\",\"status\":\"off\",\"note\":\"Music off.\"}}}"
+      },
+      {
+        "name": "mobile controls fit without intro overlap",
+        "pass": true,
+        "detail": "{\"fits\":true,\"separated\":true}"
+      },
+      {
+        "name": "no shader compilation or asset errors",
+        "pass": true,
+        "detail": ""
       }
     ]
   }

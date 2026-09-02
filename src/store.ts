@@ -12,6 +12,9 @@ export interface SceneEntry {
   type: ObjectType;
   /** Preset variant, e.g. the chess piece kind ('queen'); survives snapshots. */
   variant?: string;
+  layoutRole?: 'path' | 'forest' | 'lantern';
+  humanRevision: number;
+  transformCache: Float64Array;
   group: THREE.Group;
   materials: THREE.MeshStandardMaterial[];
 }
@@ -25,6 +28,18 @@ export class SceneStore {
   private typeCounters = new Map<ObjectType, number>();
   /** Increments on every content mutation; returned by tools and describe_scene. */
   version = 0;
+  selectedId: string | null = null;
+  humanRevision = 0;
+  onHumanEdit?: (id: string) => void;
+  onClear?: () => void;
+
+  markHumanEdit(id: string): void {
+    const entry = this.get(id);
+    if (!entry) return;
+    entry.humanRevision = ++this.humanRevision;
+    this.bump();
+    this.onHumanEdit?.(id);
+  }
 
   /** Highest id handed out (read for snapshot serialization). */
   get idCount(): number {
@@ -37,6 +52,12 @@ export class SceneStore {
 
   bump(): number {
     return ++this.version;
+  }
+
+  /** Restore serialized counters without exposing the registry map itself. */
+  restoreCounters(idCounter: number, version: number): void {
+    this.idCounter = idCounter;
+    this.version = version;
   }
 
   all(): SceneEntry[] {
@@ -64,7 +85,9 @@ export class SceneStore {
       forceId?: string;
     } = {},
   ): SceneEntry {
-    const built = buildObject(type, opts.variant, (this.typeCounters.get(type) ?? 0) + 1);
+    // Stable object seed makes restores rebuild the exact same procedural asset.
+    const seed = opts.forceId ? Number(opts.forceId.slice(4)) : this.idCounter + 1;
+    const built = buildObject(type, opts.variant, seed);
     if (typeof opts.scale === 'number') built.group.scale.setScalar(opts.scale);
     else if (opts.scale) built.group.scale.set(opts.scale.x, opts.scale.y, opts.scale.z);
     if (opts.rotationYDeg) built.group.rotation.y = THREE.MathUtils.degToRad(opts.rotationYDeg);
@@ -81,12 +104,25 @@ export class SceneStore {
       name: opts.name?.trim() || `${type} ${n2}`,
       type,
       variant: opts.variant,
+      humanRevision: 0,
+      transformCache: new Float64Array(10).fill(NaN),
       group: built.group,
       materials: built.materials,
     };
+    built.group.matrixAutoUpdate = false;
     built.group.userData.entryId = id;
     this.objects.set(id, entry);
     return entry;
+  }
+
+  /** Only changed editable roots invalidate their world matrices. Static parts stay cached. */
+  syncMatrices(): void {
+    for (const entry of this.objects.values()) {
+      const g = entry.group, p = g.position, q = g.quaternion, s = g.scale, c = entry.transformCache;
+      if (c[0] === p.x && c[1] === p.y && c[2] === p.z && c[3] === q.x && c[4] === q.y && c[5] === q.z && c[6] === q.w && c[7] === s.x && c[8] === s.y && c[9] === s.z) continue;
+      c[0] = p.x; c[1] = p.y; c[2] = p.z; c[3] = q.x; c[4] = q.y; c[5] = q.z; c[6] = q.w; c[7] = s.x; c[8] = s.y; c[9] = s.z;
+      g.updateMatrix();
+    }
   }
 
   remove(id: string): boolean {
@@ -94,10 +130,12 @@ export class SceneStore {
   }
 
   clear(): void {
+    this.onClear?.();
     this.objects.clear();
     this.typeCounters.clear();
     this.idCounter = 0;
     this.version = 0;
+    this.selectedId = null;
   }
 
   /**

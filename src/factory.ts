@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { asset } from './art';
+import { cabin, pond } from './lofi-assets';
+import { batchStaticMeshes } from './geometry';
 
 /**
  * Object factory for primitives + furniture presets.
@@ -9,7 +12,7 @@ import * as THREE from 'three';
 export const OBJECT_TYPES = [
   'box', 'sphere', 'cylinder', 'plane',
   'tree', 'rock', 'lamp', 'window', 'chair', 'table',
-  'chessboard', 'chess_piece',
+  'chessboard', 'chess_piece', 'camp', 'cabin', 'pond',
 ] as const;
 export type ObjectType = (typeof OBJECT_TYPES)[number];
 
@@ -31,6 +34,9 @@ export const DEFAULT_COLORS: Record<ObjectType, { color: string; roughness: numb
   table:    { color: '#9c7a5b', roughness: 0.8,  metalness: 0.0 },
   chessboard:  { color: '#ffffff', roughness: 0.75, metalness: 0.0 },
   chess_piece: { color: '#e8dcc8', roughness: 0.55, metalness: 0.05 },
+  cabin: { color: '#af8055', roughness: 0.65, metalness: 0 },
+  pond: { color: '#2b777a', roughness: 0.19, metalness: 0.58 },
+  camp: { color: '#998669', roughness: 0.75, metalness: 0 },
 };
 
 export interface BuiltObject {
@@ -53,6 +59,7 @@ function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, cast = true): THRE
 /** Free GPU resources of a removed object (call AFTER unlinking from the scene). */
 export function disposeObject(root: THREE.Object3D): void {
   root.traverse((o) => {
+    o.userData.dispose?.();
     const m = o as THREE.Mesh;
     if (m.geometry) m.geometry.dispose();
     const mat = m.material as THREE.Material | THREE.Material[] | undefined;
@@ -62,6 +69,17 @@ export function disposeObject(root: THREE.Object3D): void {
 }
 
 export function buildObject(type: ObjectType, variant?: string, seed?: number): BuiltObject {
+  const detailed = type === 'cabin' ? cabin() : type === 'pond' ? pond(seed ?? 0) : asset(type, seed);
+  if (detailed) {
+    batchStaticMeshes(detailed);
+    const materials: THREE.MeshStandardMaterial[] = [];
+    detailed.traverse((o) => {
+      o.userData.rootRef = detailed;
+      const mat = (o as THREE.Mesh).material;
+      if (mat instanceof THREE.MeshStandardMaterial && !materials.includes(mat)) materials.push(mat);
+    });
+    return { group: detailed, materials };
+  }
   const group = new THREE.Group();
   const materials: THREE.MeshStandardMaterial[] = [];
   const def = DEFAULT_COLORS[type];
@@ -91,60 +109,6 @@ export function buildObject(type: ObjectType, variant?: string, seed?: number): 
       // a flat pad / rug
       add(mesh(new THREE.BoxGeometry(1.8, 0.04, 1.2), stdMat(def.color, def.roughness)));
       group.children[0].position.y = 0.02;
-      break;
-    }
-    case 'tree': {
-      // Seeded variation: every tree gets its own height, tier count, tilt and
-      // foliage tint — but the same seed always rebuilds the same tree, so
-      // snapshots/undo are stable.
-      const r = mulberry32(1000 + (seed ?? 0) * 7919);
-      const trunkMat = stdMat('#8a6a4f', 0.9);
-      const hueShift = (r() - 0.5) * 0.04;
-      const foliageCol = new THREE.Color(def.color).offsetHSL(hueShift, (r() - 0.5) * 0.08, (r() - 0.5) * 0.07);
-      const foliage = stdMat(`#${foliageCol.getHexString()}`, def.roughness);
-      const trunkH = 0.55 + r() * 0.35;
-      const t = mesh(new THREE.CylinderGeometry(0.075, 0.13, trunkH, 10), trunkMat);
-      t.position.y = trunkH / 2;
-      t.rotation.z = (r() - 0.5) * 0.09;
-      add(t);
-      let y = trunkH * 0.92;
-      const tiers = 2 + Math.floor(r() * 2); // 2–3 crown tiers
-      let radius = 0.5 + r() * 0.16;
-      for (let i = 0; i < tiers; i++) {
-        const tierH = 0.75 + r() * 0.4;
-        const cone = mesh(new THREE.ConeGeometry(radius, tierH, 10), foliage);
-        cone.position.set((r() - 0.5) * 0.12, y + tierH * 0.42, (r() - 0.5) * 0.12);
-        add(cone);
-        y += tierH * 0.52;
-        radius *= 0.72;
-      }
-      break;
-    }
-    case 'rock': {
-      const m = stdMat(def.color, def.roughness);
-      const r = mesh(new THREE.IcosahedronGeometry(0.5, 0), m);
-      r.position.y = 0.3;
-      r.scale.set(1, 0.72, 0.9);
-      r.rotation.y = Math.PI / 5;
-      add(r);
-      break;
-    }
-    case 'lamp': {
-      const poleMat = stdMat('#4f4a45', 0.7, 0.3);
-      const headMat = stdMat(def.color, def.roughness);
-      headMat.emissive = new THREE.Color('#ffb45e');
-      headMat.emissiveIntensity = 0.85;
-      const base = mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.08, 16), poleMat);
-      base.position.y = 0.04;
-      const pole = mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.6, 10), poleMat);
-      pole.position.y = 0.85;
-      const head = mesh(new THREE.SphereGeometry(0.22, 20, 14), headMat, false);
-      head.position.y = 1.72;
-      add(base); add(pole); add(head);
-      const light = new THREE.PointLight(0xffb45e, 6, 9, 2);
-      light.position.y = 1.72;
-      group.add(light);
-      group.userData.light = light;
       break;
     }
     case 'window': {
@@ -179,17 +143,6 @@ export function buildObject(type: ObjectType, variant?: string, seed?: number): 
       }
       break;
     }
-    case 'table': {
-      const mat = stdMat(def.color, def.roughness);
-      const top = mesh(new THREE.BoxGeometry(0.95, 0.06, 0.65), mat); top.position.y = 0.72;
-      add(top);
-      for (const [lx, lz] of [[-0.4, -0.25], [0.4, -0.25], [-0.4, 0.25], [0.4, 0.25]]) {
-        const leg = mesh(new THREE.BoxGeometry(0.06, 0.72, 0.06), mat);
-        leg.position.set(lx, 0.36, lz);
-        add(leg);
-      }
-      break;
-    }
     case 'chessboard': {
       const boardMat = stdMat(def.color, def.roughness);
       boardMat.map = makeCheckerTexture();
@@ -214,17 +167,6 @@ export function buildObject(type: ObjectType, variant?: string, seed?: number): 
   });
 
   return { group, materials };
-}
-
-/** Deterministic PRNG (same as tools.ts) for per-object variation. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /** Turned-chess-piece silhouettes, one lathe profile per piece (radius, height in meters). */

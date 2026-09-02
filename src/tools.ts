@@ -1,9 +1,12 @@
+import type { LofiSession } from './lofi';
+import { musicState } from './ambience';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
 import { SceneStore, round2 } from './store';
 import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
 import type { SnapshotManager } from './snapshot';
+import type { LayoutManager } from './layout';
 import { AGENT_PLAYBOOK } from './agent-guide';
 import { setMusic, isMusicOn } from './ambience';
 import {
@@ -29,6 +32,8 @@ export interface ToolContext {
   studio: Studio;
   store: SceneStore;
   snapshots: SnapshotManager;
+  layout: LayoutManager;
+  lofi: LofiSession;
   select: (id: string | null) => void;
 }
 
@@ -138,6 +143,8 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       id: e.id,
       name: e.name,
       type: e.type,
+      layout_role: e.layoutRole,
+      human_edited: e.humanRevision > 0,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
       s: uniform,
@@ -150,6 +157,16 @@ export function describeScene(ctx: ToolContext, args: Args): string {
   const body: Record<string, unknown> = {
     ok: true,
     scene_version: ctx.store.version,
+    selected_id: ctx.store.selectedId,
+    human_revision: ctx.store.humanRevision,
+    human_edits: ctx.store.all().filter(e => e.humanRevision > 0).map(e => ({
+      id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
+    })),
+    layout: ctx.layout.state,
+    lofi: ctx.lofi.state,
+    camera_motion: ctx.studio.director.state,
+    music: musicState(),
+    rendering: ctx.studio.frameStats,
     object_count: entries.length,
     counts,
     objects: compact,
@@ -163,7 +180,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       fov: round2(cam.fov),
     },
     lighting: { preset: ctx.studio.currentPreset, intensity: ctx.studio.currentIntensity },
-    ground_radius: 60,
+    ground_radius: ctx.studio.terrain.radius,
     note: entries.length > MAX_OUTPUT_OBJECTS
       ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use query_scene (limit/offset/filter) for the full, paginated list.`
       : 'All values are the live rendered scene state. Use query_scene for pagination and per-object bounds.',
@@ -214,7 +231,7 @@ export function queryScene(ctx: ToolContext, args: Args): string {
   const objects = page.map((e) => {
     const g = e.group;
     const mat = e.materials[0];
-    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type };
+    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type, layout_role: e.layoutRole, human_edited: e.humanRevision > 0 };
     if (e.type === 'chess_piece' && e.variant) o.piece = e.variant;
     if (want('pose')) {
       const uniform =
@@ -321,7 +338,9 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   const lazy = args.animate === false;
   if (lazy) {
     // Bulk placement: still pops in (staggered), but the call returns at once.
-    spawnPop(entry.group, Math.random() * 1400);
+    const requestedDelay = num(args.delay_ms);
+    const delay = requestedDelay == null ? Math.random() * 1400 : clamp(requestedDelay, 0, 2000);
+    spawnPop(entry.group, delay);
   } else {
     spawnPop(entry.group);
     await awaitGroup(`spawn:${entry.group.uuid}`);
@@ -578,7 +597,9 @@ function framingPose(
   const dirs: Record<(typeof ANGLES)[number], THREE.Vector3> = {
     front: new THREE.Vector3(0, 0.22, 1),
     side: new THREE.Vector3(1, 0.22, 0),
-    top: new THREE.Vector3(0.001, 1, 0.001),
+    // Keep a tiny +z component to define a stable roll when looking straight
+    // down: world +x stays screen-right and -z stays screen-up.
+    top: new THREE.Vector3(0, 1, 0.001),
     three_quarter: new THREE.Vector3(0.8, 0.55, 0.8),
     low: new THREE.Vector3(0.7, 0.08, 0.7),
     hero: new THREE.Vector3(0.75, 0.2, 0.75),
@@ -1142,9 +1163,6 @@ export async function importScene(ctx: ToolContext, args: Args): Promise<string>
   // invoke() already captured the pre-import snapshot — no nested capture here
   const r = ctx.snapshots.importJson(json);
   if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');
-  const target = new THREE.Vector3(...(JSON.parse(json).camera?.t ?? [0, 0.8, 0]));
-  ctx.studio.controls.target.copy(target);
-  await awaitGroup('camera');
   return ok(ctx, {
     restored: r.restored,
     note: 'Scene replaced. undo returns to the previous state — modify freely from here.',

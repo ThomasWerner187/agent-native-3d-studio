@@ -1,140 +1,99 @@
 # Agent-Native 3D Scene Studio
 
-**Canvas applications expose almost no reliable semantic structure to DOM- and accessibility-tree-based agents.** Vision models can drag pixels over a screenshot, but they get no stable state-and-action contract: no ids, no queries, no reversible operations, no guarantees. CAD tools, GIS and mapping, medical imaging, DAWs, video editors, data-visualization dashboards, game engines, design tools like Figma's canvas — all of them are effectively agent-inoperable today for this reason. [WebMCP](https://developer.chrome.com/docs/ai/webmcp) is the first API that changes that — and this studio is the working proof case: a live three.js scene where an AI agent builds, lights, scores and *directs* while a human keeps full mouse control at the same time. Nothing here is simulated; every agent action goes through real WebMCP tool calls you can inspect in the on-page log.
+**A little world. To slow down in.** Ask your browser agent for a calming lofi scene. A cabin, pond, pines and lanterns appear gradually; music fades in and a cinematic camera keeps drifting. Everything stays editable in the shared three.js scene.
 
-**20 seconds, no setup:** paste this into the agent and watch (or open the page and just grab the camera — after 25 idle seconds it drifts into a slow cinematic orbit on its own):
+[Lofi review build](https://diorama-review--agent-native-3d-studio.netlify.app) · [Production studio](https://agent-native-3d-studio.netlify.app) · [30-second demo script](DEMO.md) · [90-second recording plan](docs/recording-plan.md) · [Submission description](SUBMISSION.md) · [MIT license](LICENSE)
 
-> *"Plant an avenue of trees along the stone path, then fly an exciting camera flight through it."*
+![The live lofi cabin, pond and cinematic director](docs/lofi-retreat.jpg)
 
-![Recorded agent run: a batch call plants a tree avenue, golden hour rolls in, then a four-shot cinematic camera flight — docs/demo.gif](docs/demo.gif)
+## Create a lofi scene
 
-**No Chrome flag handy?** Every tool also runs through the built-in dev harness: open [`?agent=1`](https://agent-native-3d-studio.netlify.app/?agent=1) — same handlers, honestly labeled `DEV HARNESS`. Or share any scene with the ⧉ button / `export_scene` — the link contains the whole scene and opens for anyone.
+Click **Create a lofi scene** for the local experience, or give a WebMCP browser agent this prompt:
 
-**All tools verified:** `npm run smoke` → 20/20 ok (`scripts/smoke-result.json`).
+> Create a calming lofi scene with a moonlit cabin, water, warm lanterns, slowly growing trees, an infinite cinematic camera and soft music. Use compose_lofi_scene, then describe_scene to check progress.
 
-## Why this needs WebMCP (not just benefits from it)
+`compose_lofi_scene` accepts `mood` (moonlit or golden_hour), `seed`, `build_seconds` (12–90, default 32), `camera` (cinematic or orbit), and `music`. It starts a background session and returns a `session_id` immediately. This is an authored procedural composition that the agent configures through a semantic tool, not arbitrary text-to-mesh generation.
 
-The entire application state — objects, transforms, materials, camera, light — lives in the three.js scene graph, invisible to DOM- and accessibility-based actuation. The best a vision-driven agent can do without WebMCP is blindly drag pixels across a screenshot — guessing, with no way to verify what it changed. Most WebMCP demos put tools on top of a page the agent could always have actuated through the DOM anyway — for them, WebMCP is an accelerant. Here it is the **prerequisite**: without it the studio does not exist for an agent at all. Twenty structured tools turn that black box into a shared workspace:
+- **The scene unfolds:** pond → cedar A-frame cabin → forest → path and lanterns → music and camera. The progress and actual playback state are visible and available through `describe_scene`.
+- **An endless camera:** `set_camera_motion` starts continuous orbit or a smooth periodic route with changing height, distance and focus. No endpoint cut; no maximum loop count. A circuit defaults to four minutes. Observation tools do not interrupt it.
+- **Human control:** grabbing the canvas pauses the camera; during construction it also pauses the build. `control_lofi` pauses/resumes the complete session or stops it while retaining its objects. **Undo** restores the pre-composition scene, including when construction is interrupted.
+- **Sound:** the local three-track playlist fades in softly. The UI and tools distinguish requested playback from actual playback. If the browser blocks audio, click **Enable sound**. Volume and mute remain available.
+- **Clean view:** hides the interface for enjoying the scene. H or the unobtrusive **Controls** button brings it back. Exporting/recording video and YouTube upload are future work.
 
-- **The scatter before/after.** "Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area clear" is roughly **twenty minutes of manual click-place-adjust work** — and **zero** for an agent without WebMCP, because there is nothing to click. With `scatter{type:"tree",count:40,exclusion_zones:[…],seed:42}` it is one sentence, executed in seconds, reproducible via the seed.
-- **Measured: agent wall-clock is model turns, not the scene.** In a live Codex run, 8 successful tool calls took **3 min 12 s** wall-clock while total scene animation was **under 3 s**. The time went into orientation and one failed call — model turns, not rendering. That measurement is why `batch` exists (1–12 tool operations in one call, one snapshot, whole-batch undo): the biggest speed lever for agents is fewer round trips, and every WebMCP tool author will hit the same wall. This is concrete API feedback to the Chrome team, from the only class of app where it could be measured this cleanly.
-- **Reversibility is the trust primitive.** Every mutating tool auto-captures a restore point; `undo` steps back, ↺ resets, `export_scene`/`import_scene` turn any state into a share link that opens for anyone — no backend.
+The local Create button calls the same handler with `actor: human`; it does not contact an AI model. A connected browser agent calls the registered WebMCP tool with `actor: agent`. **Tool activity** exposes the original arguments and response. The background session state is observable in both cases.
 
-## Try it live
+## Try the collaboration
 
-**URL:** <https://agent-native-3d-studio.netlify.app>
+1. Drag the wooden camp to another spot. Its blue outline and the **YOU** activity entry identify the human edit.
+2. Give a connected browser agent the prompt below. It discovers the page tools, reads the actual selection and human edits, then adjusts the environment.
+3. Click **Undo layout**. Only the layout's positions revert. The camp, later edits and material changes remain.
 
-Requirements (the API is experimental, so one-time setup):
+> Read the live scene, including my selection and human edits. Keep my camp exactly where I placed it. Use arrange_scene to adapt the path, trees and lanterns around it, keeping access clear. Then frame a beautiful shot.
 
-1. **Chrome 149 or newer** (stable, Beta, Dev, or Canary — check `chrome://version`).
-2. Open `chrome://flags/#enable-webmcp-testing`, set **Enabled**, and relaunch.
-3. Optionally install the agent simulator: the free
-   [Model Context Tool Inspector](https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd)
-   extension (by the Chrome team). It lets you chat with the page's tools directly.
-4. Load the studio. The status chip top-left should turn green: **“WebMCP live · 20 tools”.**
+**Try layout** calls the same handler locally, with `actor: human`. **Guided tour** is an explicitly labeled local script, with `actor: demo`. Neither button invokes an AI model. A connected agent's WebMCP calls appear as **AGENT · WEBMCP**, with the full request and result available in the activity log.
 
-Then paste any of these into the Inspector (or any WebMCP-aware agent) and watch the scene change while your mouse stays fully functional:
+## Why WebMCP matters here
 
-| # | Prompt | What it exercises |
-|---|--------|-------------------|
-| 1 | “Set the mood to golden hour, then frame the scene like a movie still.” | `set_lighting` + `frame_camera` |
-| 2 | “Make it night and let the lamp glow warm.” | `set_lighting` + `set_material` (emissive drives the lamp’s real light) |
-| 3 | “Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area.” | multi-step `add_object` + `transform_object` |
-| 4 | “Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.” | `describe_scene` + `scatter` with `exclusion_zones` |
-| 5 | “What’s in the scene right now? Then move the table two meters toward the window and give me a hero shot of it.” | `describe_scene` → `transform_object` → `frame_camera` |
-| 6 | “Hide the UI, then fly a cinematic tour: start on the window, sweep past the lamp, and end on a hero shot of the table.” | `set_ui` + `camera_path` — the reveal moment |
-| 7 | “Plant an avenue of trees along both sides of the stone path, add a few boulders, then fly an exciting camera flight right through the avenue.” | two `scatter` rows + `camera_path` through the trees |
-| 8 | “Set up a chessboard with pawns next to the picnic table, zoom in, and play your first move against me — animate the piece.” | `add_object` (chessboard/chess_piece) + `board_square` + `transform_object` + `frame_camera` |
-| 9 | “Delete all pawns — kings-only chess. Switch the camera to whoever's turn it is.” | `delete_objects` by name filter + per-turn camera swaps |
+The WebGL canvas doesn't expose the scene graph through the DOM. A screenshot contains visible objects, but not their stable ids, exact positions, human-edit history or undo semantics. WebMCP lets this page publish those capabilities as discoverable, structured tools in the same live browser session. The agent can observe, act and verify while the person keeps the mouse.
 
-While an agent works: **drag to orbit, click to select, drag objects to move them, ⌫/Delete to remove, H to toggle the HUD.** Grabbing the camera also cancels any in-flight agent camera move — the human always wins. Every tool call appears in the visible **Tool Log** (top right), each mutating tool auto-saves a restore point (↺ button or `undo` tool steps back).
+A custom API or other automation integration could provide similar capabilities. The contribution here is the **standard browser-facing contract**, shared live state and reversible collaboration—not a claim that 3D automation is otherwise impossible. See the [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp).
 
-No WebMCP in your browser? The scene still works with the mouse, the chip tells you exactly what's missing, and `?agent=1` exposes a local dev panel that calls the identical tool implementations — clearly labeled as a dev harness, never auto-activated.
+## What is implemented
 
-## The tools
+- Procedural A-frame cabin with a furnished interior, glazed front, reading porch and softly dissipating GPU chimney smoke. A stone-lined pond reflects the actual scene, with layered wave normals, Fresnel reflection and a shallow shoreline.
+- Procedural forest diorama: fine evergreen needle silhouettes, wood grain, beveled terrace furniture, glass lanterns, layered rock, instanced grass, reflection lighting, ambient occlusion and restrained bloom. No external model or texture downloads.
+- `describe_scene` exposes `selected_id`, `human_edits`, scene version and layout history. `query_scene` adds pagination and real world-space bounds.
+- `arrange_scene` plans around the live camp and fixed objects before changing anything. Existing human edits and untagged objects stay fixed. Blocked arrangements fail without partial placement.
+- `undo_layout` and `redo_layout` use a position journal. Objects moved later or rebuilt by import/reset are skipped. Human takeover during a layout interrupts affected movement; grabbing its camp stops the arrangement.
+- Real provenance: WebMCP, local buttons and the guided tour are labeled separately. The actor label identifies the invocation path; it is not authentication of a remote model.
+- Human camera takeover, reduced-motion handling, optional performance mode, five lighting moods, scene share links, general building tools and chess geometry.
 
-| Tool | Purpose | Why this shape |
-|------|---------|----------------|
-| `help` | The full agent playbook: workflow conventions, build/camera/chess recipes, human-interaction guarantees — one tool result. | An agent that reads one row of the table understands the whole studio; `help` compresses that onboarding into a single call. |
-| `describe_scene` | Scene overview: object counts, first objects, camera, lighting. | The eyes. Without it the agent is blind; with it, one-way commands become a dialogue (look → critique → refine). |
-| `query_scene` | Paginated object query: filters, field selection, real bounding boxes. | Large scenes stay fully observable — `total`/`next_offset` page through everything, so an agent never mistakes a truncated view for the whole scene. |
-| `add_object` | One object: primitives, furniture presets (tree, rock, lamp, window, chair, table) and game pieces (chessboard; chess_piece with `piece`: pawn/rook/knight/bishop/queen/king and `side`: white/black — six distinct turned silhouettes). | Scoped to a single, well-validated creation with enums for every type — no free-form hallucination surface. |
-| `transform_object` | Move/rotate/scale one id, a name, or a batch — absolute or relative. | Batch targets + relative mode match how people actually direct edits (“move those three back a bit”). |
-| `set_material` | Color, roughness, metalness, emissive, opacity. | Material personality in one call; emissive also drives the lamp’s real point light, so “make it glow” *glows*. |
-| `set_lighting` | Five curated mood presets (golden_hour, night_neon, studio, overcast, moonlit) + intensity + sun azimuth. | Sky, fog, sun, ambient switch as one coherent, animated mood instead of five fiddly parameters to hallucinate. |
-| `frame_camera` | Animated fly-to shot of an object or the whole scene (6 angles, distance, focal length, optional `select:false` for clean frames). | Gives the agent cinematography: hero and three_quarter angles, 35mm-equivalent lens. The result reports the pose only **after** the move has settled. |
-| `camera_path` | Direct a sequence: 2–12 keyframed shots with per-shot angle, lens, flight time and hold, cinematic easing, optional loop. | From moving the camera to **directing** it — tours, reveals, orbit drama. Interruptible by the human at any moment; completed shots are reported per keyframe. |
-| `set_ui` | Show/hide the HUD (tool log, panels). | The agent can stage its own reveal: build, hide the UI, run the camera path, hand back. Humans press H at any time. |
-| `scatter` | Distribute up to 200 instances over an area with jitter, scale/rotation variance and **exclusion_zones**. | The 20-minutes-by-hand proof moment: “a forest, but not on the path.” |
-| `delete_objects` *(bonus)* | Batch removal by targets, type or name filter (“delete all pawns”). | Group edits are as natural as single edits; staggered shrink-out animation, undoable like every mutation. |
-| `board_square` *(bonus)* | Ask a chessboard where square e4 is (world position). | The scene stays a scene — chess *rules* live in the agent; the board only answers geometry questions. Precise moves without coordinate math. |
-| `chess_move` *(bonus)* | Perform a move: resolves the square, animates the piece with a small lift, optional `camera: "follow"|"hero"`. | One call = a complete, visible chess move. The *rules* stay in the agent's head; the scene performs. This is what makes agent-vs-agent chess presentable. |
-| `snapshot` *(bonus)* | Save a named restore point. | Reversibility is a trust primitive — Chrome's own security guidance asks for it. |
-| `undo` *(bonus)* | Step back to the last restore point. | Every mutating tool auto-captures one before it runs, so undo is always meaningful — including after an agent mistakes. |
-| `set_music` *(bonus)* | Put lofi on/off — three self-made Suno tracks as a playlist (volume). | Agents don't just shape the scene, they set its mood: "put some lofi on" while the camera flies. Browser autoplay policy may hold audio until the first click; the result says so. |
-| `export_scene` *(bonus)* | Export objects + camera + lighting; sets the page URL to a `#scene=...` share link. | Scenes become artifacts: link opens for anyone, no WebMCP, no flag — the judge sees the exact scene. Also the answer to "no persistence": links ARE the persistence. |
-| `import_scene` *(bonus)* | Restore an exported scene (JSON or share link). Captures an undo snapshot first. | Modify a shared scene with the agent, experiment, `undo` back — collaboration on top of artifacts. |
-| `batch` *(bonus)* | Run 1–12 tool calls in one turn: one snapshot, one result, whole-batch undo. | Measurement showed model turns dominate agent wall-clock, not the scene. `batch` is that lesson turned into tool design — a whole setup in one call. |
+## Rendering work and CPU use
 
-## How the WebMCP integration works
+The full cinematic image retains its resolution, ambient occlusion, bloom and shadow detail. A 60 FPS ceiling avoids unnecessary rendering on high-refresh displays. Static geometry is batched by material without removing triangles; only changed object transforms are recomputed. Sun shadows are cached until an object or light changes. Smoke is evaluated in one GPU particle draw, and lighting updates sky uniforms instead of uploading a repainted texture. Hidden tabs skip rendering.
 
-Tools are registered through the WebMCP imperative API, guarded by feature detection so the page degrades gracefully in non-WebMCP browsers. This is the real registration path from [`src/webmcp.ts`](src/webmcp.ts):
+`describe_scene.rendering` exposes actual frame rate, CPU submission time, draw calls, triangles and shadow updates. CPU submission time covers application work and graphics submission; it is not whole-machine CPU usage or GPU time. Real water reflection adds one view of the scene per visible pond; multiple ponds and large shared scenes can still be expensive.
 
-```ts
-export async function registerTools(ctx: ToolContext, log: ToolLogger): Promise<number> {
-  const mc = document.modelContext;
-  if (!mc) return 0; // status chip explains what's missing
+## Tools (26)
 
-  for (const def of TOOL_DEFS) {
-    await mc.registerTool(
-      {
-        name: def.name,
-        description: def.description,        // tells the model *when* to use the tool
-        inputSchema: def.inputSchema,        // strict enums + ranges: no free-text to hallucinate
-        execute: async (input) => invoke(ctx, def, input ?? {}, log),
-      },
-      { signal: controller.signal },         // owning the tool lifecycle
-    );
-  }
-  return registered;
-}
-```
+| Purpose | Tools |
+| --- | --- |
+| Lofi session | `compose_lofi_scene`, `control_lofi`, `set_camera_motion` |
+| Discover and inspect | `help`, `describe_scene`, `query_scene` |
+| Cooperate around human placement | `arrange_scene`, `undo_layout`, `redo_layout` |
+| Build and edit | `add_object`, `transform_object`, `set_material`, `scatter`, `delete_objects` |
+| Direct the scene | `set_lighting`, `frame_camera`, `camera_path`, `set_ui`, `set_music` |
+| Save and restore | `snapshot`, `undo`, `export_scene`, `import_scene` |
+| Group operations | `batch` |
+| Chess geometry | `board_square`, `chess_move` |
 
-Design decisions worth calling out (all learned from live agent testing):
+Registration uses `document.modelContext.registerTool({ name, description, inputSchema, annotations, execute }, { signal })`. Tools return an operation envelope containing `ok`, `operation_id`, `actor`, before/after scene versions, `applied`, `duration_ms` and a result or error. Mutating tools can reject stale observations through `expected_scene_version`. Animations settle before the call reports live values, except explicit bulk `add_object{animate:false}` and the background lofi/camera tools, which report acceptance immediately and expose ongoing state.
 
-- **Uniform operation envelope.** Every invocation returns `{ok, operation_id, actor, scene_version_before, scene_version_after, applied, duration_ms, result|code+error}` — generated centrally in the invocation layer, so agents can verify their own work and measure call cost.
-- **Optimistic concurrency.** Mutating tools accept an optional `expected_scene_version`; if the scene moved since the agent observed it (the human touched something), the call is rejected with a typed `stale_scene` error instead of overwriting the human's change.
-- **Results are only reported after the animation settles.** Tools `await` the scene transition and then report the *live rendered* values — an immediate `describe_scene` after `transform_object` matches the tool result, always.
-- **Human interruption is explicit.** If the user grabs the camera or a newer command supersedes a transition, the tool says so (`applied: false` + live values) instead of pretending success.
-- **`scene_version` + `operation_id`** on every mutation (camera moves included) let an agent detect stale observations.
-- **Typed errors:** failures carry a machine-readable `code` (`unknown_type`, `ambiguous_target`, `unknown_target`, `out_of_range`, …) plus a human `error`.
-- **Side-effect annotations** on every tool: `readOnlyHint` on the query tools, `idempotentHint` on material/lighting/camera/scatter, `destructiveHint` on `undo`.
-- **Reproducible layouts:** `scatter` accepts an RNG `seed` (always returned) and `avoid_object_ids` with real bounding-box footprints (`footprint: "actual_bounds"`).
-- **Chess, agent-native style:** the scene ships board + a full piece set (six distinct lathe-turned silhouettes, white/black colorways) + a `board_square` geometry oracle — the *rules* stay in the agent's head. It asks where e4 is, moves the piece, zooms in for the move, turns the camera to your side on your turn.
-- **Strict validation in code, loose in schema**, with descriptive errors (“Ambiguous target »tree« matches 3 objects: … use an id”) so the model can self-correct.
-- **`annotations.readOnlyHint** on `describe_scene`; mutating tools auto-snapshot for `undo`.
-- **Agent onboarding, three surfaces.** (1) The `help` tool hands any injected agent the full playbook in one call. (2) A `<script type="application/json" id="agent-manifest">` in the DOM gives DOM-scraping agents the tool list and conventions. (3) A console banner carries the standard `document.modelContext.getTools()` + `executeTool()` recipe for harnesses that drive Chrome without a WebMCP client (CDP-only agents) — the page stays addressable even when the harness isn't.
-- The same handlers power a query-param dev harness (`?agent=1`) — one code path, honestly labeled, never faked.
+General edits use whole-scene snapshots. Cooperative arrangements have their own position journal; use **layout undo** to preserve later human work. Layout tools and background lofi/camera controls cannot be nested inside `batch`. A running or paused lofi construction rejects competing scene edits until stopped, while allowing observation, undo and session controls. A running layout rejects competing tool mutations while still allowing mouse interaction and read-only queries.
 
-## Known limitations
-
-- **Experimental browser API.** WebMCP needs Chrome 149+ with `chrome://flags/#enable-webmcp-testing`; other browsers get the mouse-only experience with an honest status chip.
-- **One flat meadow.** The ground is a circle at y=0 — no terrain, physics, or water. `exclusion_zones` are axis-aligned rectangles.
-- **The scene doesn't play chess.** There is no rules engine: pieces are objects, `board_square` is geometry only. Legal-move knowledge lives in the agent (LLMs know chess); nothing stops an illegal move except the agent itself.
-- **Persistence is the share link.** `export_scene` packs the whole scene into a `#scene=...` URL — that link IS the save file, and `import_scene` restores it (undo-safe). A plain reload still resets to the starter scene; server-side accounts are deliberately out of scope.
-- **Material edits are object-wide.** `set_material` re-tints all parts of a preset; per-part editing (e.g. only the trunk) is not exposed.
-- **Scene size is bounded** (radius ≈ 60, 200 instances per scatter). `describe_scene` truncates its object list at 40 by design — use `query_scene` for the full paginated listing (up to 200/page).
-- **`camera_path` loops are capped** at 3 repetitions / 90 s so a runaway agent can't hold the camera hostage; grabbing the camera always wins.
-- Mouse-dragging an object mid-tool-call is allowed and simply wins — agents can detect the change via `scene_version`.
-
-## Dev
+## Run and verify
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173  (append ?agent=1 for the dev tool panel)
-npm run build    # typecheck + production build to dist/
+npm ci
+npm run dev
+npm run build
+npm run smoke
 ```
 
-## License
+The smoke suite uses its own free preview port, exercises every listed tool and checks observable behavior: pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`. GPU-less CI runs the same semantic suite in Performance mode through software OpenGL; the cinematic view is also checked in a hardware-accelerated browser.
 
-[MIT](LICENSE) — built with [three.js](https://threejs.org) for [The WebMCP Challenge](https://webmcp.dev). Tool-design references: the [WebMCP docs](https://developer.chrome.com/docs/ai/webmcp) and [GoogleChromeLabs/webmcp-tools](https://github.com/GoogleChromeLabs/webmcp-tools) demos.
+Native WebMCP requires a supporting browser/client. In supported Chrome testing builds, enable `chrome://flags/#enable-webmcp-testing`; the status chip reports actual API availability. The scene and local controls also work without WebMCP. `?agent=1` exposes a clearly labeled developer harness for handler tests.
+
+## Limits
+
+- The editable surface is flat at y=0; the layered island is art direction, without physics or terrain simulation.
+- Layout adaptation applies to the starter scene's tagged paths, grove and lanterns around a camp. It is not a general-purpose layout solver. Fixed obstacles can make a request infeasible.
+- A one-second scene operation does not imply a one-second model response. Agent discovery and reasoning time depend on the client. The 30-second presentation is an edited real session.
+- General snapshot undo replaces the whole scene. Only layout undo preserves unrelated later edits.
+- Reduced-motion preference keeps the lofi camera still and removes growing-object animation. Continuous motion can still be explicitly requested.
+- Share links preserve cabin/pond geometry and materials, but not session timers, camera routes or audio playback.
+- Materials are edited per object. Share links carry scene state, not the live undo journal or accounts, and can become long.
+- Chess tools provide geometry and animation, not a chess rules engine.
+- Cinematic rendering costs more than performance mode; frame rate depends on hardware, viewport and scene size.
+
+MIT licensed. Bundled DM Sans and Manrope fonts use their respective SIL Open Font Licenses in [public/fonts](public/fonts). Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).
