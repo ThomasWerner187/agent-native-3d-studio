@@ -248,6 +248,13 @@ export class Studio {
     this.controls.addEventListener('start', () => this.onHumanGrab?.());
 
     window.addEventListener('resize', () => this.onResize());
+    document.addEventListener('visibilitychange', () => {
+      // Exclude suspended tabs at the clock, not by clamping slow visible frames.
+      // Otherwise a 12-second composition can take minutes on a software GPU.
+      this.lastFrameAt = 0;
+      if (document.hidden) this.clock.stop();
+      else this.clock.start();
+    });
 
     this.renderer.setAnimationLoop(() => this.frame());
   }
@@ -315,7 +322,7 @@ export class Studio {
 
   private frame(): void {
     const frameStart = performance.now();
-    if (document.hidden) { this.lastFrameAt = 0; this.clock.getDelta(); return; }
+    if (document.hidden) return;
     // Keep full-resolution cinematic rendering; avoid wasting 120 Hz on a slow orbit.
     const interval = 1000 / 60;
     if (frameStart - this.lastFrameAt < interval - 0.6) return;

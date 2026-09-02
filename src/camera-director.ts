@@ -72,8 +72,7 @@ export class CameraDirector {
 
   update(dt: number): void {
     if (this.status !== 'running' || document.hidden) return;
-    // Ignore suspension time: returning to the tab never fast-forwards the shot.
-    dt = Math.min(dt, 0.1);
+    // Studio excludes hidden-tab time; visible elapsed time is independent of FPS.
     this.elapsed += dt; this.blend = Math.min(1, this.blend + dt / 8);
     const t = this.elapsed / this.period * Math.PI * 2;
     const a = this.phase + t;

@@ -132,7 +132,6 @@ export class LofiSession {
 
   private update(dt: number) {
     if (document.hidden) return;
-    dt = Math.min(dt, 0.1);
     if (!this.reduced && this.status !== 'paused') this.time += dt;
     if (this.animationVersion !== this.store.version) {
       this.animationVersion = this.store.version;
