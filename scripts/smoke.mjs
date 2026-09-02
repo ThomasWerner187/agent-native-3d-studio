@@ -367,11 +367,22 @@ try {
   const builtLofi = await describe();
   check('lofi completes cabin pond forest light and continuous camera', builtLofi.counts.cabin === 1 && builtLofi.counts.pond === 1 && builtLofi.counts.tree === 26 && builtLofi.lofi.progress === 100 && builtLofi.camera_motion.status === 'running' && !builtLofi.music.requested, JSON.stringify(builtLofi.lofi));
   const motionBefore = await describe();
-  await badPage2.waitForTimeout(400);
-  const motionAfter = await describe();
-  check('read-only observations leave continuous camera running', motionAfter.camera_motion.elapsed_seconds > motionBefore.camera_motion.elapsed_seconds && JSON.stringify(motionAfter.camera.p) !== JSON.stringify(motionBefore.camera.p));
-  await badPage2.mouse.move(800, 330); await badPage2.mouse.down(); await badPage2.mouse.move(815, 332, { steps: 3 }); await badPage2.mouse.up();
-  check('human pointer input pauses continuous camera', (await describe()).camera_motion.status === 'paused');
+  // A software GPU can take seconds per frame. Observe real camera movement,
+  // rather than assuming another frame has rendered after a fixed 400 ms.
+  const motionDeadline = Date.now() + (process.env.CI ? 60_000 : 10_000);
+  let motionAfter = motionBefore;
+  const hasMoved = () => motionAfter.camera_motion.elapsed_seconds > motionBefore.camera_motion.elapsed_seconds
+    && JSON.stringify(motionAfter.camera.p) !== JSON.stringify(motionBefore.camera.p);
+  while (!hasMoved() && motionAfter.camera_motion.status === 'running' && Date.now() < motionDeadline) {
+    await badPage2.waitForTimeout(500);
+    motionAfter = await describe();
+  }
+  check('read-only observations leave continuous camera running', motionAfter.camera_motion.status === 'running' && hasMoved(), JSON.stringify({ before: motionBefore.camera_motion, after: motionAfter.camera_motion }));
+  // Right-drag always controls the camera. Left-drag may hit a moving object's
+  // silhouette and correctly add a human edit to the undo stack instead.
+  await badPage2.mouse.move(800, 330); await badPage2.mouse.down({ button: 'right' }); await badPage2.mouse.move(815, 332, { steps: 3 }); await badPage2.mouse.up({ button: 'right' });
+  const humanCamera = await describe();
+  check('human pointer input pauses continuous camera', humanCamera.camera_motion.status === 'paused' && humanCamera.scene_version === motionAfter.scene_version, JSON.stringify({ camera: humanCamera.camera_motion, versionBefore: motionAfter.scene_version, versionAfter: humanCamera.scene_version }));
   await run('set_camera_motion', { action: 'resume' });
   check('camera can explicitly resume after human takeover', (await describe()).camera_motion.status === 'running');
   await run('control_lofi', { action: 'stop' });
@@ -380,12 +391,13 @@ try {
   const afterStop = await describe();
   check('stop cancels background construction camera and music', afterStop.lofi.status === 'stopped' && afterStop.camera_motion.status === 'stopped' && !afterStop.music.requested && afterStop.scene_version === stoppedLofi.scene_version);
   await run('undo', {});
-  check('one undo restores the scene before lofi construction', (await describe()).object_count === beforeLofi.object_count);
+  const restoredLofi = await describe();
+  check('one undo restores the scene before lofi construction', restoredLofi.object_count === beforeLofi.object_count, JSON.stringify({ expected: beforeLofi.object_count, actual: restoredLofi.object_count }));
   const toCancel = j(await run('compose_lofi_scene', { build_seconds: 12, music: false }));
   await run('undo', {});
   await badPage2.waitForTimeout(300);
   const cancelledLofi = await describe();
-  check('undo during construction prevents later object spawns', toCancel.ok && cancelledLofi.object_count === beforeLofi.object_count && cancelledLofi.lofi.status === 'stopped');
+  check('undo during construction prevents later object spawns', toCancel.ok && cancelledLofi.object_count === beforeLofi.object_count && cancelledLofi.lofi.status === 'stopped', JSON.stringify({ expected: beforeLofi.object_count, actual: cancelledLofi.object_count, lofi: cancelledLofi.lofi }));
 
   await badPage2.setViewportSize({ width: 390, height: 844 });
   await badPage2.goto(BASE);
