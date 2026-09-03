@@ -104,15 +104,16 @@ Native WebMCP requires a supporting browser/client. In Chrome 149+, enable `chro
 
 ## Demo production on macOS
 
-The optional media helpers use macOS `say`, Swift/AppKit, `ffmpeg` and `ffprobe`. After capturing real native-browser footage and its tool evidence as described in the [recording plan](docs/recording-plan.md), run these from the repository root:
+The optional media helpers use ElevenLabs for narration, plus Swift/AppKit, `ffmpeg` and `ffprobe` for local production. After capturing real native-browser footage and its tool evidence as described in the [recording plan](docs/recording-plan.md), run these from the repository root:
 
 ```bash
-npm run demo:audio
+npm run audio:elevenlabs -- --plan
+npm run audio:elevenlabs
 node scripts/encode-demo-capture.mjs
 node scripts/assemble-demo.mjs
 ```
 
-The commands prepare the local English voice track, encode existing timestamped capture frames and assemble a 135-second MP4 with captions and a poster in `scratch-submission-media`. Raw browser captures and `native-capture.json` are required inputs, kept outside the repository. These helpers do not automate browser capture, YouTube upload or Devpost submission. The exported candidate still needs the creator's complete watch-through and voice approval before publication.
+The narration uses **Lily — Velvety Actress** with ElevenLabs `eleven_v3`. `--plan` checks the script and cache without API calls or credentials. Generating missing tracks requires `ELEVENLABS_API_KEY` in the environment and makes paid API calls; matching cached takes are reused. The eight MP3 tracks retain character alignment and generation provenance for caption timing. The remaining commands encode existing timestamped frames and assemble a 135-second MP4 with captions and a poster in `scratch-submission-media`. Raw browser captures and `native-capture.json` are required inputs, kept outside the repository. These helpers do not automate browser capture, YouTube upload or Devpost submission. The exported candidate still needs the creator's complete watch-through and voice approval before publication.
 
 ## Code map
 

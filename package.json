@@ -10,7 +10,8 @@
     "smoke": "node scripts/smoke.mjs",
     "test:animations": "node scripts/animation-regression.mjs",
     "test:lofi": "node scripts/lofi-regression.mjs",
-    "demo:audio": "node scripts/prepare-demo-audio.mjs"
+    "demo:audio": "node scripts/prepare-demo-audio.mjs",
+    "audio:elevenlabs": "node scripts/prepare-elevenlabs-audio.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

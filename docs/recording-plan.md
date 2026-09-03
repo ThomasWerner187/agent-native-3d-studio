@@ -4,21 +4,30 @@ Produce the [2:15 English film](../DEMO.md) from the same revision that will be 
 
 ## Current candidate
 
-The rerendered local export was captured against application revision `3487e00`; the final reviewed application is `9bda5c3`, which adds the compact-share update. Its production build and smoke suite passed **26/26 tools and 58/58 semantic checks**; animation and lofi regressions passed on the unchanged core, including 12 bounded automatic cycles. Preview deploy `6a990cece684e99516a09013` matches that final build. The later share behavior still needs a native-browser round trip: browser-tool access is blocked by admin-policy verification, and the earlier film does not establish that later check.
+The browser footage was captured against application revision `3487e00`; the reviewed application is `9bda5c3`, which adds the compact-share update. Its production build and smoke suite passed **26/26 tools and 58/58 semantic checks**; animation and lofi regressions passed on the unchanged core, including 12 bounded automatic cycles. Build and smoke also passed again in the narration-polish worktree, whose 3D application source is unchanged. Preview deploy `6a990cece684e99516a09013` matches the reviewed application build. The later share behavior still needs a native-browser round trip: browser-tool access is blocked by admin-policy verification, and the earlier film does not establish that later check.
 
-The local film is **135 seconds, 1280 × 720, 30 FPS, H.264 video and AAC audio**. Its **42 caption cues** and **17 recorded native events** accompany English SRT captions, a poster, a contact sheet and export metadata in `scratch-submission-media`. The film uses eight locally synthesized macOS Samantha narration segments and the owner-provided Aurora Drift music track. It is an **edited demo assembled from multiple live WebMCP sessions**; the opening and evidence cards disclose that provenance rather than presenting one uninterrupted session. Native-agent waiting-time cuts are labeled; the complete 20-second build is shown at its recorded timing. The 30 FPS export does not imply that the browser source captured every displayed frame.
+The replacement narration uses **Lily — Velvety Actress** (`pFZP5JQG7iQjIQuC4Bku`), generated through ElevenLabs with model `eleven_v3`, stability `0.5`, similarity boost `0.75` and style `0`. Eight source MP3s at **44.1 kHz / 128 kbps** total **103.04 seconds** within the fixed 135-second film slots. They retain character alignment and generation provenance. The previous narration was rejected; Lily is the voice in the current exported master.
 
-The exported mix measured **−19.2 dBFS mean** and **−3.7 dBFS peak**. Format checks and level measurements passed; a complete listen-through and creator approval of the synthesized voice are still required. Public YouTube upload and the Devpost Submitted status are not complete.
+The revised master is **1280 × 720, 30 FPS, H.264/AAC**, with video and audio streams of exactly **135.000 seconds** and a size of **43,349,714 bytes**. Its **32 valid caption cues** use character alignment and last at least **0.8 seconds** each. The source footage retains **17 recorded native events**. The master, English SRT, poster, contact sheet and export metadata are in `scratch-submission-media`.
+
+The film pairs the narration with the owner-provided Aurora Drift music track. Narration plays at its original speed. The music bed targets **−24.5 LUFS** with sidechain ducking at **700 ms attack / 1000 ms release**. The final mix measures **−17.4 LUFS integrated**, **−2.87 dBTP true peak**, **−20.0 dBFS mean** and **−2.9 dBFS sample peak**. Format and level checks passed; a complete watch/listen and creator approval of the replacement voice remain pending.
+
+The film is an **edited demo assembled from multiple live WebMCP sessions**; the opening and evidence cards disclose that provenance rather than presenting one uninterrupted session. Native-agent waiting-time cuts are labeled; the complete 20-second build is shown at its recorded timing. The 30 FPS export does not imply that the browser source captured every displayed frame. Public YouTube upload and the Devpost Submitted status are not complete.
+
+Master SHA-256: `f7f7eadb8048e5e42d3e3e7559b2dfc6aec14435b3fb10f062d9dceb0914f692`.
 
 ## Rebuild the media on macOS
 
-Prerequisites: the installed project dependencies, macOS `say`, Swift with AppKit, and `ffmpeg`/`ffprobe` on `PATH`. Run from the repository root:
+Prerequisites: the installed project dependencies, Swift with AppKit, and `ffmpeg`/`ffprobe` on `PATH`. Generating missing narration tracks uses paid ElevenLabs API calls and requires `ELEVENLABS_API_KEY` in the environment. Run from the repository root:
 
 ```bash
-npm run demo:audio
+npm run audio:elevenlabs -- --plan
+npm run audio:elevenlabs
 ```
 
-This prepares the eight AIFF narration segments and `scratch-submission-media/timeline.json`; the default voice is Samantha. Browser capture is a separate step: retain genuine timestamped frame images and `frames.json` manifests in the `opening`, `composition`, `state`, `next`, `endless`, `human` and `closing` subdirectories, plus the actual native requests/results in `native-capture.json`. These raw inputs are intentionally not committed. A fresh clone cannot produce the film from the narration command alone.
+`--plan` reads the script and cache without credentials, API calls or file writes. Generation prepares eight MP3 tracks, character-alignment JSON and provenance JSON under `scratch-submission-media/elevenlabs`, then writes `scratch-submission-media/timeline.json` when every matching take is ready. Cached takes are checked and reused. The default is Lily with `eleven_v3`; optional `ELEVENLABS_VOICE_ID` and `ELEVENLABS_MODEL_ID` select another voice/model. Use `npm run audio:elevenlabs -- --only opening` to prepare one named segment. The helper keeps original audio speed and rejects a take that does not fit its slot; it does not retry failed API calls automatically.
+
+Browser capture is a separate step: retain genuine timestamped frame images and `frames.json` manifests in the `opening`, `composition`, `state`, `next`, `endless`, `human` and `closing` subdirectories, plus the actual native requests/results in `native-capture.json`. These raw inputs are intentionally not committed. A fresh clone cannot produce the film from the narration command alone.
 
 Once those captures are present, encode and assemble them:
 
@@ -27,7 +36,7 @@ node scripts/encode-demo-capture.mjs
 node scripts/assemble-demo.mjs
 ```
 
-The encoder preserves source timestamps; the assembler validates the required clips and native evidence, renders title/caption overlays with AppKit, mixes narration and music, and writes `submission-demo.mp4`, `submission-demo.srt`, `submission-poster.jpg`, `submission-contact-sheet.jpg` and `export-metadata.json` under `scratch-submission-media`. Neither command records browser actions or uploads anything. Rebuilding after changing the narration or captures requires another full review.
+The encoder preserves source timestamps; the assembler validates the required clips and native evidence, uses the ElevenLabs character alignment for caption timing, renders title/caption overlays with AppKit, mixes narration and music, and writes `submission-demo.mp4`, `submission-demo.srt`, `submission-poster.jpg`, `submission-contact-sheet.jpg` and `export-metadata.json` under `scratch-submission-media`. Neither command records browser actions or uploads anything. Rebuilding after changing the narration or captures requires another full review.
 
 ## Capture
 
@@ -41,7 +50,7 @@ The exact prompts and narration are in [DEMO.md](../DEMO.md), with matching mach
 
 ## Voice and edit
 
-- Record the English script as one natural performance, then align the footage to it. Use the exact feature names when the relevant tool is on screen. A guide voice is acceptable for reviewing the cut; record which voice the final film actually uses.
+- Keep the English delivery relaxed, with natural pauses between ideas. Use the exact feature names when the relevant tool is on screen. Keep each generated segment within its shot; shorten and regenerate an overlong take instead of speeding it up. Record the actual voice and model used for the exported film.
 - Keep narration prominent and music quiet underneath. Check actual sound playback before capture, not just a successful music request. A silent browser recording may need the separately captured audio mixed in.
 - Keep camera, water and smoke footage moving under the voice. Avoid extending a still frame to cover a long sentence.
 - Add readable English captions. Use short labels such as **Native WebMCP call**, **Human placement** and **Layout undo** only when the footage supports them.

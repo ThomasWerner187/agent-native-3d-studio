@@ -20,7 +20,7 @@ This is a working release checklist, not a claim that Devpost submission is comp
 | Final submitted revision | `[FINAL_SUBMISSION_COMMIT]` — pending creator approval of publication and final submission |
 | Public demo video | `[PUBLIC_YOUTUBE_URL]` |
 | Devpost draft | [Agent-Native 3D Scene Studio](https://devpost.com/software/agent-native-3d-scene-studio), submission `1168246` — Overview saved, 2/5 steps; not Submitted |
-| Local exported candidate | `scratch-submission-media/submission-demo.mp4` — 135 seconds; SRT captions and poster alongside it; final watch/voice approval pending |
+| Local exported candidate | `scratch-submission-media/submission-demo.mp4` — ElevenLabs Lily narration; video and audio each 135.000 seconds; 32 caption cues; final watch/voice approval pending |
 
 ## Before submitting
 
@@ -35,8 +35,9 @@ This is a working release checklist, not a claim that Devpost submission is comp
 - [x] Verify basic repository access and licensing anonymously. GitHub showed **Public**, its signed-out interface, an accessible `LICENSE` and detected **MIT license**. The About description no longer contains an obsolete tool count.
 - [ ] After pushing/merging the reviewed release, verify its actual registration source, run instructions and assets while logged out. The current public `main` README still describes the earlier 20-tool version; the basic access check does not complete final source verification.
 - [x] Verify bundled font notices and record music provenance. DM Sans and Manrope include their OFL notices; Thomas confirmed the three Suno tracks are his. [Music credits](../public/music/README.md) record that owner-provided statement without asserting subscription terms.
-- [x] Produce the local **135-second, 720p, 30 FPS H.264/AAC** film, SRT captions and poster. The opening and evidence cards disclose an edited demo from multiple live WebMCP sessions. Native waiting-time cuts are labeled, and the full 20-second build retains its real timing. Format and measured audio levels were checked.
-- [ ] Have the creator watch and listen to the complete exported English film, approve the synthesized Samantha narration, and confirm that it matches this release and explains WebMCP. Automated audio measurements do not complete this review.
+- [x] Generate the eight replacement English narration tracks with ElevenLabs **Lily — Velvety Actress**, model `eleven_v3`. Source audio totals **103.04 seconds** in the fixed 135-second edit; MP3s, character alignment and generation provenance are retained locally.
+- [x] Verify the revised **135-second, 720p, 30 FPS H.264/AAC** film, SRT captions and poster after replacing the rejected narration. Both media streams are **135.000 seconds**; all **32 captions** are valid and at least **0.8 seconds** long. The mix measures **−17.4 LUFS integrated / −2.87 dBTP true peak** (**−20.0 dBFS mean / −2.9 dBFS sample peak**). The opening and evidence cards disclose multiple live WebMCP sessions, native waiting-time cuts remain labeled, and the full 20-second build retains its real timing. The [recording plan](recording-plan.md) records the exact master checksum.
+- [ ] Have the creator watch and listen to the complete exported English film, approve the synthesized Lily narration, and confirm that it matches this release and explains WebMCP. Automated audio measurements do not complete this review.
 - [ ] Upload the film to YouTube as **Public**, wait for processing, and verify its watch page while logged out. Replace the public-video marker above and in `SUBMISSION.md`.
 - [x] Complete the Devpost CAPTCHA and create the project draft. Submission `1168246` has its Overview saved; **2/5 steps** are completed.
 - [ ] Clean the unsaved Details draft: replace the entire About editor contents with `scratch-submission-media/submission-kit/fields/project-story.md` or the story in `SUBMISSION.md`. The last visible editor contained the empty template plus appended text. Confirm Built-with entries as actual tags; WebMCP was only unconfirmed input. The local kit's `fields` directory contains the prepared copy/paste fields.
