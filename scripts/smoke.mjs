@@ -10,6 +10,7 @@ import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import './animation-regression.mjs';
 
 // Use a free port so an older developer preview can never mask this build.
 const reservation = createServer();
@@ -263,6 +264,9 @@ try {
   const d4 = await describe();
   const back = j(await run('query_scene', { id_or_name: addId }));
   check('undo restores deleted object', d4.object_count === d1.object_count && back.ok === true);
+  check('undo advances the observation version', d4.scene_version > d3.scene_version);
+  const staleUndo = j(await run('transform_object', { targets: addId, op: 'move', x: 12, expected_scene_version: d3.scene_version }));
+  check('undo never revalidates a stale plan', !staleUndo.ok && staleUndo.code === 'stale_scene');
 
   // export/import round-trips the same scene
   const exp = j(await run('export_scene', {}));
@@ -280,6 +284,26 @@ try {
   const exportedAgain = j(await run('export_scene', {}));
   const decodeScene = url => JSON.parse(Buffer.from(url.split('#scene=')[1], 'base64url').toString('utf8'));
   check('scene links preserve every material and lantern light', JSON.stringify(decodeScene(shareUrl).objects) === JSON.stringify(decodeScene(exportedAgain.result.url).objects));
+  await run('set_material', { targets: addId, roughness: 0.42 });
+  const beforeOldImport = await describe();
+  await run('import_scene', { url: shareUrl });
+  check('older imports never rewind the local version', (await describe()).scene_version === beforeOldImport.scene_version + 1);
+
+  await run('set_lighting', { preset: 'moonlit', azimuth: 137 });
+  const aimed = decodeScene(j(await run('export_scene', {})).result.url);
+  await run('set_lighting', { preset: 'studio', azimuth: -32 });
+  await run('undo', {});
+  const restoredLight = decodeScene(j(await run('export_scene', {})).result.url);
+  check('undo preserves the authored light direction', Math.abs(restoredLight.lighting.azimuth - aimed.lighting.azimuth) < 0.001);
+
+  const lampId = aimed.objects.find(object => object.type === 'lamp').id;
+  const beforeLamp = decodeScene(j(await run('export_scene', {})).result.url).objects.find(object => object.id === lampId);
+  await run('set_material', { targets: lampId, roughness: 0.7 });
+  const roughLamp = decodeScene(j(await run('export_scene', {})).result.url).objects.find(object => object.id === lampId);
+  check('surface edits preserve lantern illumination', JSON.stringify(beforeLamp.lights) === JSON.stringify(roughLamp.lights));
+  await run('set_material', { targets: lampId, emissive: '#2299ff', emissive_intensity: 2 });
+  const blueLamp = decodeScene(j(await run('export_scene', {})).result.url).objects.find(object => object.id === lampId);
+  check('lantern illumination follows its emissive material', blueLamp.lights[0].color === '#2299ff' && Math.abs(blueLamp.lights[0].intensity - 3.5) < 0.001, JSON.stringify(blueLamp.lights));
 
   // invalid calls never mutate the scene
   const d5 = await describe();
@@ -288,6 +312,25 @@ try {
   const bad3 = j(await run('chess_move', { piece: 'obj_1', to: 'zz' }));
   const d6 = await describe();
   check('invalid calls fail without mutating', bad1.ok === false && bad2.ok === false && bad3.ok === false && d6.object_count === d5.object_count && d6.scene_version === d5.scene_version);
+  const malformed = [];
+  for (const [tool, args] of [
+    ['add_object', { type: 'box', scale: NaN }],
+    ['add_object', { type: 'box', name: 'x'.repeat(121) }],
+    ['add_object', { type: 'box', position: null }],
+    ['set_material', { targets: addId, roughness: '0.5' }],
+    ['set_music', { on: 'false' }],
+    ['transform_object', { targets: addId, op: 'scale' }],
+    ['transform_object', { targets: addId, op: 'move', uniform: 2 }],
+  ]) malformed.push(j(await run(tool, args)));
+  const afterMalformed = await describe();
+  check('malformed typed input is rejected before mutation', malformed.every(result => !result.ok) && afterMalformed.scene_version === d6.scene_version && afterMalformed.object_count === d6.object_count, JSON.stringify(malformed));
+
+  await run('transform_object', { targets: addId, op: 'move', mode: 'relative', x: 10000, y: 10000, z: -10000 });
+  await run('scatter', { type: 'rock', count: 3, area: { center_x: 58, center_z: 58, width: 110, depth: 110 }, seed: 12 });
+  const bounded = j(await run('export_scene', {}));
+  const bounds = decodeScene(bounded.result.url).objects;
+  const boundedImport = j(await run('import_scene', { url: bounded.result.url }));
+  check('edge placement stays inside the portable scene bounds', boundedImport.ok && bounds.every(object => object.p.every(n => Math.abs(n) <= 60)));
 
   // batch reverts as one logical unit
   const pre = await describe();
@@ -300,6 +343,62 @@ try {
   await run('undo', {});
   const post = await describe();
   check('single undo rolls back whole batch', post.object_count === pre.object_count && post.lighting?.preset === pre.lighting?.preset);
+
+  const rollbackBefore = decodeScene(j(await run('export_scene', {})).result.url);
+  const rolledBack = j(await run('batch', { ops: [
+    { tool: 'add_object', args: { type: 'rock', name: 'rollback probe' } },
+    { tool: 'transform_object', args: { targets: 'missing rollback target', op: 'move', x: 2 } },
+    { tool: 'add_object', args: { type: 'box', name: 'must never execute' } },
+  ] }));
+  const rollbackAfter = decodeScene(j(await run('export_scene', {})).result.url);
+  check('failed batch rolls back completely and reports the failed step', !rolledBack.ok && rolledBack.code === 'batch_rolled_back'
+    && rolledBack.result.transaction_status === 'rolled_back' && rolledBack.result.results.length === 2
+    && JSON.stringify(rollbackBefore.objects) === JSON.stringify(rollbackAfter.objects), JSON.stringify(rolledBack));
+
+  const concurrentBefore = await describe();
+  const overlapping = await badPage2.evaluate(async () => {
+    const results = await Promise.all([
+      window.__tool('add_object', { type: 'box', name: 'concurrent first' }),
+      window.__tool('add_object', { type: 'rock', name: 'concurrent rejected' }),
+      window.__tool('describe_scene', {}),
+    ]);
+    return results.map(JSON.parse);
+  });
+  check('overlapping edits are rejected while scene observation stays available', overlapping[0].ok && !overlapping[1].ok && overlapping[1].code === 'scene_busy'
+    && overlapping[2].ok && (await describe()).object_count === concurrentBefore.object_count + 1, JSON.stringify(overlapping));
+  const transitionalRead = await badPage2.evaluate(async id => {
+    const moving = window.__tool('transform_object', { targets: id, op: 'move', x: 10 });
+    const observed = JSON.parse(await window.__tool('describe_scene', {}));
+    await moving;
+    return JSON.parse(await window.__tool('transform_object', { targets: id, op: 'move', x: 11, expected_scene_version: observed.result.scene_version }));
+  }, addId);
+  check('observations during an animation become stale when it settles', !transitionalRead.ok && transitionalRead.code === 'stale_scene', JSON.stringify(transitionalRead));
+
+  const revealing = j(await run('add_object', { type: 'box', name: 'slow reveal export', scale: 0.1, animate: false, delay_ms: 2000 }));
+  const revealUrl = j(await run('export_scene', {})).result.url;
+  const revealImport = j(await run('import_scene', { url: revealUrl }));
+  check('share links captured during a reveal remain importable', revealing.ok && revealImport.ok, JSON.stringify(revealImport));
+
+  const elevatedBoard = j(await run('add_object', { type: 'chessboard', name: 'elevated board', scale: 2 }));
+  await run('transform_object', { targets: elevatedBoard.result.id, op: 'move', y: 3 });
+  const elevatedPiece = j(await run('add_object', { type: 'chess_piece', name: 'elevated pawn' }));
+  const elevatedMove = j(await run('chess_move', { piece: elevatedPiece.result.id, board: elevatedBoard.result.id, to: 'e4' }));
+  check('chess pieces land on elevated scaled boards', elevatedMove.ok && Math.abs(elevatedMove.result.position[1] - 3.16) < 0.01, JSON.stringify(elevatedMove));
+
+  const takeoverObject = j(await run('add_object', { type: 'box', name: 'human takeover probe' })).result.id;
+  await run('frame_camera', { target: takeoverObject, select: true });
+  const beforeTakeover = await describe();
+  await badPage2.evaluate(id => {
+    window.__takeoverBatch = window.__tool('batch', { ops: [
+      { tool: 'transform_object', args: { targets: id, op: 'move', x: 1 } },
+      { tool: 'add_object', args: { type: 'box', name: 'must not replace human work' } },
+    ] });
+  }, takeoverObject);
+  await badPage2.keyboard.press('Delete');
+  const takeoverResult = await badPage2.evaluate(async () => JSON.parse(await window.__takeoverBatch));
+  check('human deletion interrupts a batch without restoring over the human', takeoverResult.code === 'batch_interrupted'
+    && takeoverResult.result.results[0].ok && takeoverResult.result.results[0].applied === false
+    && (await describe()).object_count === beforeTakeover.object_count - 1, JSON.stringify(takeoverResult));
 
   // optimistic concurrency: stale expected version is rejected, scene untouched
   const cur = await describe();
@@ -398,6 +497,51 @@ try {
   await badPage2.waitForTimeout(300);
   const cancelledLofi = await describe();
   check('undo during construction prevents later object spawns', toCancel.ok && cancelledLofi.object_count === beforeLofi.object_count && cancelledLofi.lofi.status === 'stopped', JSON.stringify({ expected: beforeLofi.object_count, actual: cancelledLofi.object_count, lofi: cancelledLofi.lofi }));
+
+  const grove = j(await run('compose_lofi_scene', { scene: 'lantern_grove', cycle: true, hold_seconds: 120, build_seconds: 12, music: false }));
+  check('agents can choose an authored world and enable its sequence', grove.ok && grove.result.scene === 'lantern_grove'
+    && grove.result.sequence.enabled && grove.result.sequence.length === 3 && grove.result.sequence.hold_seconds === 120);
+  await badPage2.waitForFunction(() => document.getElementById('lofi-progress').value === 100, null, { timeout: process.env.CI ? 120_000 : 30_000, polling: 1000 });
+  const completedGrove = await describe();
+  check('lantern grove builds its distinct terrace and forest', completedGrove.counts.camp === 1 && completedGrove.counts.tree === 24
+    && !completedGrove.counts.cabin && !completedGrove.counts.pond && completedGrove.lofi.status === 'playing', JSON.stringify(completedGrove.counts));
+  await run('control_lofi', { action: 'next' });
+  await run('control_lofi', { action: 'pause' });
+  const pausedTransition = await describe();
+  await badPage2.waitForTimeout(350);
+  const stillTransition = await describe();
+  check('pausing freezes an in-progress scene transition', pausedTransition.lofi.status === 'paused'
+    && stillTransition.lofi.sequence.transition_opacity === pausedTransition.lofi.sequence.transition_opacity
+    && stillTransition.object_count === pausedTransition.object_count);
+  await run('control_lofi', { action: 'stop' });
+  await badPage2.waitForTimeout(1800);
+  const cancelledTransition = await describe();
+  check('stopping cancels a queued world replacement', cancelledTransition.lofi.status === 'stopped'
+    && cancelledTransition.lofi.scene === 'lantern_grove' && cancelledTransition.object_count === completedGrove.object_count);
+  await run('undo', {});
+  check('one undo restores the original scene after sequence controls', (await describe()).object_count === beforeLofi.object_count);
+
+  await run('compose_lofi_scene', { scene: 'island_hideaway', build_seconds: 12, music: false });
+  const nextIsland = j(await run('control_lofi', { action: 'next' }));
+  check('next returns immediately with an observable transition', nextIsland.ok && nextIsland.result.lofi.status === 'transitioning');
+  // This Playwright poll treats an async predicate's Promise as truthy. Await
+  // tool observations in Node so Stop cannot race ahead of the actual change.
+  const transitionDeadline = Date.now() + (process.env.CI ? 60_000 : 20_000);
+  let nextArrival = await describe();
+  const hasArrived = () => nextArrival.lofi.scene === 'lakeside_cabin' && nextArrival.lofi.status === 'building' && nextArrival.object_count > 0;
+  while (!hasArrived() && Date.now() < transitionDeadline) {
+    await badPage2.waitForTimeout(250);
+    nextArrival = await describe();
+  }
+  const nextStopResult = j(await run('control_lofi', { action: 'stop' }));
+  const nextStopped = await describe();
+  await badPage2.waitForTimeout(250);
+  const nextFrozen = await describe();
+  check('next builds the following world and stop freezes it', hasArrived() && nextStopResult.ok && nextStopped.lofi.scene === 'lakeside_cabin'
+    && nextFrozen.lofi.status === 'stopped' && nextFrozen.object_count === nextStopped.object_count,
+    JSON.stringify({ arrived: nextArrival.lofi, stopped: nextStopped.lofi, countAtStop: nextStopped.object_count, countAfterStop: nextFrozen.object_count }));
+  await run('undo', {});
+  check('world transitions do not add extra undo captures', (await describe()).object_count === beforeLofi.object_count);
 
   await badPage2.setViewportSize({ width: 390, height: 844 });
   await badPage2.goto(BASE);

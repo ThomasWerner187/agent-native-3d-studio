@@ -25,6 +25,7 @@ export class Interaction {
   private dragging = false;
   private dragGlowDone = false;
   private dragOffset = new THREE.Vector3();
+  private activePointer: number | null = null;
 
   constructor(
     private studio: Studio,
@@ -36,6 +37,7 @@ export class Interaction {
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
     canvas.addEventListener('pointerup', (e) => this.onUp(e));
     canvas.addEventListener('pointercancel', (e) => this.onUp(e));
+    canvas.addEventListener('lostpointercapture', (e) => this.onUp(e));
     window.addEventListener('keydown', (e) => this.onKey(e));
     studio.onFrame(() => {
       if (this.selected && !store.get(this.selected)) this.select(null);
@@ -70,7 +72,15 @@ export class Interaction {
   }
 
   private onDown(ev: PointerEvent): void {
+    if (!ev.isPrimary) {
+      // A second finger hands the gesture back to camera controls. Never let
+      // its coordinates move an object grabbed by the first pointer.
+      this.finishDrag();
+      return;
+    }
     if (ev.button !== 0) return;
+    this.activePointer = ev.pointerId;
+    (ev.currentTarget as HTMLCanvasElement).focus({ preventScroll: true });
     this.downAt = { x: ev.clientX, y: ev.clientY };
     this.downHitId = this.pick(ev);
     this.dragging = false;
@@ -86,7 +96,7 @@ export class Interaction {
   }
 
   private onMove(ev: PointerEvent): void {
-    if (!this.downAt) return;
+    if (!this.downAt || ev.pointerId !== this.activePointer) return;
     const dist = Math.hypot(ev.clientX - this.downAt.x, ev.clientY - this.downAt.y);
     if (!this.dragging && dist > 5 && this.downHitId) {
       this.dragging = true;
@@ -126,6 +136,7 @@ export class Interaction {
   }
 
   private onUp(ev: PointerEvent): void {
+    if (ev.pointerId !== this.activePointer) return;
     if (this.downAt) {
       this.studio.controls.enabled = true;
       if (this.dragging) {
@@ -141,14 +152,32 @@ export class Interaction {
         else this.select(null);
       }
     }
+    this.activePointer = null;
     this.dragGlowDone = false;
     this.downAt = null;
     this.downHitId = null;
   }
 
+  private finishDrag(): void {
+    if (this.dragging) {
+      this.store.bump();
+      const entry = this.downHitId ? this.store.get(this.downHitId) : undefined;
+      if (entry) logToolCall('human_move', { name: entry.name }, JSON.stringify({
+        ok: true, actor: 'human', result: { id: entry.id, position: entry.group.position.toArray(), preserved_by_layout: true },
+      }));
+    }
+    this.studio.controls.enabled = true;
+    this.dragging = false;
+    this.dragGlowDone = false;
+    this.downAt = null;
+    this.downHitId = null;
+    this.activePointer = null;
+  }
+
   private onKey(ev: KeyboardEvent): void {
     const target = ev.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if ((ev.key === 'Delete' || ev.key === 'Backspace') && this.selected) {
       ev.preventDefault();
       this.deleteSelected();

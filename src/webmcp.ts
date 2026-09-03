@@ -59,9 +59,12 @@ const CDP_RECIPE = (name: string) =>
 export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'compose_lofi_scene',
-    description: 'Create a complete calming cabin-by-the-water scene, replacing the current scene with an undo point. Trees, lanterns, lighting and music arrive gradually; the camera then loops forever. Returns immediately with a session_id. Read describe_scene for progress; control_lofi to pause/stop. Audio may need a click.',
+    description: 'Compose one of three authored cozy worlds with one undo point. Optional cycle visits all three after each hold, with a dark dip between worlds. Returns immediately. Read describe_scene for progress and sequence; control_lofi pauses/resumes/stops/advances. Human takeover pauses the full sequence. Audio may need a click.',
     inputSchema: { type: 'object', properties: {
       ...EXPECTED_VERSION,
+      scene: { type: 'string', enum: ['lakeside_cabin', 'lantern_grove', 'island_hideaway'], description: 'Authored starting world. Default lakeside_cabin.' },
+      cycle: { type: 'boolean', description: 'Visit all three worlds repeatedly with one initial undo point. Default false.' },
+      hold_seconds: { type: 'number', minimum: 120, maximum: 1800, description: 'Enjoy each completed world before cycling. Default 180 seconds.' },
       mood: { type: 'string', enum: ['moonlit', 'golden_hour'], description: 'Cool moonlight or warm sunset. Default moonlit.' },
       build_seconds: { type: 'number', minimum: 12, maximum: 90, description: 'Slow reveal duration. Default 32 seconds.' },
       seed: { type: 'integer', description: 'Repeatable forest arrangement. Default 42.' },
@@ -73,11 +76,13 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: 'control_lofi',
-    description: 'Pause, resume or stop the ongoing lofi session. Pause freezes construction and camera, and pauses music. Stop keeps constructed objects for editing. undo restores the scene before composition. No background scene writes after stopping.',
-    inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'stop'] } }, required: ['action'] },
+    description: 'Control the full lofi sequence: pause freezes build, camera and scene changes; resume continues it. next intentionally replaces the world with the next authored scene. stop cancels future changes and keeps current objects. undo restores the scene before the initial composition, including across cycles.',
+    inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'stop', 'next'] } }, required: ['action'] },
+    annotations: { destructiveHint: true },
     run: (ctx, args) => {
-      if (!['pause', 'resume', 'stop'].includes(String(args.action))) return fail('action must be pause, resume or stop.');
+      if (!['pause', 'resume', 'stop', 'next'].includes(String(args.action))) return fail('action must be pause, resume, stop or next.');
       if (args.action === 'resume' && !ctx.lofi.resume()) return fail('No paused lofi session to resume.');
+      if (args.action === 'next' && !ctx.lofi.next()) return fail('Start a lofi session first, or wait for the current scene transition to finish.');
       if (args.action === 'pause') ctx.lofi.pause();
       if (args.action === 'stop') ctx.lofi.stop();
       return ok(ctx, { lofi: ctx.lofi.state });
@@ -219,7 +224,7 @@ export const TOOL_DEFS: ToolDef[] = [
           },
         },
         rotation_y: { type: 'number', description: 'Rotation around the vertical axis, in degrees.' },
-        name: { type: 'string', description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
+        name: { type: 'string', maxLength: 120, description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
         animate: { type: 'boolean', description: 'false = bulk placement: the object pops in staggered, but the call returns immediately instead of waiting for the pop (default true).' },
         delay_ms: { type: 'number', minimum: 0, maximum: 2000, description: 'animate:false only: delay the pop for authored reveals, in milliseconds.' },
       },
@@ -510,9 +515,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'batch',
     description:
-      'Run up to 200 tool calls in ONE turn: ops is an array of {tool, args}. One snapshot, one result with every ' +
-      'operation outcome, undo rolls the whole batch back. Use for complete setups (e.g. furniture + light + camera) ' +
-      'instead of many separate calls. Not nestable; batch/undo/snapshot are rejected inside.',
+      'Run up to 200 scene edits/readouts in one turn: ops is an array of {tool,args}. One undo point. Stops on failure and rolls back; human takeover preserves partial work. Put expected_scene_version on the batch. Run UI, music, share links, background sessions and layout journals separately.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -628,7 +631,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout']);
+const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout', 'set_ui', 'set_music', 'export_scene']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -641,7 +644,10 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
   // undo a no-op.
 
   const results: Record<string, unknown>[] = [];
+  const humanRevision = ctx.store.humanRevision;
+  const versionBefore = ctx.store.version;
   let failed = 0;
+  let interrupted = false;
   for (let i = 0; i < ops.length; i++) {
     const op = ops[i] as { tool?: unknown; args?: unknown };
     const name = String(op?.tool ?? '');
@@ -649,15 +655,20 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
     if (!def) {
       failed++;
       results.push({ index: i, ok: false, code: 'unknown_tool', error: `Unknown tool "${name}".` });
-      continue;
+      break;
     }
     if (BATCH_DISALLOWED.has(name)) {
       failed++;
       results.push({ index: i, ok: false, code: 'bad_request', error: `"${name}" cannot run inside batch.` });
-      continue;
+      break;
     }
     try {
-      const res = await def.run(ctx, (op?.args ?? {}) as Record<string, unknown>);
+      const input = (op?.args ?? {}) as Record<string, unknown>;
+      const error = validateArguments(input, def.inputSchema, `ops[${i}].args`);
+      const expected = input.expected_scene_version;
+      const res = error ? fail(error, 'bad_request')
+        : expected != null && expected !== ctx.store.version ? fail('Nested expected_scene_version is stale. Put the observed version on the batch itself.', 'stale_scene')
+        : await def.run(ctx, input);
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(res) as Record<string, unknown>;
@@ -666,31 +677,83 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
       }
       if (parsed.ok === false) failed++;
       results.push({ index: i, tool: name, ...parsed });
+      interrupted = parsed.applied === false || ctx.store.humanRevision !== humanRevision;
+      if (failed || interrupted) break;
     } catch (e) {
       failed++;
       results.push({ index: i, tool: name, ok: false, code: 'internal_error', error: e instanceof Error ? e.message : String(e) });
+      break;
     }
   }
 
   // atomic: any failed operation rolls the whole batch back (one snapshot)
-  const status = failed > 0 ? 'rolled_back' : 'applied';
-  if (failed > 0) ctx.snapshots.restoreLast();
+  // Human takeover must never be overwritten by a whole-scene rollback.
+  interrupted ||= ctx.store.humanRevision !== humanRevision;
+  const status = interrupted ? 'interrupted' : failed > 0 ? 'rolled_back' : 'applied';
+  if (status === 'rolled_back') {
+    const snapshot = transactionSnapshots.get(ctx.store);
+    if (snapshot && ctx.store.version !== versionBefore) ctx.snapshots.restoreSnapshot(snapshot);
+  }
   const payload: Record<string, unknown> = {
     operations: ops.length,
     failed,
+    operations_attempted: results.length,
     transaction_status: status,
     results,
-    note: status === 'rolled_back'
+    note: interrupted
+      ? 'The batch stopped when an operation was interrupted or a human edited the scene. Live partial changes and human work are preserved; inspect the scene before continuing.'
+      : status === 'rolled_back'
       ? `${failed} of ${ops.length} operations failed — the batch was rolled back atomically; the scene is unchanged.`
       : `All ${ops.length} operations applied. undo rolls the whole batch back.`,
   };
-  if (failed > 0) {
-    return JSON.stringify({ ok: false, code: 'batch_rolled_back', transaction_status: status, ...payload });
+  if (failed > 0 || interrupted) {
+    return JSON.stringify({ ok: false, applied: false, code: interrupted ? 'batch_interrupted' : 'batch_rolled_back', error: payload.note, ...payload });
   }
   return ok(ctx, payload);
 }
 
 const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
+const activeTransactions = new WeakMap<ToolContext['store'], string>();
+const transactionSnapshots = new WeakMap<ToolContext['store'], string>();
+
+/** Enforce the same small schema vocabulary advertised to native hosts.
+ * The development harness and nested batch calls must obey it as well. */
+function validateArguments(value: unknown, schema: Record<string, unknown>, path = 'args'): string | null {
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  const isRecord = value !== null && typeof value === 'object' && !Array.isArray(value);
+  const matches = (type: unknown) => type === undefined
+    || (type === 'object' && isRecord)
+    || (type === 'array' && Array.isArray(value))
+    || (type === 'number' && typeof value === 'number' && Number.isFinite(value))
+    || (type === 'integer' && typeof value === 'number' && Number.isSafeInteger(value))
+    || (type === 'string' && typeof value === 'string')
+    || (type === 'boolean' && typeof value === 'boolean');
+  if (!types.some(matches)) return `${path} must be ${types.join(' or ')}.`;
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return `${path} must be one of: ${schema.enum.join(', ')}.`;
+  if (typeof value === 'number') {
+    if (typeof schema.minimum === 'number' && value < schema.minimum) return `${path} must be at least ${schema.minimum}.`;
+    if (typeof schema.maximum === 'number' && value > schema.maximum) return `${path} must be at most ${schema.maximum}.`;
+  }
+  if (typeof value === 'string' && typeof schema.maxLength === 'number' && value.length > schema.maxLength) return `${path} must be at most ${schema.maxLength} characters.`;
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === 'number' && value.length < schema.minItems) return `${path} needs at least ${schema.minItems} items.`;
+    if (value.length > (typeof schema.maxItems === 'number' ? schema.maxItems : 600)) return `${path} contains too many items.`;
+    if (schema.items) for (let i = 0; i < value.length; i++) {
+      const error = validateArguments(value[i], schema.items as Record<string, unknown>, `${path}[${i}]`);
+      if (error) return error;
+    }
+  }
+  if (isRecord) {
+    const record = value as Record<string, unknown>;
+    for (const key of (schema.required ?? []) as string[]) if (record[key] === undefined) return `${path}.${key} is required.`;
+    for (const [key, child] of Object.entries((schema.properties ?? {}) as Record<string, Record<string, unknown>>)) {
+      if (record[key] === undefined) continue;
+      const error = validateArguments(record[key], child, `${path}.${key}`);
+      if (error) return error;
+    }
+  }
+  return null;
+}
 
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
 
@@ -706,13 +769,24 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
   const isMutating = MUTATING.has(def.name);
-  if (ctx.layout.busy && (isMutating || def.name === 'undo')) {
+  const nextLofiScene = def.name === 'control_lofi' && args?.action === 'next';
+  const transaction = isMutating || def.name === 'undo' || def.name === 'snapshot' || nextLofiScene;
+  const argumentError = validateArguments(args, def.inputSchema);
+  const active = transaction && activeTransactions.get(ctx.store);
+  if (argumentError || active) {
+    const result = JSON.stringify({ ok: false, code: argumentError ? 'bad_request' : 'scene_busy',
+      operation_id: fallbackOperationId, actor, applied: false, scene_version_before: versionBefore,
+      scene_version_after: versionBefore, duration_ms: 0,
+      error: argumentError ?? `The ${active} operation is still settling. Re-observe the scene and retry when it completes.` });
+    log(def.name, args, result); return result;
+  }
+  if (ctx.layout.busy && (isMutating || def.name === 'undo' || nextLofiScene)) {
     const result = JSON.stringify({ ok: false, operation_id: fallbackOperationId, scene_version_before: versionBefore, scene_version_after: ctx.store.version, duration_ms: 0, code: 'layout_busy', actor, applied: false, error: 'A layout is still running. Read the scene after it settles and retry.' });
     log(def.name, args, result);
     return result;
   }
 
-  if (ctx.lofi.building && isMutating) {
+  if (ctx.lofi.building && isMutating && def.name !== 'compose_lofi_scene') {
     const result = JSON.stringify({ ok: false, code: 'lofi_busy', operation_id: fallbackOperationId, actor, applied: false,
       scene_version_before: versionBefore, scene_version_after: versionBefore, duration_ms: 0,
       error: 'Lofi construction is active. Read describe_scene, or control_lofi stop before editing. undo restores the original scene.' });
@@ -722,7 +796,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   // optimistic concurrency: reject stale plans before touching the scene
   const expected = args?.expected_scene_version;
   if (isMutating && expected != null) {
-    const exp = Number(expected);
+    const exp = expected;
     const failure = (code: string, error: string, extra: Record<string, unknown> = {}) => JSON.stringify({
       ok: false,
       code,
@@ -735,7 +809,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
       error,
       ...extra,
     });
-    if (!Number.isInteger(exp) || exp < 0) {
+    if (typeof exp !== 'number' || !Number.isSafeInteger(exp) || exp < 0) {
       const result = failure('bad_request', 'expected_scene_version must be a non-negative integer.');
       log(def.name, args ?? {}, result);
       return result;
@@ -770,10 +844,12 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     log(def.name, args ?? {}, result);
     return result;
   }
-  const onAbort = () => cancelAllToolTweens();
+  const onAbort = () => { if (transaction) cancelAllToolTweens(); };
   signal?.addEventListener('abort', onAbort, { once: true });
 
   let result: string;
+  if (transaction) activeTransactions.set(ctx.store, def.name);
+  if (snapId) transactionSnapshots.set(ctx.store, snapId);
   try {
     result = await def.run(ctx, args ?? {});
   } catch (e) {
@@ -781,6 +857,8 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   } finally {
     signal?.removeEventListener('abort', onAbort);
     ctx.store.syncMatrices();
+    if (transaction) activeTransactions.delete(ctx.store);
+    if (snapId) transactionSnapshots.delete(ctx.store);
   }
 
   // uniform operation envelope: every invocation reports the same metadata
@@ -795,7 +873,9 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     // the run finished, but cancellation arrived mid-flight: report honestly
     data = { ...data, applied: false, cancelled: true };
   }
-  if (!ok && snapId) ctx.snapshots.discard(snapId); // failed calls leave no undo noise
+  // A failed call with partial effects must remain reversible. Pure validation
+  // failures and an explicitly rolled-back batch leave no undo noise.
+  if (!ok && snapId && (ctx.store.version === versionBefore || data.transaction_status === 'rolled_back')) ctx.snapshots.discard(snapId);
 
   const envelope: Record<string, unknown> = {
     ok,
@@ -813,6 +893,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   } else {
     envelope.code = data.code ?? 'internal_error';
     envelope.error = data.error ?? 'operation failed';
+    envelope.result = data;
   }
   result = JSON.stringify(envelope);
   log(def.name, args ?? {}, result);

@@ -6,29 +6,37 @@
   <title>Agent-Native 3D Scene Studio</title>
   <meta name="description" content="Shape a cinematic forest together. Your hands and your browser agent, on one live 3D canvas through WebMCP." />
   <meta name="theme-color" content="#09151b" />
+  <meta property="og:title" content="Agent-Native 3D Scene Studio" />
+  <meta property="og:description" content="Build a little world together. A living 3D canvas for you and your WebMCP browser agent." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://agent-native-3d-studio.netlify.app/social-preview.jpg" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23dcab66' d='M20 3 36 12v16L20 37 4 28V12z'/%3E%3Cpath fill='none' stroke='%230d2228' stroke-width='2' d='m5 12 15 9 15-9M20 21v15'/%3E%3C/svg%3E" />
 </head>
 <body>
 <div id="app">
-  <canvas id="viewport" aria-label="Interactive 3D forest. Drag to orbit; drag an object to move it."></canvas>
+  <canvas id="viewport" tabindex="0" aria-label="Interactive 3D forest. Drag empty space to orbit; drag an object to move it. Escape clears selection. H toggles controls."></canvas>
   <header class="hud hud-top">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">◇</span><div><div class="brand-title">Scene Studio</div><div class="brand-sub">Agent-native · WebMCP</div></div></div>
+    <div class="brand"><span class="brand-mark" data-icon="cube" aria-hidden="true"></span><div><div class="brand-title">Scene Studio</div><div class="brand-sub">Agent-native · WebMCP</div></div></div>
     <div class="top-actions">
       <div id="webmcp-status" class="status-chip status-checking"><span class="status-dot"></span><span class="status-text">Connecting tools…</span></div>
-      <button id="scene-share" class="icon-btn" aria-label="Copy scene share link" title="Copy scene share link">↗</button>
-      <button id="music-toggle" class="icon-btn" aria-label="Toggle lofi music" title="Toggle lofi music">♫</button>
+      <button id="scene-share" class="icon-btn" data-icon="share" aria-label="Copy scene share link" title="Copy scene share link"></button>
+      <button id="music-toggle" class="icon-btn" data-icon="music" aria-label="Toggle lofi music" aria-pressed="false" title="Toggle lofi music"></button>
       <button id="quality-toggle" class="quality-btn" aria-pressed="true">Cinematic</button>
     </div>
   </header>
   <section class="hud scene-intro" aria-label="About this scene">
-    <div class="eyebrow"><span></span> SMALL WORLDS, SLOW MOMENTS</div>
     <h1>A little world.<br><em>To slow down in.</em></h1>
     <p>A cabin. A quiet lake. Nowhere to be.<br>Let your agent bring it all to life.</p>
-    <div class="lofi-entry"><label class="sr-only" for="lofi-mood">Lofi atmosphere</label><select id="lofi-mood"><option value="moonlit">Moonlit retreat</option><option value="golden_hour">Golden evening</option></select><button id="lofi-create">✦ Create a lofi scene <span>↗</span></button><small>A slow reveal · endless camera · lofi music</small></div>
+    <div class="lofi-entry">
+      <div class="world-options"><label class="sr-only" for="lofi-scene">Starting world</label><select id="lofi-scene"><option value="lakeside_cabin">Lakeside cabin</option><option value="lantern_grove">Lantern grove</option><option value="island_hideaway">Island hideaway</option></select><label class="sr-only" for="lofi-mood">Lofi atmosphere</label><select id="lofi-mood"><option value="moonlit">Moonlight</option><option value="golden_hour">Golden evening</option></select></div>
+      <button id="lofi-create">Create a lofi scene <span data-icon="share" aria-hidden="true"></span></button>
+      <label class="wander-option"><input id="lofi-cycle" type="checkbox" checked> Wander to a new world every 3 minutes</label>
+      <small>Watch it grow. Stay as long as you like.</small>
+    </div>
     <div class="actor-legend"><span class="human-dot"></span> You <span class="agent-dot"></span> Your agent</div>
   </section>
-  <aside id="tool-log" class="hud panel">
-    <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool log">−</button></div>
+  <aside id="tool-log" class="hud panel" aria-label="Tool activity">
+    <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool activity" aria-expanded="true" aria-controls="tool-log-entries agent-bridge"></button></div>
     <div id="tool-log-entries" class="panel-body"><div class="log-empty">Your canvas is ready.<br>Move the camp, then ask your agent to build around it.</div></div>
     <details id="agent-bridge" class="agent-bridge"><summary>Connect your agent</summary>
       <p>Open this page with a WebMCP-aware browser agent. Ask it to read the scene and rearrange the surroundings around your camp.</p>
@@ -41,24 +49,27 @@ await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
   </aside>
   <div id="selection-card" class="hud selection-card" hidden><span class="human-dot"></span><span id="selection-name">Camp selected</span><span id="selection-position"></span></div>
   <section id="prompt-card" class="hud command-bar">
-    <div class="command-main"><span class="prompt-star" aria-hidden="true">✳</span><button class="prompt" data-copy="Create a calming lofi scene with a moonlit cabin, water, warm lanterns, slowly growing trees, an infinite cinematic camera and soft music. Use compose_lofi_scene, then describe_scene to check progress."><span>Create a calming lofi scene. Let it unfold, slowly.</span><span class="copy-hint">Copy for agent ↗</span></button><button id="prompt-card-close" class="mini-btn" aria-label="Dismiss prompts">×</button></div>
+    <div class="command-main"><span class="prompt-star" data-icon="spark" aria-hidden="true"></span><button class="prompt" data-copy="Create a calming lofi scene with a moonlit cabin, water, warm lanterns, slowly growing trees, an infinite cinematic camera and soft music. Use compose_lofi_scene, then describe_scene to check progress."><span>Create a calming lofi scene. Let it unfold, slowly.</span><span class="copy-hint">Copy for agent</span></button><button id="prompt-card-close" class="mini-btn" data-icon="close" aria-label="Dismiss prompts"></button></div>
     <div class="command-caption">Copy this prompt to your WebMCP browser agent. Or try Create a lofi scene locally.</div>
   </section>
   <nav class="hud scene-controls" aria-label="Scene controls">
-    <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Blue hour</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-orbit">↻ Orbit</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
+    <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Moonlight</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-orbit" aria-pressed="false">Orbit</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
     <div class="control-group"><button id="layout-try" title="Run the layout tool locally; no AI model">Try layout</button><button id="layout-undo" disabled>Undo layout</button><button id="layout-redo" disabled>Redo</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
   </nav>
   <section id="lofi-player" class="hud lofi-player" aria-label="Lofi session" hidden>
-    <div class="lofi-player-head"><div><div id="lofi-progress-label">GROWING YOUR WORLD</div><h2 id="lofi-phase" aria-live="polite">A quiet place by the water</h2><p id="lofi-shot">Settling into the scene</p></div><button id="lofi-view" title="Hide interface; H to return">Clean view ↗</button></div>
+    <div class="lofi-player-head"><div><div id="lofi-progress-label">Growing your world</div><h2 id="lofi-phase" aria-live="polite">A quiet place by the water</h2><p id="lofi-shot">Settling into the scene</p></div><button id="lofi-view" title="Hide interface; H to return">Clean view</button></div>
     <progress id="lofi-progress" max="100" value="0" aria-label="Scene construction progress"></progress>
-    <div class="lofi-player-controls"><button id="lofi-pause">Ⅱ Pause</button><label class="sr-only" for="lofi-motion">Camera motion</label><select id="lofi-motion"><option value="cinematic">Cinematic drift</option><option value="orbit">Endless orbit</option></select><button id="lofi-sound">♫ Enable sound</button><label class="sr-only" for="lofi-volume">Music volume</label><input id="lofi-volume" type="range" min="0" max="70" value="38" aria-label="Music volume"><button id="lofi-proof" aria-pressed="false">Tool activity</button><button id="lofi-exit" aria-label="Stop lofi session">×</button></div>
-    <div class="lofi-player-foot"><span id="lofi-track">Quiet for now</span><span>LIVE 3D · GENERATIVE ENVIRONMENT</span></div>
+    <div class="lofi-player-controls"><button id="lofi-pause">Pause</button><button id="lofi-next">Next world</button><label class="sr-only" for="lofi-motion">Camera motion</label><select id="lofi-motion"><option value="cinematic">Cinematic drift</option><option value="orbit">Endless orbit</option></select><button id="lofi-sound" aria-pressed="false">Enable sound</button><label class="sr-only" for="lofi-volume">Music volume</label><input id="lofi-volume" type="range" min="0" max="100" value="38" aria-label="Music volume"><button id="lofi-proof" aria-pressed="false">Tool activity</button><button id="lofi-exit" data-icon="close" aria-label="Stop lofi session"></button></div>
+    <p id="lofi-sequence" class="sequence-note"></p>
+    <div class="lofi-player-foot"><span id="lofi-track">Quiet for now</span><span>Live 3D · Yours to change</span></div>
   </section>
-  <button id="return-controls" aria-label="Show controls">↙ Controls</button>
-  <button id="show-agent" class="hud show-btn">▷ Guided tour</button>
+  <button id="return-controls" aria-label="Show controls">Show controls</button>
+  <button id="show-agent" class="hud show-btn">Guided tour</button>
   <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true"><div id="show-cue-kicker"></div><div id="show-cue-title"></div><div id="show-cue-detail"></div></div>
   <div id="hint-bar" class="hud">DRAG TO ORBIT <span>·</span> SCROLL TO EXPLORE <span>·</span> H TO HIDE UI</div>
-  <div id="toast" class="toast" role="status"></div><div class="vignette"></div>
+  <div id="toast" class="toast" role="status"></div><div class="vignette"></div><div id="scene-transition" class="scene-transition" aria-hidden="true"></div>
+  <section id="startup-error" class="startup-error" role="alert" hidden><h1>This world needs WebGL.</h1><p>Your browser could not start its 3D renderer. Enable hardware acceleration or open this page in a current browser, then reload.</p><button id="retry-renderer">Reload scene</button></section>
+  <noscript><section class="startup-error"><h1>A little world needs JavaScript.</h1><p>Enable JavaScript to open the interactive studio.</p></section></noscript>
 </div>
     <script type="application/json" id="agent-manifest">
     {

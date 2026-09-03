@@ -252,7 +252,10 @@ function buildChessPiece(piece: string, mat: THREE.MeshStandardMaterial): THREE.
 }
 
 /** 8x8 checkerboard in warm cream/walnut, drawn once to a canvas. */
+let checkerTexture: THREE.CanvasTexture | null = null;
+
 function makeCheckerTexture(): THREE.CanvasTexture {
+  if (checkerTexture) return checkerTexture;
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const g = c.getContext('2d')!;
@@ -268,5 +271,6 @@ function makeCheckerTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  return tex;
+  checkerTexture = tex;
+  return checkerTexture;
 }

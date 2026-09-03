@@ -3,7 +3,7 @@
  * The tool log makes agent activity visible to humans — no DevTools needed.
  */
 
-export type LogKind = 'call' | 'info' | 'error';
+import { icon } from './icons';
 
 interface LogEntry {
   tool: string;
@@ -15,7 +15,6 @@ interface LogEntry {
 }
 
 const MAX_ENTRIES = 100;
-const entries: LogEntry[] = [];
 
 /** Visual effects the log can trigger (wired in main.ts): object glows. */
 export interface ActivityFx {
@@ -30,6 +29,9 @@ export function registerActivityFx(fx: ActivityFx): void {
 function activityLine(tool: string, args: Record<string, unknown>): string {
   const targets = typeof args.targets === 'string' ? args.targets : Array.isArray(args.targets) ? `${args.targets.length} objects` : 'objects';
   switch (tool) {
+    case 'compose_lofi_scene': return 'Started a lofi world';
+    case 'control_lofi': return args.action === 'pause' ? 'Paused the lofi session' : args.action === 'resume' ? 'Resumed the lofi session' : 'Stopped the session · kept the scene';
+    case 'set_camera_motion': return args.action === 'start' ? 'Started a continuous camera journey' : `${args.action === 'pause' ? 'Paused' : args.action === 'resume' ? 'Resumed' : 'Stopped'} the camera`;
     case 'human_move': return `Placed ${args.name ?? 'object'} · position preserved`;
     case 'arrange_scene': return 'Adapted the grove, path & lanterns';
     case 'undo_layout': return 'Undid layout · kept your edits';
@@ -54,7 +56,7 @@ function activityLine(tool: string, args: Record<string, unknown>): string {
     case 'export_scene': return 'Packaging the scene as a share link';
     case 'import_scene': return 'Restoring a shared scene';
     case 'batch': return `Running ${Array.isArray(args.ops) ? args.ops.length : '?'} steps as one`;
-    case 'reset': return '↺ Restoring the original scene';
+    case 'reset': return 'Restored the original scene';
     default: return `${tool}`;
   }
 }
@@ -153,8 +155,6 @@ function renderEntry(entry: LogEntry): HTMLElement {
 }
 
 export function pushLog(entry: LogEntry): void {
-  entries.push(entry);
-  if (entries.length > MAX_ENTRIES) entries.shift();
   const body = el('tool-log-entries');
   const empty = body.querySelector('.log-empty');
   if (empty) empty.remove();
@@ -200,11 +200,33 @@ export function setStatus(kind: 'live' | 'none' | 'checking', toolCount?: number
 }
 
 export function initChrome(onReset?: () => void): void {
+  document.querySelectorAll<HTMLElement>('[data-icon]').forEach(node => {
+    node.innerHTML = icon(node.dataset.icon ?? '');
+  });
+  // Opacity alone leaves invisible controls in the keyboard focus order.
+  const syncVisibility = () => {
+    const hidden = document.body.classList.contains('ui-hidden');
+    document.querySelectorAll<HTMLElement>('.hud').forEach(node => { node.inert = hidden; });
+    if (hidden && document.activeElement?.closest('.hud')) {
+      document.getElementById('return-controls')?.focus({ preventScroll: true });
+    }
+  };
+  new MutationObserver(syncVisibility).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  syncVisibility();
   // collapse toggle
   const panel = el('tool-log');
+  const toggle = el('tool-log-toggle');
+  const syncToggle = () => {
+    const collapsed = panel.classList.contains('collapsed');
+    toggle.innerHTML = icon(collapsed ? 'plus' : 'minus');
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Expand tool activity' : 'Collapse tool activity');
+  };
+  if (window.matchMedia('(max-width: 700px)').matches) panel.classList.add('collapsed');
+  syncToggle();
   el('tool-log-toggle').addEventListener('click', () => {
     panel.classList.toggle('collapsed');
-    el('tool-log-toggle').textContent = panel.classList.contains('collapsed') ? '+' : '–';
+    syncToggle();
   });
 
   // reset to boot state

@@ -65,7 +65,7 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
     }
     const t0 = performance.now();
     out.textContent = '…';
-    void dispatchTool(ctx, toolSel.value, args, log).then((result) => {
+    void dispatchTool(ctx, toolSel.value, args, log, 'demo').then((result) => {
       const ms = (performance.now() - t0).toFixed(1);
       out.textContent = `← ${ms} ms\n` + (() => { try { return JSON.stringify(JSON.parse(result), null, 1); } catch { return result; } })();
     });
@@ -78,5 +78,5 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
 
   // console access: __tool('add_object', {...})
   (window as unknown as Record<string, unknown>).__devtool = async (name: string, args: Record<string, unknown>) =>
-    dispatchTool(ctx, name, args, log);
+    dispatchTool(ctx, name, args, log, 'demo');
 }

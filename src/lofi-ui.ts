@@ -11,8 +11,23 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
   };
   el('lofi-create').addEventListener('click', () => {
     stopTour();
-    void run('compose_lofi_scene', { mood: (el('lofi-mood') as HTMLSelectElement).value });
+    void run('compose_lofi_scene', {
+      mood: (el('lofi-mood') as HTMLSelectElement).value,
+      scene: (el('lofi-scene') as HTMLSelectElement).value,
+      cycle: (el('lofi-cycle') as HTMLInputElement).checked,
+      hold_seconds: 180,
+    });
   });
+  el('lofi-next').addEventListener('click', () => void run('control_lofi', { action: 'next' }));
+  const syncPrompt = () => {
+    const scene = (el('lofi-scene') as HTMLSelectElement).value;
+    const mood = (el('lofi-mood') as HTMLSelectElement).value;
+    const cycle = (el('lofi-cycle') as HTMLInputElement).checked;
+    const prompt = document.querySelector<HTMLButtonElement>('.prompt');
+    if (prompt) prompt.dataset.copy = `Create a cozy, endless lofi animation. Use compose_lofi_scene with scene: "${scene}", mood: "${mood}", cycle: ${cycle}, hold_seconds: 180, build_seconds: 32, seed: 42, camera: "cinematic", music: true. Let the world build itself, then read describe_scene to verify its progress. Keep everything controllable through WebMCP and pause when I take over.`;
+  };
+  ['lofi-scene', 'lofi-mood', 'lofi-cycle'].forEach(id => el(id).addEventListener('change', syncPrompt));
+  syncPrompt();
   el('lofi-pause').addEventListener('click', () => {
     const state = ctx.lofi.state;
     if (state.status === 'paused') void run('control_lofi', { action: 'resume' });
@@ -30,7 +45,10 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
     const state = ctx.studio.director.state;
     void run('set_camera_motion', { action: state.status === 'running' ? 'pause' : state.status === 'paused' ? 'resume' : 'start', mode: 'orbit' });
   });
-  el('lofi-sound').addEventListener('click', () => { setMusic(!musicState().playing, 0.38); update(); });
+  el('lofi-sound').addEventListener('click', () => {
+    const music = musicState();
+    setMusic(!music.playing, music.volume || 0.38); update();
+  });
   el('lofi-volume').addEventListener('input', () => {
     setMusic(true, Number((el('lofi-volume') as HTMLInputElement).value) / 100); update();
   });
@@ -40,21 +58,50 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
     if (now - lastUpdate < 200) return;
     lastUpdate = now;
     const state = ctx.lofi.state, camera = ctx.studio.director.state, music = musicState();
-    const active = ['building', 'playing', 'paused'].includes(state.status);
+    const active = ['building', 'playing', 'paused', 'transitioning'].includes(state.status);
     document.body.classList.toggle('lofi-active', active);
     el('lofi-player').hidden = !active;
-    const phase = state.status === 'paused' ? 'Take your time. We’re paused.' : state.phase;
+    const phase = state.status === 'paused' ? 'Take your time. We’re paused.' : state.status === 'playing' ? state.scene_title : state.phase;
     if (el('lofi-phase').textContent !== phase) el('lofi-phase').textContent = phase;
-    el('lofi-progress-label').textContent = state.progress < 100 ? `${state.progress}% · GROWING YOUR WORLD` : '∞ · NO ENDING, NO HURRY';
+    el('lofi-progress-label').textContent = state.progress < 100 ? `${state.progress}% · Growing your world` : 'Your world is ready';
     (el('lofi-progress') as HTMLProgressElement).value = state.progress;
     el('lofi-shot').textContent = camera.status === 'running' ? camera.shot : camera.status === 'paused' ? 'Camera is yours · resume when ready' : state.reduced_motion ? 'Still frame · reduced motion' : 'Settling into the scene';
-    el('lofi-pause').textContent = state.status === 'paused' || camera.status === 'paused' ? '▷ Resume' : 'Ⅱ Pause';
-    el('lofi-sound').textContent = music.playing ? '♫ Sound on' : music.requested ? '♫ Enable sound' : '♫ Sound off';
+    const paused = state.status === 'paused' || camera.status === 'paused';
+    el('lofi-pause').textContent = paused ? 'Resume' : 'Pause';
+    el('lofi-pause').setAttribute('aria-pressed', String(paused));
+    el('lofi-sound').textContent = music.playing ? 'Mute sound' : 'Enable sound';
+    el('lofi-sound').setAttribute('aria-pressed', String(music.playing));
+    const volume = el('lofi-volume') as HTMLInputElement;
+    if (document.activeElement !== volume) volume.value = String(Math.round(music.volume * 100));
+    const motion = el('lofi-motion') as HTMLSelectElement;
+    if (document.activeElement !== motion) motion.value = camera.mode;
     el('lofi-track').textContent = music.status === 'error' ? music.note : music.playing ? music.track : music.requested ? 'A click may be needed for sound' : 'Quiet for now';
     el('music-toggle').classList.toggle('active', isMusicOn());
     el('music-toggle').setAttribute('aria-pressed', String(isMusicOn()));
-    el('camera-orbit').textContent = camera.status === 'running' ? 'Ⅱ Orbit' : camera.status === 'paused' ? '▷ Resume camera' : '↻ Orbit';
+    el('music-toggle').title = music.note;
+    el('camera-orbit').textContent = camera.status === 'running' ? 'Pause camera' : camera.status === 'paused' ? 'Resume camera' : 'Orbit';
+    el('camera-orbit').setAttribute('aria-pressed', String(camera.status === 'running'));
+    document.querySelectorAll<HTMLElement>('[data-mood]').forEach(button => {
+      const selected = button.dataset.mood === ctx.studio.currentPreset;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
     (el('lofi-create') as HTMLButtonElement).disabled = ctx.layout.busy;
+    const hasCamp = ctx.store.all().some(entry => entry.type === 'camp');
+    const layoutButton = el('layout-try') as HTMLButtonElement;
+    layoutButton.disabled = ctx.layout.busy || !hasCamp;
+    layoutButton.title = hasCamp ? 'Adapt the surroundings to your camp' : 'Reset the scene to try the camp layout';
+    const tourButton = el('show-agent') as HTMLButtonElement;
+    tourButton.disabled = !hasCamp;
+    tourButton.title = hasCamp ? 'A local walkthrough of shared scene editing' : 'Reset the scene to start the guided tour';
+    (el('lofi-next') as HTMLButtonElement).disabled = state.status === 'transitioning';
+    el('scene-transition').style.opacity = String(state.sequence.transition_opacity);
+    const sequence = state.sequence;
+    const seconds = Math.max(0, Math.ceil(sequence.remaining_seconds));
+    const countdown = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    el('lofi-sequence').textContent = state.status === 'transitioning' ? `${state.phase}…` :
+      sequence.enabled ? `${state.scene_title} · Next: ${sequence.next_title} ${state.status === 'playing' ? `in ${countdown}` : 'when you’re ready'}` :
+      `${state.scene_title} · An endless moment. Next world whenever you like.`;
   }
   window.addEventListener('music-state', update);
   ctx.studio.onFrame(dt => { tick += dt; if (tick > 0.25) { tick = 0; update(); } });

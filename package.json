@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:animations": "node scripts/animation-regression.mjs",
+    "test:lofi": "node scripts/lofi-regression.mjs",
+    "demo:audio": "node scripts/prepare-demo-audio.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

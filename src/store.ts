@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { buildObject, type ObjectType } from './factory';
 
+/** Shared editing/import budget: every scene we can build must remain portable. */
+export const MAX_SCENE_OBJECTS = 600;
+
 /**
  * The scene registry — the single source of truth both the mouse (selection,
  * dragging) and the agent (WebMCP tools) read from and write to.
@@ -85,6 +88,7 @@ export class SceneStore {
       forceId?: string;
     } = {},
   ): SceneEntry {
+    if (this.objects.size >= MAX_SCENE_OBJECTS) throw new Error(`Scene limit reached (${MAX_SCENE_OBJECTS} objects). Delete objects before adding more.`);
     // Stable object seed makes restores rebuild the exact same procedural asset.
     const seed = opts.forceId ? Number(opts.forceId.slice(4)) : this.idCounter + 1;
     const built = buildObject(type, opts.variant, seed);
@@ -134,7 +138,8 @@ export class SceneStore {
     this.objects.clear();
     this.typeCounters.clear();
     this.idCounter = 0;
-    this.version = 0;
+    // Versions identify observations, not saved content. Replacing a scene
+    // must never make an older optimistic-lock token valid again.
     this.selectedId = null;
   }
 

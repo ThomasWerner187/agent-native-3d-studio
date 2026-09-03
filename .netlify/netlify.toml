@@ -7,7 +7,7 @@ redirects = []
 [functions."*"]
 
 [build]
-publish = "/Volumes/Archiv/dev/webmcp-hackathon/dist"
+publish = "/Users/thomaswerner/Worktrees/agent-native-3d-studio/codex-submission-final-polish/dist"
 publishOrigin = "config"
 commandOrigin = "config"
 command = "npm run build"

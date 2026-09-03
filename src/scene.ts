@@ -411,6 +411,10 @@ export class Studio {
     this.onResize();
   }
 
+  get currentAzimuth(): number {
+    return THREE.MathUtils.radToDeg(Math.atan2(this.sun.position.z, this.sun.position.x));
+  }
+
   /** Apply a lighting preset, animated over ~700ms. */
   applyLighting(preset: LightingPreset, intensity = 1, azimuthDeg?: number, duration = 700): void {
     const p = PRESETS[preset];

@@ -7,6 +7,7 @@ const PLAYLIST = [
 let audio: HTMLAudioElement | null = null;
 let trackIndex = 0, volume = 0.5, fadeFrame = 0;
 let requested = false, error = '';
+let playbackRequest = 0;
 const changed = () => window.dispatchEvent(new Event('music-state'));
 function ensureAudio() {
   if (audio) return audio;
@@ -21,9 +22,14 @@ function ensureAudio() {
 }
 function playTrack() {
   const el = ensureAudio(), track = PLAYLIST[trackIndex];
+  const request = ++playbackRequest;
   if (!el.src.endsWith(track.src)) el.src = track.src;
   el.volume = volume * 0.9;
-  void el.play().then(() => { error = ''; changed(); }).catch(e => {
+  void el.play().then(() => {
+    if (request !== playbackRequest || !requested) return;
+    error = ''; changed();
+  }).catch(e => {
+    if (request !== playbackRequest || !requested || e.name === 'AbortError') return;
     error = e.name === 'NotAllowedError' ? '' : 'Audio could not start.'; changed();
   });
 }
@@ -37,7 +43,7 @@ export function setMusic(on: boolean, newVolume?: number) {
   cancelAnimationFrame(fadeFrame);
   if (newVolume != null) volume = Math.max(0, Math.min(1, newVolume));
   requested = on; error = '';
-  if (on) playTrack(); else audio?.pause();
+  if (on) playTrack(); else { playbackRequest++; audio?.pause(); }
   if (audio) audio.volume = volume * 0.9;
   changed(); return musicState();
 }
@@ -57,7 +63,12 @@ export function fadeMusic(target: number, seconds = 6) {
 export function isMusicOn() { return requested; }
 export function currentTrack() { return PLAYLIST[trackIndex].title; }
 export function installAudioUnlock() {
-  const unlock = () => { if (requested && audio?.paused) playTrack(); };
+  const unlock = (event: Event) => {
+    // Explicit sound controls own their action; a capture-phase resume would
+    // otherwise turn an Enable sound click into an immediate mute.
+    if (event.target instanceof Element && event.target.closest('#music-toggle, #lofi-sound, #lofi-volume')) return;
+    if (requested && audio?.paused) playTrack();
+  };
   window.addEventListener('pointerdown', unlock, { capture: true });
   window.addEventListener('keydown', unlock, { capture: true });
 }

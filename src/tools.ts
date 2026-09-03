@@ -3,7 +3,7 @@ import { musicState } from './ambience';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
-import { SceneStore, round2 } from './store';
+import { MAX_SCENE_OBJECTS, SceneStore, round2 } from './store';
 import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
 import type { SnapshotManager } from './snapshot';
 import type { LayoutManager } from './layout';
@@ -284,6 +284,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
   }
+  if (ctx.store.size >= MAX_SCENE_OBJECTS) return fail(`Scene limit reached (${MAX_SCENE_OBJECTS} objects). Delete objects before adding more.`, 'scene_full');
 
   // Chess piece preset params — validated strictly so agents self-correct.
   let piece: string | undefined;
@@ -336,6 +337,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
   const lazy = args.animate === false;
+  let completed = true;
   if (lazy) {
     // Bulk placement: still pops in (staggered), but the call returns at once.
     const requestedDelay = num(args.delay_ms);
@@ -343,7 +345,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
     spawnPop(entry.group, delay);
   } else {
     spawnPop(entry.group);
-    await awaitGroup(`spawn:${entry.group.uuid}`);
+    completed = (await awaitGroup(`spawn:${entry.group.uuid}`)).completed;
   }
   ctx.store.bump();
 
@@ -355,6 +357,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
     ...(piece || side ? { piece: piece ?? 'pawn', side: side ?? 'white' } : {}),
     position: { x: round2(entry.group.position.x), y: 0, z: round2(entry.group.position.z) },
     scale: round2(entry.group.scale.x),
+    ...interruptedNote(completed),
   });
 }
 
@@ -379,19 +382,21 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
   const y = num(args.y);
   const z = num(args.z);
   const uniform = num(args.uniform);
-  if (op !== 'scale' && x == null && y == null && z == null && uniform == null) {
+  if (x == null && y == null && z == null && (op !== 'scale' || uniform == null)) {
     return fail(`Provide at least one of x, y, z${op === 'scale' ? ' or uniform' : ''}.`);
   }
+  if (op !== 'scale' && uniform != null) return fail('uniform only applies to scale operations.');
 
   const opId = newOpId();
   const groups: string[] = [];
-  for (const id of targets.ids) {
-    const g = ctx.store.get(id)!.group;
+  const entries = targets.ids.map(id => ctx.store.get(id)!);
+  for (const entry of entries) {
+    const g = entry.group;
     if (op === 'move') {
       const to = {
-        x: mode === 'absolute' ? (x != null ? clamp(x, -58, 58) : undefined) : (x ?? 0) + g.position.x,
-        z: mode === 'absolute' ? (z != null ? clamp(z, -58, 58) : undefined) : (z ?? 0) + g.position.z,
-        y: mode === 'relative' ? Math.max(0, (y ?? 0) + g.position.y) : y != null ? Math.max(0, y) : undefined,
+        x: x == null ? undefined : clamp(mode === 'relative' ? x + g.position.x : x, -58, 58),
+        z: z == null ? undefined : clamp(mode === 'relative' ? z + g.position.z : z, -58, 58),
+        y: y == null ? undefined : clamp(mode === 'relative' ? y + g.position.y : y, 0, 58),
       };
       moveObject(g, to);
       groups.push(`pos:${g.uuid}`);
@@ -426,12 +431,14 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
 
   const results = await Promise.all(groups.map(awaitGroup));
   const allCompleted = results.every((r) => r.completed);
+  // An observation made during the transition must be stale after it settles.
+  ctx.store.bump();
 
-  const updated = targets.ids.map((id) => {
-    const entry = ctx.store.get(id)!;
+  const surviving = entries.filter(entry => ctx.store.get(entry.id) === entry);
+  const updated = surviving.map((entry) => {
     const g = entry.group;
     return {
-      id,
+      id: entry.id,
       name: entry.name,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
@@ -445,7 +452,8 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
     mode,
     count: updated.length,
     updated: updated.slice(0, 25),
-    ...interruptedNote(allCompleted),
+    ...interruptedNote(allCompleted && surviving.length === entries.length),
+    ...(surviving.length < entries.length ? { removed_ids: entries.filter(entry => !surviving.includes(entry)).map(entry => entry.id) } : {}),
   });
 }
 
@@ -501,19 +509,30 @@ export async function setMaterial(ctx: ToolContext, args: Args): Promise<string>
         mat.needsUpdate = true;
       }
     }
-    // keep a lamp's actual light in sync with its glow
-    const light = entry.group.userData.light as THREE.PointLight | undefined;
-    if (light) {
-      const headMat = entry.materials[2] ?? entry.materials[0];
-      const k = headMat.emissiveIntensity / 0.85;
-      light.intensity = 6 * clamp(k, 0, 4);
-      light.color.copy(headMat.emissive);
-    }
   }
   ctx.store.bump();
 
   const results = await Promise.all(groups.map(awaitGroup));
   const allCompleted = results.every((r) => r.completed);
+  if (groups.length) ctx.store.bump();
+
+  // Read the emissive color after its tween has settled, so the emitted
+  // light matches the final visible glow rather than its previous color.
+  for (const id of targets.ids) {
+    const entry = ctx.store.get(id);
+    if (!entry) continue;
+    const light = entry.group.userData.light as THREE.PointLight | undefined;
+    if (light && (emissive != null || emissiveIntensity != null)) {
+      const headMat = (entry.group.userData.emissiveMaterial as THREE.MeshStandardMaterial | undefined)
+        ?? entry.materials.reduce((best, mat) => mat.emissiveIntensity > best.emissiveIntensity ? mat : best);
+      if (emissive != null) light.color.copy(headMat.emissive);
+      if (emissiveIntensity != null) {
+        const baseLight = Number(entry.group.userData.lightBaseIntensity ?? 6);
+        const baseGlow = Number(entry.group.userData.emissiveBaseIntensity ?? 0.85);
+        light.intensity = baseLight * clamp(headMat.emissiveIntensity / baseGlow, 0, 4);
+      }
+    }
+  }
 
   return ok(ctx, {
     operation_id: opId,
@@ -543,6 +562,7 @@ export async function setLighting(ctx: ToolContext, args: Args): Promise<string>
   ctx.store.bump();
 
   const { completed } = await awaitGroup('lighting');
+  ctx.store.bump();
 
   return ok(ctx, {
     operation_id: opId,
@@ -634,6 +654,7 @@ export async function frameCamera(ctx: ToolContext, args: Args): Promise<string>
   ctx.store.bump();
 
   const { completed } = await awaitGroup('camera');
+  ctx.store.bump();
   const cam = ctx.studio.camera;
 
   return ok(ctx, {
@@ -732,6 +753,7 @@ export async function cameraPath(ctx: ToolContext, args: Args): Promise<string> 
   }
 
   const cam = ctx.studio.camera;
+  ctx.store.bump();
   return ok(ctx, {
     operation_id: opId,
     keyframes_total: frames.length,
@@ -784,12 +806,16 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   }
   const count = Math.round(num(args.count) ?? 10);
   if (count < 1 || count > MAX_SCATTER) return fail(`count must be between 1 and ${MAX_SCATTER}.`);
+  if (ctx.store.size + count > MAX_SCENE_OBJECTS) return fail(`This scatter exceeds the ${MAX_SCENE_OBJECTS}-object scene limit. Delete objects or reduce count.`, 'scene_full');
 
   const areaRaw = (args.area ?? {}) as Record<string, unknown>;
   const centerX = clamp(num(areaRaw.center_x) ?? 0, -58, 58);
   const centerZ = clamp(num(areaRaw.center_z) ?? 0, -58, 58);
-  const width = clamp(num(areaRaw.width) ?? 10, 0.5, 110);
-  const depth = clamp(num(areaRaw.depth) ?? 10, 0.5, 110);
+  const requestedWidth = clamp(num(areaRaw.width) ?? 10, 0.5, 110);
+  const requestedDepth = clamp(num(areaRaw.depth) ?? 10, 0.5, 110);
+  const minX = Math.max(-58, centerX - requestedWidth / 2), maxX = Math.min(58, centerX + requestedWidth / 2);
+  const minZ = Math.max(-58, centerZ - requestedDepth / 2), maxZ = Math.min(58, centerZ + requestedDepth / 2);
+  const width = maxX - minX, depth = maxZ - minZ;
 
   const jitter = clamp(num(args.jitter) ?? 0.75, 0, 1);
   const scaleVariance = clamp(num(args.scale_variance) ?? 0.2, 0, 1);
@@ -849,13 +875,13 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
 
   for (let r = 0; r < rows && placed < count; r++) {
     for (let c = 0; c < cols && placed < count; c++) {
-      let x = centerX - width / 2 + cellW * (c + 0.5) + (rng() - 0.5) * cellW * jitter;
-      let z = centerZ - depth / 2 + cellD * (r + 0.5) + (rng() - 0.5) * cellD * jitter;
+      let x = minX + cellW * (c + 0.5) + (rng() - 0.5) * cellW * jitter;
+      let z = minZ + cellD * (r + 0.5) + (rng() - 0.5) * cellD * jitter;
       if (inZone(x, z, posPad)) {
         let found = false;
         for (let t = 0; t < 6; t++) {
-          x = centerX + (rng() - 0.5) * width;
-          z = centerZ + (rng() - 0.5) * depth;
+          x = minX + rng() * width;
+          z = minZ + rng() * depth;
           if (!inZone(x, z, posPad)) { found = true; break; }
         }
         if (!found) { skipped++; continue; }
@@ -874,7 +900,8 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   }
   ctx.store.bump();
 
-  await Promise.all(spawnGroups.map(awaitGroup));
+  const completed = (await Promise.all(spawnGroups.map(awaitGroup))).every(result => result.completed);
+  if (spawnGroups.length) ctx.store.bump();
 
   return ok(ctx, {
     operation_id: opId,
@@ -883,9 +910,10 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
     type,
     seed,
     footprint: actualBounds ? 'actual_bounds' : 'pad',
-    area: { center_x: centerX, center_z: centerZ, width, depth },
+    area: { center_x: (minX + maxX) / 2, center_z: (minZ + maxZ) / 2, width, depth },
     ids: ids.slice(0, 60),
     ...(ids.length > 60 ? { note: `Showing first 60 of ${ids.length} ids.` } : {}),
+    ...interruptedNote(completed),
   });
 }
 
@@ -953,6 +981,7 @@ export async function deleteObjects(ctx: ToolContext, args: Args): Promise<strin
   for (const e of entries) {
     ctx.store.remove(e.id);
   }
+  if (ctx.store.selectedId && ids.includes(ctx.store.selectedId)) ctx.select(null);
   ctx.store.bump();
 
   // staggered shrink-out, mirroring scatter's spawn rhythm
@@ -1059,10 +1088,10 @@ export async function chessMove(ctx: ToolContext, args: Args): Promise<string> {
   const size = 1.8;
   const cell = size / 8;
   const half = size / 2;
-  const local = new THREE.Vector3(-half + (file + 0.5) * cell, 0, -half + (rank + 0.5) * cell);
+  const local = new THREE.Vector3(-half + (file + 0.5) * cell, BOARD_SURFACE_Y, -half + (rank + 0.5) * cell);
   const world = board.group.localToWorld(local.clone());
   const from = piece.group.position.clone();
-  const to = new THREE.Vector3(world.x, BOARD_SURFACE_Y, world.z);
+  const to = world;
 
   // Animated move with a small lift — visible, never a hard cut.
   const lift = 0.16;
@@ -1155,9 +1184,12 @@ export function exportScene(ctx: ToolContext, _args: Args): string {
 export async function importScene(ctx: ToolContext, args: Args): Promise<string> {
   let json = args.json != null ? String(args.json) : '';
   if (!json && args.url != null) {
-    const m = String(args.url).match(/#scene=([A-Za-z0-9\-_]+)/);
+    const url = String(args.url);
+    if (url.length > 5_400_000) return fail('Share link is too large (maximum decoded scene is 4 MB).', 'bad_request');
+    const m = url.match(/#scene=([A-Za-z0-9\-_]+)$/);
     if (!m) return fail('url contains no #scene= fragment.', 'bad_request');
-    json = b64urlDecode(m[1]);
+    try { json = b64urlDecode(m[1]); }
+    catch { return fail('The share link contains invalid base64 data.', 'bad_request'); }
   }
   if (!json) return fail('Provide the exported json or a share url (with #scene=...).', 'bad_request');
   // invoke() already captured the pre-import snapshot — no nested capture here

@@ -269,6 +269,9 @@ export function lantern(): THREE.Group {
   light.position.y = 0.35;
   g.add(light);
   g.userData.light = light;
+  g.userData.emissiveMaterial = glow;
+  g.userData.lightBaseIntensity = 7;
+  g.userData.emissiveBaseIntensity = 4;
   return g;
 }
 

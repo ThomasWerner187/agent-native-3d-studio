@@ -7,7 +7,7 @@ import { registerTools, dispatchTool } from './webmcp';
 import type { ToolContext } from './tools';
 import { initChrome, logToolCall, logInfo, setStatus, toast, registerActivityFx } from './ui';
 import { initDevAgent } from './devagent';
-import { setMusic, isMusicOn, installAudioUnlock } from './ambience';
+import { setMusic, isMusicOn, installAudioUnlock, musicState } from './ambience';
 import { exportScene } from './tools';
 import { GuidedTour } from './show';
 import { LayoutManager } from './layout';
@@ -23,7 +23,16 @@ import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
  */
 
 const canvas = document.getElementById('viewport') as HTMLCanvasElement;
-const studio = new Studio(canvas);
+document.getElementById('retry-renderer')?.addEventListener('click', () => location.reload());
+function renderingUnavailable(): void {
+  document.getElementById('startup-error')!.hidden = false;
+  document.querySelectorAll<HTMLElement>('.hud').forEach(node => { node.hidden = true; });
+}
+const studio = (() => {
+  try { return new Studio(canvas); }
+  catch (error) { renderingUnavailable(); throw error; }
+})();
+canvas.addEventListener('webglcontextlost', (event) => { event.preventDefault(); renderingUnavailable(); });
 const store = new SceneStore();
 const snapshots = new SnapshotManager(store, studio);
 const layout = new LayoutManager(store, studio);
@@ -137,7 +146,6 @@ initChrome(() => {
   layout.clear();
   interaction.select(null);
   if (snapshots.resetToBoot()) {
-    store.bump();
     logToolCall('reset', {}, JSON.stringify({ ok: true, note: 'Scene restored to boot state.' }));
     logInfo('Scene reset to its original state.');
   }
@@ -146,9 +154,9 @@ initChrome(() => {
 // --- Lofi toggle (same tracks the set_music tool plays) ----------------------
 const musicBtn = document.getElementById('music-toggle');
 musicBtn?.addEventListener('click', () => {
-  const r = setMusic(!isMusicOn(), 0.38);
+  const r = setMusic(!isMusicOn(), musicState().volume || 0.38);
   musicBtn.classList.toggle('active', r.requested);
-  musicBtn.title = r.requested ? `Lofi on — ${r.track}` : 'Lofi on/off — self-made Suno tracks';
+  musicBtn.title = r.note;
   logToolCall('set_music', { on: r.playing }, JSON.stringify({ ok: true, playing: r.playing, track: r.track }));
 });
 installAudioUnlock();
@@ -166,10 +174,9 @@ document.getElementById('scene-share')?.addEventListener('click', async () => {
 const localCall = (tool: string, args: Record<string, unknown> = {}) => dispatchTool(ctx, tool, args, logToolCall, 'human');
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-mood]')) {
   button.addEventListener('click', () => {
-    void localCall('set_lighting', { preset: button.dataset.mood });
-    document.querySelectorAll('[data-mood]').forEach(el => {
-      el.classList.toggle('active', el === button);
-      el.setAttribute('aria-pressed', String(el === button));
+    void localCall('set_lighting', { preset: button.dataset.mood }).then(raw => {
+      const result = JSON.parse(raw);
+      if (!result.ok) toast(result.error ?? 'Lighting could not be changed.');
     });
   });
 }
@@ -220,12 +227,12 @@ const show = new GuidedTour({
   onDone: () => {
     toast('Your turn: move the camp, then connect your browser agent.');
     const btn = document.getElementById('show-agent');
-    if (btn) btn.textContent = '▷ Guided tour';
+    if (btn) btn.textContent = 'Guided tour';
   },
   onPause: () => {
     toast('Tour stopped. You have control.');
     const btn = document.getElementById('show-agent');
-    if (btn) btn.textContent = '▷ Guided tour';
+    if (btn) btn.textContent = 'Guided tour';
   },
   onBeat: ({ kicker, title, detail }) => setShowCue(kicker, title, detail),
 });
@@ -235,7 +242,7 @@ document.getElementById('show-agent')?.addEventListener('click', () => {
   lofi.stop();
   if (show.isRunning) { show.stop(); return; }
   const btn = document.getElementById('show-agent');
-  if (btn) btn.textContent = '■ Stop guided tour';
+  if (btn) btn.textContent = 'Stop guided tour';
   void show.run();
 });
 canvas.addEventListener('pointerdown', () => {
@@ -259,10 +266,10 @@ void (async () => {
       'Mouse interaction works everywhere; local tool testing via ?agent=1.',
     );
   }
-  // dev-only bridges: never exposed in production builds
+  // Explicit local testing bridges; ?agent=1 opts in on a production build.
   if (devMode) {
     (window as unknown as Record<string, unknown>).__tool = async (name: string, args: Record<string, unknown>) =>
-      dispatchTool(ctx, name, args, logToolCall);
+      dispatchTool(ctx, name, args, logToolCall, 'demo');
     (window as unknown as Record<string, unknown>).__scene = async () =>
       JSON.parse(await dispatchTool(ctx, 'describe_scene', {}, () => {}));
     initDevAgent(ctx, logToolCall);

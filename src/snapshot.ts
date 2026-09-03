@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import type { SceneStore } from './store';
+import { MAX_SCENE_OBJECTS, type SceneStore } from './store';
 import type { Studio } from './scene';
 import { isObjectType, disposeObject } from './factory';
 import { LIGHTING_PRESETS } from './scene';
+import { cancelAllToolTweens } from './anim';
 
 /**
  * Reversibility: every mutating tool auto-captures a snapshot beforehand,
@@ -49,7 +50,7 @@ interface SnapshotData {
   scene_version?: number;
   idCounter: number;
   version: number;
-  lighting: { preset: string; intensity: number };
+  lighting: { preset: string; intensity: number; azimuth?: number };
   camera: { p: [number, number, number]; t: [number, number, number]; fov: number };
   objects: SerializedObject[];
 }
@@ -79,7 +80,8 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
   return {
     idCounter: store.idCount,
     version: store.version,
-    lighting: { preset: studio.currentPreset, intensity: studio.currentIntensity },
+    lighting: { preset: studio.currentPreset, intensity: studio.currentIntensity,
+      azimuth: studio.currentAzimuth },
     camera: {
       p: [studio.camera.position.x, studio.camera.position.y, studio.camera.position.z],
       t: [studio.controls.target.x, studio.controls.target.y, studio.controls.target.z],
@@ -114,6 +116,8 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
 }
 
 function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
+  const versionBefore = store.version;
+  cancelAllToolTweens();
   for (const e of store.all()) {
     studio.scene.remove(e.group);
     disposeObject(e.group);
@@ -164,9 +168,11 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       if (state) { object.color.set(state.color); object.intensity = state.intensity; }
     });
   }
-  store.restoreCounters(data.idCounter, data.version);
+  // A saved version is metadata from a past observation, never the current
+  // concurrency token. The caller bumps this version after restoration.
+  store.restoreCounters(data.idCounter, versionBefore);
 
-  studio.applyLighting(data.lighting.preset as never, data.lighting.intensity);
+  studio.applyLighting(data.lighting.preset as never, data.lighting.intensity, data.lighting.azimuth, 0);
   studio.camera.position.set(...data.camera.p);
   studio.controls.target.set(...data.camera.t);
   studio.camera.fov = data.camera.fov;
@@ -175,7 +181,7 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
 }
 
 /** Portable export schema. schema_version 2 is the current one. */
-const MAX_EXPORT_OBJECTS = 600;
+const MAX_EXPORT_OBJECTS = MAX_SCENE_OBJECTS;
 
 function migrateExport(raw: Record<string, unknown>): { ok: boolean; data?: SnapshotData; error?: string } {
   const schema = raw.schema_version ?? (raw.v === 1 ? 1 : null);
@@ -244,6 +250,13 @@ export class SnapshotManager {
   restoreLast(): boolean {
     const snap = this.ring[this.ring.length - 1];
     if (!snap) return false;
+    return this.restoreSnapshot(snap.id);
+  }
+
+  /** Restore the transaction's own capture, even if a human saved another one. */
+  restoreSnapshot(id: string): boolean {
+    const snap = this.ring.find(s => s.id === id);
+    if (!snap) return false;
     restore(this.store, this.studio, snap.data);
     this.store.bump();
     return true;
@@ -302,10 +315,10 @@ export class SnapshotManager {
     if (!Array.isArray(data.objects) || data.objects.length > MAX_EXPORT_OBJECTS) {
       return { ok: false, error: `objects must be an array with at most 600 entries` };
     }
-    if (!Number.isInteger(data.version) || data.version < 0) {
+    if (!Number.isSafeInteger(data.version) || data.version < 0) {
       return { ok: false, error: 'scene_version must be a non-negative integer' };
     }
-    if (!Number.isInteger(data.idCounter) || data.idCounter < 0) {
+    if (!Number.isSafeInteger(data.idCounter) || data.idCounter < 0 || data.idCounter > Number.MAX_SAFE_INTEGER - MAX_SCENE_OBJECTS) {
       return { ok: false, error: 'id_counter must be a non-negative integer' };
     }
     const presets = LIGHTING_PRESETS as readonly string[];
@@ -315,10 +328,13 @@ export class SnapshotManager {
     if (typeof data.lighting.intensity !== 'number' || !Number.isFinite(data.lighting.intensity) || data.lighting.intensity < 0 || data.lighting.intensity > 2) {
       return { ok: false, error: 'lighting.intensity must be a number between 0 and 2' };
     }
+    if (data.lighting.azimuth != null && (typeof data.lighting.azimuth !== 'number' || !Number.isFinite(data.lighting.azimuth) || Math.abs(data.lighting.azimuth) > 360)) {
+      return { ok: false, error: 'lighting.azimuth must be a number between -360 and 360' };
+    }
     if (!isRecord(data.camera)) return { ok: false, error: 'camera is required' };
     {
       const c = data.camera;
-      if (!isFiniteTuple(c.p) || !isFiniteTuple(c.t) || typeof c.fov !== 'number' || !Number.isFinite(c.fov) || c.fov < 10 || c.fov > 120) {
+      if (!isFiniteTuple(c.p) || !isFiniteTuple(c.t) || c.p.some(n => Math.abs(n) > 10_000) || c.t.some(n => Math.abs(n) > 10_000) || typeof c.fov !== 'number' || !Number.isFinite(c.fov) || c.fov < 10 || c.fov > 120) {
         return { ok: false, error: 'camera must be {p:[x,y,z], t:[x,y,z], fov:number}' };
       }
     }
@@ -347,7 +363,8 @@ export class SnapshotManager {
       if (!isFiniteTuple(o.p) || !isFiniteTuple(o.s)) {
         return { ok: false, error: `object "${o.id}" has a malformed pose/scale` };
       }
-      if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.01 || n > 10)) {
+      // Slow reveals legitimately export tiny, nonzero scales while building.
+      if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.00001 || n > 10)) {
         return { ok: false, error: `object "${o.id}" out of bounds` };
       }
       if (!isFiniteTuple(o.r)) return { ok: false, error: `object "${o.id}" has a malformed rotation` };
