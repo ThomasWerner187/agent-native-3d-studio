@@ -1059,8 +1059,9 @@ export async function addGrove(ctx: ToolContext, args: Args): Promise<string> {
       if (route) for (const point of route) obstacles.push({ minX: point.x - 0.85, maxX: point.x + 0.85, minZ: point.z - 0.85, maxZ: point.z + 0.85 });
     }
   }
+  const rearCount = Math.ceil(count * 0.8);
   const shapes = Array.from({ length: count }, (_, index) => measuredZenShape(ctx, 'tree', index,
-    0.8 + rng() * 0.3, rng() * 360));
+    index < rearCount ? 1.05 + rng() * 0.3 : 0.8 + rng() * 0.2, rng() * 360));
   let plan = planGrove(frame, shapes, obstacles, seed);
   if (!plan) return fail('No safe space for the entire grove. Nothing changed. Move the anchors away from existing objects or the world edge.', 'no_space');
   const items: Parameters<typeof revealZen>[1] = plan.map((item, index) => ({ ...item, type: 'tree', role: 'forest', name: `${item.region === 'rear' ? 'Forest' : 'Framing'} pine ${index + 1}` }));

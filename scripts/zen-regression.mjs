@@ -66,6 +66,17 @@ try {
     assert.equal(grove.result.rear_count, 32); assert.equal(grove.result.exact_count, true);
     assert.deepEqual(anchors.map(pose), anchorPoses);
     assert(grove.result.ids.every(id => h.store.get(id).createdBy === 'agent'));
+    const rearTrees = grove.result.ids.slice(0, 32).map(id => h.store.get(id));
+    const sideTrees = grove.result.ids.slice(32).map(id => h.store.get(id));
+    assert(rearTrees.every(entry => entry.group.scale.x >= 1.05 && entry.group.scale.x <= 1.35));
+    assert(sideTrees.every(entry => entry.group.scale.x >= 0.8 && entry.group.scale.x <= 1.0));
+    const rotation = fixture.rotation * Math.PI / 180;
+    const depth = entry => Math.sin(rotation) * (entry.group.position.x - fixture.cabin[0])
+      + Math.cos(rotation) * (entry.group.position.z - fixture.cabin[1]);
+    const byDepth = [...rearTrees].sort((a, b) => depth(a) - depth(b));
+    const averageScale = entries => entries.reduce((sum, entry) => sum + entry.group.scale.x, 0) / entries.length;
+    assert(averageScale(byDepth.slice(0, 16)) > averageScale(byDepth.slice(16)), 'Deeper forest layers should be taller than the front layer');
+
     const fixed = anchors.map(entry => fullSizeBounds(entry.group));
     for (const id of grove.result.ids) for (const bounds of fixed) assert(separated(fullSizeBounds(h.store.get(id).group), bounds, 0.3));
     const beforePath = h.store.all().map(entry => [entry.id, pose(entry)]);

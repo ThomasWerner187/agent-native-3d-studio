@@ -36,9 +36,11 @@ export function planGrove(frame: CabinFrame, shapes: ZenShape[], obstacles: Foot
       for (let attempt = 0; attempt < 650; attempt++) {
         let x: number, z: number;
         if (rear) {
-          // An irregular layered backdrop, denser than an evenly scattered field.
+          // Taller pines sit deeper in the backdrop; the smaller front layer
+          // leaves the cabin legible while avoiding a flat, uniform tree wall.
+          const depth = Math.max(0, Math.min(1, (shape.scale - 1.05) / 0.3));
           x = (rng() * 2 - 1) * 9.4 * spread;
-          z = -4.8 - rng() * 9.4 * spread;
+          z = -5.1 - (depth * 6.8 + rng() * 4.2) * spread;
         } else {
           const side = (index - rearCount) % 2 === 0 ? -1 : 1;
           x = side * (5.4 + rng() * 4.5 * spread);
