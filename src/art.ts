@@ -23,7 +23,7 @@ export function surfaceTexture(
   c.width = c.height = 512;
   const g = c.getContext("2d")!;
   const r = random(kind === "wood" ? 18 : kind === "stone" ? 41 : 27);
-  g.fillStyle = kind === "wood" ? "#b2a18d" : "#929998";
+  g.fillStyle = kind === "wood" ? "#b2a18d" : kind === "earth" ? "#cad0b9" : "#929998";
   g.fillRect(0, 0, 512, 512);
   if (kind === "wood") {
     for (let i = 0; i < 1400; i++) {
@@ -34,6 +34,20 @@ export function surfaceTexture(
       g.moveTo(x, 0);
       g.bezierCurveTo(x + r() * 20, 180, x - r() * 20, 380, x, 512);
       g.stroke();
+    }
+  } else if (kind === "earth") {
+    // Broad mossy washes read as a soft clearing, not a tiled gravel texture.
+    for (let i = 0; i < 110; i++) {
+      const x = r() * 512, y = r() * 512, radius = 35 + r() * 125;
+      const wash = g.createRadialGradient(x, y, 0, x, y, radius);
+      wash.addColorStop(0, i % 3 ? "rgba(63,91,53,.075)" : "rgba(240,221,163,.12)");
+      wash.addColorStop(1, "transparent");
+      g.fillStyle = wash;
+      g.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+    for (let i = 0; i < 6000; i++) {
+      g.fillStyle = r() > 0.5 ? "rgba(38,62,34,.018)" : "rgba(249,244,207,.025)";
+      g.fillRect(r() * 512, r() * 512, 1, 1);
     }
   } else {
     for (let i = 0; i < 16000; i++) {
@@ -48,7 +62,7 @@ export function surfaceTexture(
       const gradient = g.createRadialGradient(x, y, 0, x, y, s);
       gradient.addColorStop(
         0,
-        kind === "earth" ? "rgba(41,64,42,.22)" : "rgba(32,39,43,.16)",
+        "rgba(32,39,43,.16)",
       );
       gradient.addColorStop(1, "transparent");
       g.fillStyle = gradient;
@@ -72,7 +86,7 @@ export function material(
   if (kind) {
     mat.map = surfaceTexture(kind);
     mat.bumpMap = mat.map;
-    mat.bumpScale = kind === "wood" ? 0.025 : 0.07;
+    mat.bumpScale = kind === "wood" ? 0.025 : kind === "earth" ? 0.018 : 0.07;
   }
   return mat;
 }
@@ -109,103 +123,63 @@ function beam(
   );
 }
 
-/** Fine evergreen silhouettes, shared once across every tree. */
-function needleTexture(): THREE.CanvasTexture {
-  const cached = textures.get('needles');
-  if (cached) return cached;
-  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
-  const ctx = c.getContext('2d')!, r = random(771);
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 256, 512);
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(128, 492); ctx.lineTo(128, 20); ctx.stroke();
-  for (let tier = 0; tier < 26; tier++) {
-    const y = 475 - tier * 16, width = 22 + Math.sin(tier / 26 * Math.PI) * 83;
-    for (const side of [-1, 1]) for (let needle = 0; needle < 5; needle++) {
-      const reach = width * (0.48 + r() * 0.5);
-      ctx.lineWidth = 1.8 + r() * 1.8;
-      ctx.beginPath(); ctx.moveTo(128 + side * needle * 2, y + needle * 3);
-      ctx.lineTo(128 + side * reach, y - 20 - needle * 5 - r() * 18); ctx.stroke();
-    }
-  }
-  const texture = new THREE.CanvasTexture(c); texture.anisotropy = 8;
-  textures.set('needles', texture); return texture;
-}
-
+/** Dense, layered boughs: a legible evergreen silhouette even in a forty-tree forest. */
 export function pine(seed: number): THREE.Group {
-  const g = new THREE.Group(),
-    r = random(123 + seed * 773);
-  const h = 3.2 + r() * 1.7;
-  const crown = material("#497d72", undefined, 0.92);
-  crown.vertexColors = true;
-  crown.alphaMap = needleTexture(); crown.alphaTest = 0.32;
-  crown.side = THREE.DoubleSide; crown.alphaToCoverage = true;
-  const bark = material("#766352", "wood");
-  const trunk = new THREE.CylinderGeometry(0.045, 0.17, h, 9);
-  put(g, trunk, bark, 0, h / 2, 0);
-  const leaves: THREE.BufferGeometry[] = [];
-  const branches: THREE.BufferGeometry[] = [];
-  for (let tier = 0; tier < 7; tier++) {
-    const f = tier / 7,
-      y = 0.7 + f * (h - 0.6);
-    const reach = (1 - f) * (0.85 + h * 0.15);
-    const count = 7 - Math.floor(tier / 3);
-    for (let b = 0; b < count; b++) {
-      const angle = (b / count) * Math.PI * 2 + tier * 2.4 + r() * 0.3;
-      const direction = new THREE.Vector3(
-        Math.cos(angle),
-        -0.18,
-        Math.sin(angle),
-      ).normalize();
-      const branch = new THREE.CylinderGeometry(0.009, 0.025, reach, 5);
-      branch.applyQuaternion(
-        new THREE.Quaternion().setFromUnitVectors(
-          new THREE.Vector3(0, 1, 0),
-          direction,
-        ),
-      );
-      branch.translate(
-        (direction.x * reach) / 2,
-        y - 0.1,
-        (direction.z * reach) / 2,
-      );
-      branches.push(branch);
-      for (let n = 0; n < 5; n++) {
-        const t = 0.15 + n / 6;
-        const cardA = new THREE.PlaneGeometry((1 - t * 0.4) * 0.65, 0.75 - f * 0.24);
-        const cardB = cardA.clone(); cardB.rotateY(Math.PI / 2);
-        const leaf = mergeGeometries([cardA, cardB])!;
-        cardA.dispose(); cardB.dispose();
-        leaf.rotateZ(-0.75);
-        leaf.rotateY(-angle + n * 0.85);
-        leaf.translate(
-          direction.x * reach * t,
-          y + 0.1 - t * 0.18,
-          direction.z * reach * t,
-        );
-        const color = new THREE.Color().setHSL(
-          0.43 + r() * 0.04,
-          0.18 + r() * 0.17,
-          0.42 + r() * 0.3,
-        );
-        const colors = new Float32Array(
-          leaf.getAttribute("position").count * 3,
-        );
-        for (let i = 0; i < colors.length; i += 3) {
-          colors[i] = color.r;
-          colors[i + 1] = color.g;
-          colors[i + 2] = color.b;
-        }
-        leaf.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-        leaves.push(leaf);
-      }
+  const g = new THREE.Group(), r = random(123 + seed * 773);
+  const h = 3.5 + r() * 1.6;
+  const width = 1.0 + r() * 0.35;
+  const foliage = material("#aac7ac", undefined, 0.96);
+  foliage.vertexColors = true;
+  const bark = material("#67513b", "wood");
+  put(g, new THREE.CylinderGeometry(0.035, 0.14, h, 8), bark, 0, h / 2, 0);
+  const boughs: THREE.BufferGeometry[] = [];
+  const tierCount = 8;
+  const hue = 0.405 + r() * 0.035;
+  for (let tier = 0; tier < tierCount; tier++) {
+    const f = tier / (tierCount - 1);
+    const y = 0.68 + f * (h - 1.04);
+    const radius = Math.pow(1 - f * 0.91, 0.88) * width;
+    const rise = 0.82 - f * 0.26;
+    const sections = 18;
+    const positions: number[] = [], colors: number[] = [];
+    const tips: THREE.Vector3[] = [], shoulders: THREE.Vector3[] = [];
+    const shift = tier * 2.399 + r() * 0.4;
+    // Alternating long and short branch tips avoid a stack of geometric cones.
+    for (let j = 0; j < sections; j++) {
+      const angle = j / sections * Math.PI * 2 + shift;
+      const reach = radius * (j % 2 ? 0.77 + r() * 0.1 : 0.94 + r() * 0.12);
+      tips.push(new THREE.Vector3(Math.cos(angle) * reach, y - 0.07 - r() * 0.1, Math.sin(angle) * reach));
+      shoulders.push(new THREE.Vector3(Math.cos(angle) * reach * 0.48, y + rise * (0.32 + r() * 0.14), Math.sin(angle) * reach * 0.48));
     }
+    const peak = new THREE.Vector3(0, y + rise, 0);
+    const underside = new THREE.Vector3(0, y - 0.17, 0);
+    const color = new THREE.Color();
+    const face = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, light: number) => {
+      // Art colors are chosen in display space. Linear HSL here turns a dark
+      // green swatch into pale mint after lighting, ACES and the output pass.
+      color.setHSL(hue + (r() - 0.5) * 0.025, 0.39 + r() * 0.11, light, THREE.SRGBColorSpace);
+      for (const v of [a, b, c]) {
+        positions.push(v.x, v.y, v.z);
+        colors.push(color.r, color.g, color.b);
+      }
+    };
+    for (let j = 0; j < sections; j++) {
+      const k = (j + 1) % sections;
+      const light = 0.255 + f * 0.075 + r() * 0.03;
+      face(peak, shoulders[k], shoulders[j], light + 0.035);
+      face(shoulders[j], shoulders[k], tips[j], light);
+      face(shoulders[k], tips[k], tips[j], light);
+      face(tips[j], tips[k], underside, light - 0.045);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    boughs.push(geo);
   }
-  const needles = mergeGeometries(leaves)!;
-  leaves.forEach((x) => x.dispose());
-  const twigs = mergeGeometries(branches)!;
-  branches.forEach((x) => x.dispose());
-  put(g, needles, crown);
-  put(g, twigs, bark);
+  const crown = mergeGeometries(boughs)!;
+  boughs.forEach(bough => bough.dispose());
+  put(g, crown, foliage);
   return g;
 }
 
@@ -237,13 +211,13 @@ export function lantern(): THREE.Group {
   const glow = new THREE.MeshStandardMaterial({
     color: "#ffd89b",
     emissive: "#ffba59",
-    emissiveIntensity: 4,
+    emissiveIntensity: 5,
     roughness: 0.3,
   });
   const glass = new THREE.MeshPhysicalMaterial({
     color: "#f1dbb4",
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.15,
     roughness: 0.12,
     metalness: 0.1,
     depthWrite: false,
@@ -252,7 +226,7 @@ export function lantern(): THREE.Group {
   beam(g, metal, [0.32, 0.065, 0.32], [0, 0.5, 0]);
   put(g, new THREE.ConeGeometry(0.25, 0.14, 4), metal, 0, 0.6, 0).rotation.y =
     Math.PI / 4;
-  put(g, new THREE.CylinderGeometry(0.065, 0.08, 0.22, 12), glow, 0, 0.2, 0);
+  put(g, new THREE.CylinderGeometry(0.085, 0.1, 0.29, 12), glow, 0, 0.24, 0);
   const pane = put(
     g,
     new THREE.BoxGeometry(0.24, 0.4, 0.24),
@@ -265,13 +239,13 @@ export function lantern(): THREE.Group {
   for (const x of [-0.125, 0.125])
     for (const z of [-0.125, 0.125])
       beam(g, metal, [0.025, 0.45, 0.025], [x, 0.27, z], 0.007);
-  const light = new THREE.PointLight("#ffbd6e", 7, 4.5, 2);
+  const light = new THREE.PointLight("#ffb65e", 8.75, 5.5, 2);
   light.position.y = 0.35;
   g.add(light);
   g.userData.light = light;
   g.userData.emissiveMaterial = glow;
-  g.userData.lightBaseIntensity = 7;
-  g.userData.emissiveBaseIntensity = 4;
+  g.userData.lightBaseIntensity = 8.75;
+  g.userData.emissiveBaseIntensity = 5;
   return g;
 }
 

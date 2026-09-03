@@ -19,9 +19,9 @@ export function cabin(): THREE.Group {
   const g = new THREE.Group();
   const cedar = material('#af8055', 'wood', 0.65);
   const end = material('#574331', 'wood');
-  const roof = material('#253e40', undefined, 0.48); roof.metalness = 0.35;
-  const seams = material('#395858', undefined, 0.48);
-  const window = new THREE.MeshPhysicalMaterial({ color: '#eacb94', emissive: '#ffad51', emissiveIntensity: 0.13, roughness: 0.14, metalness: 0.12, transparent: true, opacity: 0.36, depthWrite: false });
+  const roof = material('#294340', undefined, 0.57); roof.metalness = 0.22;
+  const seams = material('#49605a', undefined, 0.56);
+  const window = new THREE.MeshPhysicalMaterial({ color: '#efd8a4', emissive: '#ffac56', emissiveIntensity: 0.32, roughness: 0.14, metalness: 0.12, transparent: true, opacity: 0.34, depthWrite: false });
   window.side = THREE.DoubleSide;
   for (let i = 0; i < 29; i++) box(g, cedar, [5.4, 0.11, 0.185], [0, 0.4, -1.8 + i * 0.195]);
   for (const x of [-2.4, 2.4]) for (const z of [-1.7, 1, 3.45]) box(g, end, [0.2, 0.4, 0.2], [x, 0.2, z]);
@@ -51,9 +51,9 @@ export function cabin(): THREE.Group {
   box(g, linen, [0.8, 0.14, 0.45], [-0.95, 1.03, -1.28]);
   for (const y of [0.68, 1.2, 1.75]) box(g, cedar, [0.95, 0.06, 0.42], [0.72, y, -1.65]);
   for (let i = 0; i < 6; i++) box(g, i % 2 ? pillow : books, [0.09, 0.23 + (i % 3) * 0.045, 0.25], [0.39 + i * 0.12, 1.38, -1.62]);
-  const interior = new THREE.PointLight('#ffbd6b', 11, 5, 2); interior.position.set(0.3, 1.65, 0.35); g.add(interior);
+  const interior = new THREE.PointLight('#ffbd6b', 17, 6, 2); interior.position.set(0.3, 1.65, 0.35); g.add(interior);
   const reading = lantern(); reading.scale.setScalar(0.55); reading.position.set(0.75, 0.47, 0.5); g.add(reading);
-  const loft = new THREE.MeshStandardMaterial({ color: '#d3a46c', emissive: '#ffbd65', emissiveIntensity: 0.5 }); loft.side = THREE.DoubleSide;
+  const loft = new THREE.MeshStandardMaterial({ color: '#d3a46c', emissive: '#ffbd65', emissiveIntensity: 1.6 }); loft.side = THREE.DoubleSide;
   mesh(g, new THREE.CircleGeometry(0.42, 40), loft, 0, 2.45, -2.12);
   mesh(g, new THREE.TorusGeometry(0.46, 0.05, 8, 40), end, 0, 2.45, -2.14);
   box(g, end, [0.06, 0.87, 0.06], [0, 2.45, -2.2]);
@@ -71,7 +71,18 @@ export function cabin(): THREE.Group {
   mesh(g, new THREE.CylinderGeometry(0.09, 0.07, 0.14, 16), ceramic, 1.8, 1.09, 2.9);
   const lamp = lantern(); lamp.scale.setScalar(0.7); lamp.position.set(-2.1, 0.46, 3.3); g.add(lamp);
   const lamp2 = lantern(); lamp2.scale.setScalar(0.65); lamp2.position.set(2.1, 0.46, 3.3); g.add(lamp2);
-  const warm = new THREE.PointLight('#ffc477', 5, 8, 2); warm.position.set(0, 1.8, 2.55); g.add(warm);
+  const warm = new THREE.PointLight('#ffc477', 8, 8, 2); warm.position.set(0, 1.8, 2.55); g.add(warm);
+  // One quiet strand over the veranda gives the human-placed cabin a warm focal point.
+  const wire = material('#4c4b37', undefined, 0.82);
+  const bulb = new THREE.MeshStandardMaterial({ color: '#ffe6af', emissive: '#ffc477', emissiveIntensity: 4.5, roughness: 0.3 });
+  for (const x of [-2.4, 2.4]) box(g, end, [0.07, 1.85, 0.07], [x, 1.38, 3.38]);
+  const strandPoint = (t: number) => new THREE.Vector3(-2.4 + t * 4.8, 2.3 - Math.sin(t * Math.PI) * 0.35, 3.38);
+  for (let i = 0; i < 16; i++) rod(g, wire, strandPoint(i / 16), strandPoint((i + 1) / 16), 0.009);
+  for (let i = 0; i < 13; i++) {
+    const point = strandPoint((i + 0.5) / 13);
+    const light = mesh(g, new THREE.SphereGeometry(0.038, 8, 6), bulb, point.x, point.y - 0.06, point.z);
+    light.castShadow = false;
+  }
   const chimney = material('#45504a', 'stone');
   box(g, chimney, [0.55, 2.2, 0.6], [-0.8, 3.65, -0.9]);
   box(g, roof, [0.72, 0.1, 0.77], [-0.8, 4.8, -0.9]);
@@ -82,7 +93,7 @@ export function cabin(): THREE.Group {
 
 export function pond(seed: number): THREE.Group {
   const g = new THREE.Group(), r = random(seed + 438);
-  const bed = material('#456b69', 'stone');
+  const bed = material('#6d7e6b', 'stone');
   const base = mesh(g, new THREE.CylinderGeometry(3.2, 3.35, 0.24, 64), bed, 0, 0.1, 0); base.scale.z = 0.7;
   const water = reflectingWater();
   g.add(water.surface);
@@ -96,6 +107,16 @@ export function pond(seed: number): THREE.Group {
     const a = r() * Math.PI * 2, radius = 1.6 + r() * 0.8;
     const pad = mesh(g, new THREE.CircleGeometry(0.13 + r() * 0.09, 20, 0.12, 5.98), leaf, Math.cos(a) * radius, 0.27, Math.sin(a) * radius * 0.7);
     pad.rotation.x = -Math.PI / 2;
+  }
+  const petal = material('#f0c5b6', undefined, 0.78);
+  const center = new THREE.MeshStandardMaterial({ color: '#edbf70', emissive: '#d69439', emissiveIntensity: 0.08, roughness: 0.85 });
+  for (const [x, z] of [[-1.85, 0.65], [1.6, -0.6]]) {
+    for (let i = 0; i < 7; i++) {
+      const angle = i / 7 * Math.PI * 2;
+      const flower = mesh(g, new THREE.SphereGeometry(0.075, 8, 5), petal, x + Math.cos(angle) * 0.065, 0.3, z + Math.sin(angle) * 0.065);
+      flower.scale.set(1, 0.28, 0.52); flower.rotation.y = -angle;
+    }
+    mesh(g, new THREE.SphereGeometry(0.035, 8, 5), center, x, 0.31, z);
   }
   g.userData.tick = water.tick;
   return g;

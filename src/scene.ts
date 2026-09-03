@@ -36,12 +36,12 @@ interface PresetDef {
 
 const PRESETS: Record<LightingPreset, PresetDef> = {
   golden_hour: {
-    background: '#eec48f',
-    skyTop: '#8fa8c4',
-    fog: ['#eec48f', 24, 48],
-    sun: { color: '#ffb070', intensity: 3.6, position: [18, 9, 8] },
-    hemi: { sky: '#ffd9b0', ground: '#8a6f5a', intensity: 0.85 },
-    ambient: { color: '#fff0dd', intensity: 0.35 },
+    background: '#c48972',
+    skyTop: '#516781',
+    fog: ['#c48972', 42, 105],
+    sun: { color: '#ffc08b', intensity: 2.35, position: [-12, 8, 9] },
+    hemi: { sky: '#b3cbdc', ground: '#6c735b', intensity: 0.7 },
+    ambient: { color: '#f4d9b5', intensity: 0.22 },
   },
   night_neon: {
     background: '#161c30',
@@ -156,7 +156,7 @@ export class Studio {
     const environment = new RoomEnvironment();
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(environment, 0.04).texture;
-    this.scene.environmentIntensity = 0.26;
+    this.scene.environmentIntensity = 0.22;
     environment.dispose(); pmrem.dispose();
 
     // World-space sky: the fog horizon stays aligned through low camera angles.
@@ -168,7 +168,7 @@ export class Studio {
           gl_Position = projectionMatrix * viewMatrix * world; }`,
       fragmentShader: `uniform vec3 skyTop; uniform vec3 skyHorizon; varying vec3 skyPosition;
         void main() { float elevation = normalize(skyPosition - cameraPosition).y;
-          vec3 color = mix(skyHorizon, skyTop, smoothstep(0.0, 0.55, elevation));
+          vec3 color = mix(skyHorizon, skyTop, smoothstep(0.0, 0.32, elevation));
           gl_FragColor = vec4(color, 1.0);
           #include <colorspace_fragment>
         }`,
@@ -220,10 +220,10 @@ export class Studio {
 
     this.ground = this.terrain.ground;
     this.scene.add(this.terrain.group);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: '#14232c', roughness: 0.78, metalness: 0.25 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: '#526566', roughness: 1, metalness: 0 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -2.05;
     this.scene.add(floor);
-    const fill = new THREE.DirectionalLight('#c0d9e7', 1.1);
+    const fill = new THREE.DirectionalLight('#c0d9e7', 0.6);
     fill.position.set(5, 7, 15); this.scene.add(fill);
     const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 128;
     const shadowContext = shadowCanvas.getContext('2d')!;
@@ -240,9 +240,9 @@ export class Studio {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.ao = new GTAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight);
     this.ao.updateGtaoMaterial({ radius: 0.55, thickness: 0.7, samples: 8, distanceFallOff: 0.7 });
-    this.ao.blendIntensity = 0.8; this.ao.enabled = this.cinematic;
+    this.ao.blendIntensity = 0.62; this.ao.enabled = this.cinematic;
     this.composer.addPass(this.ao);
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.3, 0.4, 1.25));
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.38, 0.55, 1.3));
     this.composer.addPass(new OutputPass());
 
     // The studio can tell the HUD when the human grabs the camera.
@@ -278,7 +278,7 @@ export class Studio {
     };
 
     // Fireflies — additive points that float; brightest at night.
-    const N = 32;
+    const N = 44;
     const pos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
       const [x, z] = inMeadow(14);
@@ -372,8 +372,8 @@ export class Studio {
     pos.needsUpdate = true;
     const night = this.currentPreset === 'night_neon' || this.currentPreset === 'moonlit';
     const mat = ff.material as THREE.PointsMaterial;
-    mat.opacity += ((night ? 0.95 : 0.22) - mat.opacity) * 0.02;
-    mat.size = night ? 0.13 : 0.08;
+    mat.opacity += ((night ? 0.85 : this.currentPreset === 'golden_hour' ? 0.48 : 0.16) - mat.opacity) * 0.02;
+    mat.size = night ? 0.12 : 0.085;
   }
 
   /** Slow cinematic drift after 25 s of nothing — lowest camera authority. */

@@ -1,4 +1,5 @@
 import type { LofiSession } from './lofi';
+import { getCreativeRequests } from './creative-requests';
 import { musicState } from './ambience';
 import { decodeSceneLink, encodeSceneHash } from './share-codec';
 import * as THREE from 'three';
@@ -8,6 +9,7 @@ import { MAX_SCENE_OBJECTS, SceneStore, round2, type SceneActor, type SceneEntry
 import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, buildObject, disposeObject } from './factory';
 import { planScatter, seededRandom, type Footprint, type ScatterShape } from './scatter-planner';
 import { scatterHistory } from './scatter-history';
+import { inCabinFrame, planGrove, planStonePath, placedBounds, intersects, type ZenShape, type ZenPlacement, type CabinFrame } from './zen-planner';
 import type { SnapshotManager } from './snapshot';
 import type { LayoutManager } from './layout';
 import { AGENT_PLAYBOOK } from './agent-guide';
@@ -192,6 +194,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
     ok: true,
     scene_version: ctx.store.version,
     selected_id: ctx.store.selectedId,
+    creative_requests: { latest: getCreativeRequests().at(-1) ?? null, history: getCreativeRequests() },
     human_revision: ctx.store.humanRevision,
     human_edits: ctx.store.all().filter(e => e.humanRevision > 0).map(e => ({
       id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
@@ -971,6 +974,166 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
     ...(liveEntries.length < count ? { removed_ids: entries.filter(entry => !liveEntries.includes(entry)).map(entry => entry.id) } : {}),
     ...interruptedNote(completed),
   });
+}
+
+/** Compositional tools operate on live anchors, never replace a shared world. */
+function groundBounds(box: THREE.Box3): Footprint {
+  return { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
+}
+function cabinFrame(entry: SceneEntry): CabinFrame {
+  const scale = getCanonicalScale(entry.group);
+  return { x: entry.group.position.x, z: entry.group.position.z, rotation: entry.group.rotation.y,
+    scaleX: scale.x, scaleZ: scale.z };
+}
+function livePathEndpoints(cabin: SceneEntry, pond: SceneEntry) {
+  const frame = cabinFrame(cabin), cabinBox = fullSizeBounds(cabin.group);
+  let start = inCabinFrame(frame, 0.7, 5.4);
+  // A rotated porch may still lie inside its conservative world AABB. Begin
+  // just beyond that footprint instead of putting the first stone in timber.
+  for (let step = 0; step < 20 && start.x > cabinBox.min.x - 0.65 && start.x < cabinBox.max.x + 0.65
+    && start.z > cabinBox.min.z - 0.65 && start.z < cabinBox.max.z + 0.65; step++) {
+    start = inCabinFrame(frame, 0.7, 5.65 + step * 0.25);
+  }
+  const box = fullSizeBounds(pond.group), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  const dx = start.x - center.x, dz = start.z - center.z, distance = Math.hypot(dx, dz);
+  if (distance < 0.01) return null;
+  const nx = dx / distance, nz = dz / distance;
+  const bank = 1 / Math.max(Math.abs(nx) / (size.x / 2), Math.abs(nz) / (size.z / 2));
+  const end = { x: center.x + nx * (bank + 0.9), z: center.z + nz * (bank + 0.9) };
+  return { start, end, length: Math.hypot(end.x - start.x, end.z - start.z) };
+}
+function measuredZenShape(ctx: ToolContext, type: 'tree' | 'lamp' | 'rock', offset: number,
+  scale: number, rotation: number, flattened = false): ZenShape {
+  const built = buildObject(type, undefined, ctx.store.idCount + offset + 1);
+  try {
+    built.group.scale.set(scale, flattened ? scale * 0.38 : scale, flattened ? scale * 0.82 : scale);
+    built.group.rotation.y = THREE.MathUtils.degToRad(rotation);
+    return { scale, rotation, bounds: groundBounds(new THREE.Box3().setFromObject(built.group)) };
+  } finally { disposeObject(built.group); }
+}
+async function revealZen(ctx: ToolContext, items: Array<ZenPlacement & { type: 'tree' | 'lamp' | 'rock'; name: string; role: 'forest' | 'lantern' | 'path' }>, seconds: number) {
+  const entries = items.map(item => {
+    const scale = item.role === 'path' ? { x: item.scale, y: item.scale * 0.38, z: item.scale * 0.82 } : item.scale;
+    const entry = recordMutation(ctx, () => ctx.store.spawn(item.type, { name: item.name, scale, rotationYDeg: item.rotation, actor: ctx.actor ?? 'agent' }));
+    entry.layoutRole = item.role;
+    entry.group.position.set(item.x, 0, item.z);
+    ctx.studio.scene.add(entry.group);
+    return entry;
+  });
+  const undoId = scatterHistory(ctx.store).record(entries), revisions = entries.map(entry => entry.revision);
+  const humanRevision = ctx.store.humanRevision;
+  const scales = entries.map(entry => entry.group.scale.clone());
+  const results = await Promise.all(entries.map((entry, index) => {
+    spawnPop(entry.group, index / Math.max(1, entries.length - 1) * seconds * 1000);
+    return awaitGroup(`spawn:${entry.group.uuid}`);
+  }));
+  entries.forEach((entry, index) => {
+    if (ctx.store.get(entry.id) === entry && entry.revision === revisions[index]) entry.group.scale.copy(scales[index]);
+  });
+  ctx.store.bump();
+  const live = entries.filter(entry => ctx.store.get(entry.id) === entry);
+  return { entries, undoId, live, completed: results.every(result => result.completed) && ctx.store.humanRevision === humanRevision };
+}
+
+export async function addGrove(ctx: ToolContext, args: Args): Promise<string> {
+  const anchor = ctx.store.resolve(String(args.cabin ?? 'cabin'));
+  if (!anchor.ok || anchor.entry.type !== 'cabin') return fail(anchor.ok ? 'cabin must identify a cabin.' : anchor.error, 'unknown_anchor');
+  const pond = args.pond != null ? ctx.store.resolve(String(args.pond)) : null;
+  if (pond && (!pond.ok || pond.entry.type !== 'pond')) return fail(pond.ok ? 'pond must identify a pond.' : pond.error, 'unknown_anchor');
+  const count = num(args.count) ?? 40, lightCount = num(args.lights) ?? 8, seed = num(args.seed) ?? 42;
+  const revealSeconds = num(args.reveal_seconds) ?? 6;
+  if (!Number.isSafeInteger(count) || count < 1 || count > 100 || !Number.isSafeInteger(lightCount) || lightCount < 0 || lightCount > 12
+    || !Number.isSafeInteger(seed) || revealSeconds < 0 || revealSeconds > 15) return fail('count must be 1–100, lights 0–12, seed an integer, and reveal_seconds 0–15.');
+  if (ctx.store.size + count + lightCount > MAX_SCENE_OBJECTS) return fail('The grove exceeds the scene object limit.', 'scene_full');
+  ctx.store.syncMatrices();
+  const preserved = ctx.store.all(), frame = cabinFrame(anchor.entry), rng = seededRandom(seed);
+  const obstacles = preserved.map(entry => groundBounds(fullSizeBounds(entry.group)));
+  for (const entry of preserved) for (const zone of semanticClearances(entry)) obstacles.push({ minX: zone.x - zone.width / 2,
+    maxX: zone.x + zone.width / 2, minZ: zone.z - zone.depth / 2, maxZ: zone.z + zone.depth / 2 });
+  if (pond?.ok) {
+    const connection = livePathEndpoints(anchor.entry, pond.entry);
+    if (connection && connection.length >= 1.8) {
+      const count = Math.max(4, Math.min(24, Math.floor(connection.length / 0.9) + 1));
+      const corridorShape: ZenShape = { bounds: { minX: -0.28, maxX: 0.28, minZ: -0.28, maxZ: 0.28 }, scale: 1, rotation: 0 };
+      const route = planStonePath(connection.start, connection.end, count, Array.from({ length: count }, () => corridorShape), obstacles, 2);
+      if (route) for (const point of route) obstacles.push({ minX: point.x - 0.85, maxX: point.x + 0.85, minZ: point.z - 0.85, maxZ: point.z + 0.85 });
+    }
+  }
+  const shapes = Array.from({ length: count }, (_, index) => measuredZenShape(ctx, 'tree', index,
+    0.8 + rng() * 0.3, rng() * 360));
+  let plan = planGrove(frame, shapes, obstacles, seed);
+  if (!plan) return fail('No safe space for the entire grove. Nothing changed. Move the anchors away from existing objects or the world edge.', 'no_space');
+  const items: Parameters<typeof revealZen>[1] = plan.map((item, index) => ({ ...item, type: 'tree', role: 'forest', name: `${item.region === 'rear' ? 'Forest' : 'Framing'} pine ${index + 1}` }));
+  // Reserve the warm accents first, then let new trees grow around them.
+  const occupied = [...obstacles];
+  const candidates = [[-3.8, 3.2], [3.8, 3.2], [-4.8, -0.8], [4.8, -0.8], [-4.5, 6.8], [4.5, 6.8], [-3.5, -4], [3.5, -4]]
+    .map(([x, z]) => inCabinFrame(frame, x, z));
+  if (pond?.ok) {
+    const box = fullSizeBounds(pond.entry.group), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    for (const side of [-1, 1]) for (const front of [-1, 1]) candidates.unshift({ x: center.x + side * (size.x / 2 + 0.85), z: center.z + front * (size.z / 2 + 0.65) });
+  }
+  for (let index = 0; index < lightCount; index++) {
+    const shape = measuredZenShape(ctx, 'lamp', count + index, 1.35 + rng() * 0.2, rng() * 360);
+    let chosen;
+    for (const base of candidates) {
+      for (const spread of [0, 0.6, 1.2, 1.8, 2.4]) {
+        const point = { x: round2(base.x + (rng() - 0.5) * spread), z: round2(base.z + (rng() - 0.5) * spread) };
+        const box = placedBounds(shape, point);
+        if (box.minX < -58 || box.maxX > 58 || box.minZ < -58 || box.maxZ > 58 || occupied.some(obstacle => intersects(box, obstacle, 0.32))) continue;
+        chosen = point; break;
+      }
+      if (chosen) break;
+    }
+    if (!chosen) return fail('No safe space for all the requested lanterns. Nothing changed. Retry with fewer lights.', 'no_space');
+    items.push({ ...shape, ...chosen, type: 'lamp', role: 'lantern', name: `Warm garden lantern ${index + 1}` });
+    // Lamps need breathing room so the whole count cannot pile up in one corner.
+    occupied.push({ minX: chosen.x - 1.35, maxX: chosen.x + 1.35, minZ: chosen.z - 1.35, maxZ: chosen.z + 1.35 });
+  }
+  const lightItems = items.filter(item => item.type === 'lamp');
+  plan = planGrove(frame, shapes, [...obstacles, ...lightItems.map(item => placedBounds(item, item))], seed);
+  if (!plan) return fail('No safe space for the complete forest around the lanterns. Nothing changed.', 'no_space');
+  items.splice(0, count, ...plan.map((item, index) => ({ ...item, type: 'tree' as const, role: 'forest' as const, name: `${item.region === 'rear' ? 'Forest' : 'Framing'} pine ${index + 1}` })));
+  if (ctx.signal?.aborted) return fail('Cancelled before adding the grove.', 'cancelled');
+  const result = await revealZen(ctx, items, revealSeconds);
+  const liveTrees = result.live.filter(entry => entry.type === 'tree').length;
+  const liveLights = result.live.filter(entry => entry.type === 'lamp').length;
+  return ok(ctx, { operation_id: newOpId(), type: 'tree', requested_count: count, added: count,
+    live_added: liveTrees, live_lights_added: liveLights,
+    exact_count: liveTrees === count && liveLights === lightCount,
+    lights_added: lightCount, ids: result.entries.filter(entry => entry.type === 'tree').map(entry => entry.id),
+    light_ids: result.entries.filter(entry => entry.type === 'lamp').map(entry => entry.id),
+    rear_count: plan.filter(item => item.region === 'rear').length, side_count: plan.filter(item => item.region === 'side').length,
+    anchor_id: anchor.entry.id, pond_id: pond?.ok ? pond.entry.id : null, preserved_ids: preserved.map(entry => entry.id),
+    undo_id: result.undoId, seed, arrangement: 'Layered forest behind the live cabin, sparse side framing, open porch and pond.',
+    ...interruptedNote(result.completed) });
+}
+
+export async function addPath(ctx: ToolContext, args: Args): Promise<string> {
+  const cabin = ctx.store.resolve(String(args.cabin ?? 'cabin')), pond = ctx.store.resolve(String(args.pond ?? 'pond'));
+  if (!cabin.ok || cabin.entry.type !== 'cabin') return fail(cabin.ok ? 'cabin must identify a cabin.' : cabin.error, 'unknown_anchor');
+  if (!pond.ok || pond.entry.type !== 'pond') return fail(pond.ok ? 'pond must identify a pond.' : pond.error, 'unknown_anchor');
+  const seed = num(args.seed) ?? 24, bend = num(args.bend) ?? 2, revealSeconds = num(args.reveal_seconds) ?? 3;
+  if (!Number.isSafeInteger(seed) || Math.abs(bend) > 8 || revealSeconds < 0 || revealSeconds > 15) return fail('seed must be an integer, bend between -8 and 8, reveal_seconds 0–15.');
+  ctx.store.syncMatrices();
+  const connection = livePathEndpoints(cabin.entry, pond.entry);
+  if (!connection) return fail('The pond and porch overlap. Move one anchor first.', 'no_space');
+  const { start, end, length } = connection;
+  const count = num(args.count) ?? Math.max(4, Math.min(24, Math.floor(length / 0.9) + 1));
+  if (!Number.isSafeInteger(count) || count < 3 || count > 40) return fail('count must be an integer between 3 and 40.');
+  if (ctx.store.size + count > MAX_SCENE_OBJECTS) return fail('The path exceeds the scene object limit.', 'scene_full');
+  const preserved = ctx.store.all(), obstacles = preserved.map(entry => groundBounds(fullSizeBounds(entry.group))), rng = seededRandom(seed);
+  // Fit each stepping stone to the actual gap, leaving visible grass between them.
+  const scale = Math.max(0.35, Math.min(0.85, length / (count - 1) * 0.48));
+  const shapes = Array.from({ length: count }, (_, index) => measuredZenShape(ctx, 'rock', index, scale * (0.94 + rng() * 0.12), rng() * 360, true));
+  const plan = planStonePath(start, end, count, shapes, obstacles, bend);
+  if (!plan) return fail('The live anchors do not leave a safe, continuous stone path. Nothing changed. Move an obstacle, separate the anchors, or try fewer stones.', 'no_space');
+  if (ctx.signal?.aborted) return fail('Cancelled before adding the path.', 'cancelled');
+  const result = await revealZen(ctx, plan.map((item, index) => ({ ...item, type: 'rock', role: 'path', name: `Stepping stone ${index + 1}` })), revealSeconds);
+  return ok(ctx, { operation_id: newOpId(), added: result.entries.length, live_added: result.live.length,
+    exact_count: result.live.length === count, ids: result.entries.map(entry => entry.id), undo_id: result.undoId,
+    cabin_id: cabin.entry.id, pond_id: pond.entry.id, start, end, preserved_ids: preserved.map(entry => entry.id),
+    editable: true, arrangement: 'Curved, individually editable stepping stones from the live porch to the pond bank.',
+    ...interruptedNote(result.completed) });
 }
 
 /** Remove only unchanged additions; never restore a snapshot over human work. */

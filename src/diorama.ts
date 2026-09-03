@@ -14,9 +14,9 @@ export class Diorama {
     const r = random(4801);
     const top = new THREE.CircleGeometry(11, 96);
     top.rotateX(-Math.PI / 2);
-    const topMat = material("#637061", "earth", 0.95);
+    const topMat = material("#718263", "earth", 0.98);
     const map = surfaceTexture("earth").clone();
-    map.repeat.set(5, 5);
+    map.repeat.set(2, 2);
     map.needsUpdate = true;
     topMat.map = topMat.bumpMap = map;
     this.ground = new THREE.Mesh(top, topMat);
@@ -51,7 +51,9 @@ export class Diorama {
           "stone",
         ),
       );
-      slab.position.y = -0.17 - layer * 0.31;
+      // The uneven cap rises by up to 5 cm. Keep all of it below the separate
+      // y=0 meadow disk, or its triangle fan cuts visible radial wedges into it.
+      slab.position.y = -0.25 - layer * 0.31;
       slab.castShadow = slab.receiveShadow = true;
       this.group.add(slab);
     }
@@ -59,7 +61,7 @@ export class Diorama {
     const pebble = new THREE.IcosahedronGeometry(1, 1);
     const pebbles = new THREE.InstancedMesh(
       pebble,
-      material("#8d9990", "stone"),
+      material("#788575", "stone"),
       380,
     );
     pebbles.castShadow = pebbles.receiveShadow = true;
@@ -69,7 +71,7 @@ export class Diorama {
         radius = i < 170 ? 10.55 + r() * 0.3 : Math.sqrt(r()) * 10.2;
       dummy.position.set(Math.cos(a) * radius, -0.06, Math.sin(a) * radius);
       dummy.rotation.set(r(), r() * 6, r());
-      const s = i < 170 ? 0.2 + r() * 0.42 : 0.06 + r() * 0.13;
+      const s = i < 170 ? 0.16 + r() * 0.3 : 0.025 + r() * 0.055;
       dummy.scale.set(s, s * 0.65, s * 0.85);
       dummy.updateMatrix();
       pebbles.setMatrixAt(i, dummy.matrix);
@@ -78,19 +80,19 @@ export class Diorama {
 
     const blades: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 4; i++) {
-      const blade = new THREE.PlaneGeometry(0.035, 0.25 + i * 0.04, 1, 3);
-      blade.translate(((i % 2) - 0.5) * 0.04, 0.13, 0);
+      const blade = new THREE.PlaneGeometry(0.025, 0.14 + i * 0.025, 1, 3);
+      blade.translate(((i % 2) - 0.5) * 0.025, 0.075, 0);
       const p = blade.getAttribute("position");
       for (let j = 0; j < p.count; j++) {
-        const t = Math.max(0, p.getY(j)) / 0.3;
-        p.setX(j, p.getX(j) * (1 - t * 0.75) + t * t * 0.06);
+        const t = Math.min(1, Math.max(0, p.getY(j)) / 0.2);
+        p.setX(j, p.getX(j) * (1 - t * 0.75) + t * t * 0.035);
       }
       blade.rotateY(i * 2.3);
       blades.push(blade);
     }
     const grassGeo = mergeGeometries(blades)!;
     blades.forEach((b) => b.dispose());
-    const grassMat = material("#657c62");
+    const grassMat = material("#a3b68a");
     grassMat.side = THREE.DoubleSide;
     const grass = new THREE.InstancedMesh(grassGeo, grassMat, 6500);
     grass.receiveShadow = true;
@@ -105,10 +107,10 @@ export class Diorama {
         (z > 0 && Math.abs(x - Math.sin(z * 0.45)) < 0.8);
       dummy.position.set(x, 0.015, z);
       dummy.rotation.set(0, r() * 6.28, 0);
-      dummy.scale.setScalar(clear ? 0.1 : 0.55 + r() * 1.3);
+      dummy.scale.setScalar(clear ? 0.12 : 0.35 + r() * 0.75);
       dummy.updateMatrix();
       grass.setMatrixAt(i, dummy.matrix);
-      color.setHSL(0.27 + r() * 0.12, 0.13 + r() * 0.2, 0.31 + r() * 0.28);
+      color.setHSL(0.27 + r() * 0.06, 0.24 + r() * 0.09, 0.38 + r() * 0.1, THREE.SRGBColorSpace);
       grass.setColorAt(i, color);
     }
     this.group.add(grass);

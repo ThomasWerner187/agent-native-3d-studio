@@ -57,9 +57,15 @@ export async function collaborationChecks({ page, run, describe, check, decodeSc
     && afterImpossible.scene_version === beforeImpossible.scene_version
     && JSON.stringify(afterImpossible.scatter_history) === JSON.stringify(beforeImpossible.scatter_history));
 
-  const rocks = await call('scatter', { type: 'rock', count: 6, anchor: pond.id, seed: 73 });
+  const livePond = (await query({ id_or_name: pond.id }))[0];
+  // This generic scatter case needs room outside the already occupied grove.
+  const rocks = await call('scatter', { type: 'rock', count: 6, anchor: pond.id, seed: 73,
+    area: { center_x: livePond.pose.p[0], center_z: livePond.pose.p[2], width: 40, depth: 40 } });
   const lamps = await call('scatter', { type: 'lamp', count: 4, anchor: cabin.id, seed: 74 });
   check('agent can add rocks and lamps without replacing the world', rocks.ok && lamps.ok
+    && rocks.result.added === 6 && lamps.result.added === 4
+    && rocks.result.preserved_ids.includes(cabin.id) && rocks.result.preserved_ids.includes(pond.id)
+    && lamps.result.preserved_ids.includes(cabin.id) && lamps.result.preserved_ids.includes(pond.id)
     && (await describe()).object_count === 42, JSON.stringify({ rocks, lamps }));
   await call('frame_camera', { target: 'scene', angle: 'three_quarter', select: false });
   await page.screenshot({ path: 'docs/collaborative-world-qa.png' });

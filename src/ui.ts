@@ -29,6 +29,9 @@ export function registerActivityFx(fx: ActivityFx): void {
 function activityLine(tool: string, args: Record<string, unknown>): string {
   const targets = typeof args.targets === 'string' ? args.targets : Array.isArray(args.targets) ? `${args.targets.length} objects` : 'objects';
   switch (tool) {
+    case 'creative_request': return `“${String(args.text ?? '')}”`;
+    case 'add_grove': return `Growing ${args.count ?? 40} trees around your cabin`;
+    case 'add_path': return 'Laying a stone path from porch to pond';
     case 'compose_lofi_scene': return 'Started a lofi world';
     case 'control_lofi': return args.action === 'pause' ? 'Paused the lofi session' : args.action === 'resume' ? 'Resumed the lofi session' : args.action === 'next' ? 'Visiting the next lofi world' : 'Stopped the session · kept the scene';
     case 'set_camera_motion': return args.action === 'start' ? 'Started a continuous camera journey' : `${args.action === 'pause' ? 'Paused' : args.action === 'resume' ? 'Resumed' : 'Stopped'} the camera`;
@@ -107,11 +110,12 @@ function renderEntry(entry: LogEntry): HTMLElement {
   head.appendChild(story);
   const actor = document.createElement('div');
   actor.className = 'log-actor';
-  actor.textContent = entry.actor === 'agent' ? 'AGENT · WEBMCP' : entry.actor === 'human' ? 'YOU' : 'LOCAL DEMO';
+  actor.textContent = entry.actor === 'agent' ? 'AGENT · WEBMCP' : entry.actor === 'human' ? entry.tool === 'creative_request' ? 'YOU ASKED' : 'YOU' : 'LOCAL DEMO';
   div.appendChild(actor);
   if (entry.ok === false) story.textContent = 'Action could not be applied';
   div.appendChild(head);
 
+  if (entry.tool === 'creative_request') return div;
   const raw = document.createElement('details');
   raw.className = 'log-raw';
   const summary = document.createElement('summary');

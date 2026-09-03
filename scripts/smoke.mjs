@@ -14,6 +14,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import './animation-regression.mjs';
 import './share-regression.mjs';
 import './scatter-regression.mjs';
+import './zen-regression.mjs';
 import { collaborationChecks } from './collaboration-smoke.mjs';
 
 function decodeScene(url) {
@@ -132,6 +133,12 @@ try {
     r.set_camera_motion = await window.__call('set_camera_motion', { action: 'start', mode: 'orbit', loop_seconds: 60 });
     r.compose_lofi_scene = await window.__call('compose_lofi_scene', { music: false, build_seconds: 12 });
     r.control_lofi = await window.__call('control_lofi', { action: 'stop' });
+    const beforeZen = await window.__call('describe_scene', {});
+    if (beforeZen.result?.object_count) await window.__call('delete_objects', { name_contains: '' });
+    const zenCabin = await window.__call('add_object', { type: 'cabin', position: { x: 3, z: -3 } });
+    const zenPond = await window.__call('add_object', { type: 'pond', position: { x: -5, z: 6 } });
+    r.add_grove = await window.__call('add_grove', { cabin: zenCabin.result.id, pond: zenPond.result.id, count: 40, lights: 8, seed: 42, reveal_seconds: 0 });
+    r.add_path = await window.__call('add_path', { cabin: zenCabin.result.id, pond: zenPond.result.id, reveal_seconds: 0 });
     return r;
   }, names);
 

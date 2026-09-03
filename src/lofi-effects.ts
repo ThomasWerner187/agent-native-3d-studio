@@ -59,7 +59,7 @@ export function reflectingWater() {
   const captureMaterial = reflector.material as THREE.ShaderMaterial;
   const capture = reflector.onBeforeRender.bind(reflector);
   const time = { value: 0 };
-  const water = new THREE.MeshStandardMaterial({ color: '#1c4544', roughness: 0.2, metalness: 0.15 });
+  const water = new THREE.MeshStandardMaterial({ color: '#235f58', roughness: 0.19, metalness: 0.18 });
   water.onBeforeCompile = shader => {
     shader.uniforms.uLofiTime = time;
     shader.uniforms.lofiReflection = captureMaterial.uniforms.tDiffuse;
@@ -75,9 +75,12 @@ export function reflectingWater() {
       varying vec4 vLofiMirror; varying vec2 vLofiLocal; varying vec3 vLofiTangent; varying vec3 vLofiBitangent;
       vec2 lofiWaves(vec2 p) {
         float t = uLofiTime;
-        return vec2(
+        vec2 wind = vec2(
           sin(p.x*6.3+p.y*2.1+t*0.58)*0.028 + sin(p.y*11.7-p.x*3.8-t*0.39)*0.013,
           cos(p.y*5.2-p.x*1.7+t*0.47)*0.023 + cos(p.x*13.1+p.y*8.2+t*0.32)*0.009);
+        vec2 ring = p - vec2(-0.65, 0.3);
+        float radius = length(ring);
+        return wind + ring / max(radius, 0.1) * sin(radius * 12.0 - t * 1.35) * 0.016 * exp(-radius * 0.55);
       }\n` + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       vec2 lofiSlope = lofiWaves(vLofiLocal);
@@ -85,7 +88,7 @@ export function reflectingWater() {
     shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
       vec2 projected = vLofiMirror.xy / vLofiMirror.w;
       vec3 reflected = texture2D(lofiReflection, clamp(projected + lofiSlope * 0.075, 0.001, 0.999)).rgb;
-      float fresnel = 0.2 + 0.72 * pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 3.0);
+      float fresnel = 0.2 + 0.7 * pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 3.0);
       float shore = smoothstep(2.4, 3.12, length(vLofiLocal));
       outgoingLight = mix(outgoingLight, reflected, fresnel * (1.0 - shore * 0.35));
       outgoingLight += vec3(0.04,0.075,0.056) * shore;

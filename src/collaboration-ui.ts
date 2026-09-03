@@ -1,7 +1,8 @@
 import type { ToolContext } from './tools';
 import type { SceneActor } from './store';
 import { scatterHistory } from './scatter-history';
-import { toast } from './ui';
+import { toast, pushLog } from './ui';
+import { addCreativeRequest, clearCreativeRequests } from './creative-requests';
 
 type Call = (tool: string, args?: Record<string, unknown>) => Promise<string>;
 interface Actions {
@@ -53,7 +54,33 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
 
   el<HTMLButtonElement>('scene-empty').addEventListener('click', () => void edit(async () => {
     await actions.startEmpty();
+    clearCreativeRequests();
   }));
+
+  const requestForm = el<HTMLFormElement>('creative-request-form');
+  const requestInput = el<HTMLTextAreaElement>('creative-request');
+  const requestStatus = el('request-status');
+  requestForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!requestInput.value.trim()) { requestInput.focus(); return; }
+    const request = addCreativeRequest(requestInput.value, ctx.store.version, ctx.store.selectedId);
+    pushLog({ tool: 'creative_request', args: { text: request.text }, ok: true, actor: 'human', time: new Date() });
+    requestStatus.textContent = 'Idea ready. Ask your connected browser agent to continue with it.';
+    requestInput.value = '';
+    requestInput.placeholder = 'What would you like to shape next?';
+  });
+  requestInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault(); requestForm.requestSubmit();
+    }
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-request]').forEach(button => {
+    button.addEventListener('click', () => {
+      requestInput.value = button.dataset.request ?? '';
+      requestInput.focus();
+      requestStatus.textContent = 'Make it yours, then share it and ask your browser agent to continue.';
+    });
+  });
 
   document.querySelectorAll<HTMLButtonElement>('[data-add-object]').forEach(button => {
     button.addEventListener('click', () => void edit(async () => {
@@ -103,7 +130,6 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
     const selected = ctx.store.selectedId ? ctx.store.get(ctx.store.selectedId) : undefined;
     const pond = all.find(entry => entry.type === 'pond');
     const cabin = all.find(entry => entry.type === 'cabin');
-    const anchor = cabin ?? pond ?? selected ?? all[0];
     document.body.classList.toggle('has-selection', Boolean(selected));
     controls.forEach(control => { control.disabled = pending; });
     el<HTMLButtonElement>('scatter-undo').disabled = pending || !scatterHistory(ctx.store).state.can_undo;
@@ -132,24 +158,6 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
         : selected.humanRevision > 0 ? 'Your edit is visible to the agent.' : 'Drag to move, or adjust a value.';
     }
 
-    const buildPrompt = el<HTMLButtonElement>('prompt-build');
-    const atmospherePrompt = el<HTMLButtonElement>('prompt-atmosphere');
-    // The prompt card is dismissible. It may no longer be in the document.
-    if (!buildPrompt || !atmospherePrompt) return;
-    buildPrompt.disabled = !anchor;
-    atmospherePrompt.disabled = !all.length;
-    const anchorInstruction = anchor ? `Use ${JSON.stringify(anchor.id)} as the live anchor, after verifying it still exists. ` : '';
-    buildPrompt.dataset.copy = 'Continue this existing world with me. First call describe_scene, then query_scene with include_bounds: true for the live pond and cabin bounds, selection, provenance and recent human edits. '
-      + anchorInstruction + 'Add exactly 30 trees, 8 rocks and 6 lamps around my current placements using separate scatter calls with anchor, clearance: 0.6 and a fixed seed. '
-      + 'Preserve every existing object, keep clear of the pond and cabin, and use the latest scene_version for each mutation. If there is not enough room, expand the scatter area and retry the failed group. '
-      + 'Do not rebuild the scene or use compose_lofi_scene. Read describe_scene after adding, verify the added counts and preserved objects, and report the undo_scatter IDs.';
-    atmospherePrompt.dataset.copy = 'Continue this same world after my latest edit. First call describe_scene and query_scene; inspect selected_id, human_edits and recent_changes. '
-      + 'Preserve all current object positions, rotations, scales and materials. Use set_lighting with preset: "golden_hour" and intensity: 0.9 for warm light. '
-      + 'Start set_camera_motion with action: "start", mode: "cinematic", target: "scene", loop_seconds: 240 for an endless gentle camera. '
-      + 'Keep controls visible and let human input pause the camera. Do not compose or cycle to a new world. Read describe_scene again to verify the lighting, running camera and preserved edits.';
-    el('prompt-context').textContent = !all.length ? 'Place your first objects, then copy a prompt to your WebMCP browser agent.'
-      : selected?.humanRevision ? 'Your edit is in the live scene. Copy a prompt to continue with your browser agent.'
-      : 'Copy a prompt to your WebMCP browser agent. It works on this live world.';
   }
 
   let elapsed = 0;

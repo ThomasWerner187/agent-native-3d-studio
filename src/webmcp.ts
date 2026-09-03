@@ -2,7 +2,7 @@ import type { ToolContext } from './tools';
 import * as THREE from 'three';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
-  frameCamera, cameraPath, scatter, undoScatter, snapshotTool, undoTool, setUi, fullSizeBounds,
+  frameCamera, cameraPath, scatter, addGrove, addPath, undoScatter, snapshotTool, undoTool, setUi, fullSizeBounds,
   deleteObjects, boardSquare, chessMove, setMusicTool, helpTool,
   exportScene, importScene, fail, ok,
 } from './tools';
@@ -91,29 +91,49 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: 'set_camera_motion',
-    description: 'Start an infinite background orbit or cinematic camera, or pause/resume/stop it. Returns immediately. Cinematic varies height, distance and target continuously. Human dragging pauses it; explicit resume blends back gently. Works on any scene. Read describe_scene for live camera_motion.',
+    description: 'Start or control endless camera motion. drift keeps an intimate front-facing garden view, gently sweeping instead of disappearing behind trees. targets frames live anchors together; distance/height override whole-world framing. Human input pauses it; resume explicitly. Returns immediately; inspect camera_motion.',
     inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
       action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
-      mode: { type: 'string', enum: ['orbit', 'cinematic'] },
-      loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One full circuit. Default 240 seconds.' },
-      target: { type: 'string', description: 'Scene, or any object id/name to orbit. Default scene; uses its live bounds.' },
+      mode: { type: 'string', enum: ['orbit', 'cinematic', 'drift'] },
+      loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One seamless cycle. Default 240 seconds.' },
+      target: { type: 'string', description: 'Scene or one object id/name. Default scene.' },
+      targets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 10, description: 'Frame these live objects together, e.g. cabin and pond. Overrides target.' },
+      distance: { type: 'number', minimum: 8, maximum: 80, description: 'Horizontal orbit radius. 20–24 is an intimate cabin-and-pond view.' },
+      height: { type: 'number', minimum: 2, maximum: 35, description: 'Height above the shared focus. 7–10 for a cozy garden view.' },
+      azimuth_degrees: { type: 'number', minimum: -360, maximum: 360, description: 'World heading:0 looks from +Z. A cabin faces its rotation_y heading.' },
+      sweep_degrees: { type: 'number', minimum: 10, maximum: 120, description: 'Total left/right sweep in drift mode. Default 50.' },
+      blend_seconds: { type: 'number', minimum: 1, maximum: 15, description: 'Gentle entry flight duration. Default 8.' },
     }, required: ['action'] },
     run: (ctx, args) => {
       const action = args.action, mode = args.mode ?? 'cinematic', period = args.loop_seconds ?? 240;
-      if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
+      if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic', 'drift'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
+      for (const [key, min, max] of [['distance', 8, 80], ['height', 2, 35], ['azimuth_degrees', -360, 360], ['sweep_degrees', 10, 120], ['blend_seconds', 1, 15]] as const) {
+        const value = args[key];
+        if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)) return fail(`${key} must be between ${min} and ${max}.`);
+      }
+      if (args.expected_scene_version != null && (!Number.isSafeInteger(args.expected_scene_version) || args.expected_scene_version !== ctx.store.version)) return fail('Scene changed since the camera plan. Read the live scene and retry.', 'stale_scene');
       const director = ctx.studio.director;
       if (action === 'start') {
-        const target = String(args.target ?? 'scene');
+        const targets = args.targets ?? [String(args.target ?? 'scene')];
+        if (!Array.isArray(targets) || targets.length < 1 || targets.length > 10 || targets.some(target => typeof target !== 'string')) return fail('targets must contain 1–10 object ids or names.');
         const bounds = new THREE.Box3();
-        if (target === 'scene') for (const entry of ctx.store.all()) bounds.union(fullSizeBounds(entry.group));
-        else {
-          const resolved = ctx.store.resolve(target);
-          if (!resolved.ok) return fail(resolved.error, 'unknown_target');
-          bounds.copy(fullSizeBounds(resolved.entry.group));
+        for (const target of targets) {
+          if (target === 'scene') for (const entry of ctx.store.all()) bounds.union(fullSizeBounds(entry.group));
+          else {
+            const resolved = ctx.store.resolve(target);
+            if (!resolved.ok) return fail(resolved.error, 'unknown_target');
+            bounds.union(fullSizeBounds(resolved.entry.group));
+          }
         }
         const sphere = bounds.isEmpty() ? new THREE.Sphere(ctx.studio.controls.target.clone(), 5) : bounds.getBoundingSphere(new THREE.Sphere());
-        ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic');
-        director.start(mode as 'orbit' | 'cinematic', period, sphere.center, sphere.radius);
+        // Focus on the lived-in garden rather than the treetop center of its bounds.
+        if (mode === 'drift') sphere.center.y = Math.min(sphere.center.y, 1.6);
+        ctx.lofi.preferMotion(mode === 'orbit' ? 'orbit' : 'cinematic');
+        director.start(mode as 'orbit' | 'cinematic' | 'drift', period, sphere.center, sphere.radius,
+          { distance: args.distance as number | undefined, height: args.height as number | undefined,
+            azimuthDegrees: args.azimuth_degrees as number | undefined, sweepDegrees: args.sweep_degrees as number | undefined,
+            blendSeconds: args.blend_seconds as number | undefined });
       }
       if (action === 'pause') director.pause();
       if (action === 'stop') director.stop();
@@ -462,6 +482,32 @@ export const TOOL_DEFS: ToolDef[] = [
     annotations: { destructiveHint: false },
     mutating: true,
     run: (ctx, args) => scatter(ctx, args),
+  },
+  {
+    name: 'add_grove',
+    description: 'Grow an exact forest around LIVE cabin/pond anchors: 80% behind the cabin, sparse sides, open porch; add warm lanterns. Plans every placement before mutation, preserves all existing objects. Canopies interleave naturally; trunks stay apart. Returns tree/light ids and targeted undo_id.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      cabin: { type: 'string', description: 'Live cabin id/name.' }, pond: { type: 'string', description: 'Live pond id/name for bank-side lanterns.' },
+      count: { type: 'integer', minimum: 1, maximum: 100, description: 'Exact number of trees. Default 40.' },
+      lights: { type: 'integer', minimum: 0, maximum: 12, description: 'Warm garden lanterns. Default 8.' },
+      seed: { type: 'integer', description: 'Repeatable arrangement. Default 42.' },
+      reveal_seconds: { type: 'number', minimum: 0, maximum: 15, description: 'Progressive tree/lantern reveal. Default 6.' },
+    }, required: ['cabin'] },
+    mutating: true, annotations: { destructiveHint: false }, run: addGrove,
+  },
+  {
+    name: 'add_path',
+    description: 'Add a curved stepping-stone path from the LIVE cabin porch to the LIVE pond bank. Every stone is independently editable. Plans against actual existing geometry before adding anything; tries both bends. Preserves human work. Returns ids, live endpoints and targeted undo_id.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      cabin: { type: 'string', description: 'Live cabin id/name.' }, pond: { type: 'string', description: 'Live pond id/name.' },
+      count: { type: 'integer', minimum: 3, maximum: 40, description: 'Omit for stone spacing derived from the actual gap.' },
+      bend: { type: 'number', minimum: -8, maximum: 8, description: 'Curve offset in meters. Default 2; opposite bends tried around obstacles.' },
+      seed: { type: 'integer', description: 'Stone variation. Default 24.' },
+      reveal_seconds: { type: 'number', minimum: 0, maximum: 15, description: 'Progressive reveal. Default 3.' },
+    }, required: ['cabin', 'pond'] },
+    mutating: true, annotations: { destructiveHint: false }, run: addPath,
   },
   {
     name: 'undo_scatter',
