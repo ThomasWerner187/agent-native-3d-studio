@@ -1,0 +1,82 @@
+{
+  "story_id": "zen-co-creation-v2",
+  "title": "Agent-Native 3D Scene Studio — A Moment, Built Together",
+  "language": "en",
+  "target_duration_seconds": 157,
+  "status": "Final 157-second film complete and verified from capture native-demo-browser-2026-09-03T17:37:25.728Z: one continuous functional Demo browser session, Lily v3 narration, Aurora Drift and 44 English captions.",
+  "capture_note": "One real scene in the functional Demo browser interface, actual human pointer actions and sidebar requests, and native WebMCP calls. The interface is visibly labelled Demo browser and is not represented as Chrome or ChatGPT. There are no cuts or scene replacements; every action remains at its original speed. Recorded presentation states keep captions inside the scene while the sidebar is open, and the film adds no editorial title or result cards.",
+  "segments": [
+    {
+      "id": "human_pond",
+      "title": "A place to breathe",
+      "duration_seconds": 14,
+      "narration": "What if you and your agent took a little break... and built somewhere to breathe? I start with a pond. Just a quiet patch of water, and a little room to imagine.",
+      "tts_narration": "[warmly] What if you and your agent took a little break... and built somewhere to breathe? [pause] I start with a pond. Just a quiet patch of water, and a little room to imagine.",
+      "visual": "Place the pond through the real UI on a clean scene. The opening grows from the actual canvas; no future-scene beauty insert."
+    },
+    {
+      "id": "human_cabin",
+      "title": "Our starting point",
+      "duration_seconds": 16,
+      "narration": "A cabin goes beside it. That's our starting point. I ask for forty trees, mostly behind the house, with a few around the water, and soft lights to make it feel welcoming.",
+      "tts_narration": "[warmly] A cabin goes beside it. That's our starting point. [pause] I ask for forty trees, mostly behind the house, with a few around the water, and soft lights to make it feel welcoming.",
+      "visual": "Place the cabin by hand. Type the forest-and-lights request into the real page. Native discovery and full scene readback identify both human anchors."
+    },
+    {
+      "id": "agent_forest",
+      "title": "A forest around our choices",
+      "duration_seconds": 26,
+      "narration": "The agent reads the scene I actually made. It keeps my cabin and pond in place, then builds a layered forest behind them. Taller trees at the back, little openings around the water. Warm lights settle between the trees, reflections catch the pond, and the whole place begins to feel alive.",
+      "tts_narration": "[warmly] The agent reads the scene I actually made. It keeps my cabin and pond in place, then builds a layered forest behind them. [pause] Taller trees at the back, little openings around the water. Warm lights settle between the trees, reflections catch the pond, and the whole place begins to feel alive.",
+      "visual": "Native WebMCP adds exactly forty trees in a designed forest, predominantly behind the existing cabin, plus warm lamps. Retain the real reveals, then query all objects to verify both anchors and additions."
+    },
+    {
+      "id": "agent_details",
+      "title": "A path home",
+      "duration_seconds": 21,
+      "narration": "Now, a stone path to the front door. The agent follows the space between the cabin and the pond, laying a gentle curve of stepping stones. It's a small detail, but suddenly there's a way into this world. You can imagine walking home.",
+      "tts_narration": "[warmly] Now, a stone path to the front door. [pause] The agent follows the space between the cabin and the pond, laying a gentle curve of stepping stones. It's a small detail, but suddenly there's a way into this world. You can imagine walking home.",
+      "visual": "Type the stone-path request in the real UI; a native call creates the curved path from the live anchors. Keep the complete reveal and read back its individually editable stones."
+    },
+    {
+      "id": "human_move",
+      "title": "A little more us",
+      "duration_seconds": 16,
+      "narration": "I move a couple of stones myself. A little more space here, a softer curve there. We can keep taking turns, making small choices until the scene feels like somewhere we'd want to stay.",
+      "tts_narration": "[warmly] I move a couple of stones myself. [pause] A little more space here, a softer curve there. We can keep taking turns, making small choices until the scene feels like somewhere we'd want to stay.",
+      "visual": "Use real pointer controls to move two distinct agent-created path stones. Show their selection and physical relocation at original speed."
+    },
+    {
+      "id": "agent_readback",
+      "title": "The agent sees my changes",
+      "duration_seconds": 19,
+      "narration": "WebMCP is what lets us work together. The agent can read the real objects, their positions, and my latest changes. It sees both stones where I left them, so our next step starts from our scene, as it is now.",
+      "tts_narration": "[warmly] Web M C P is what lets us work together. The agent can read the real objects, their positions, and my latest changes. [pause] It sees both stones where I left them, so our next step starts from our scene, as it is now.",
+      "visual": "Fresh native describe_scene and query_scene identify both human-edited stones and preserve all existing objects. Show one compact genuine result excerpt while the scene remains prominent."
+    },
+    {
+      "id": "atmosphere",
+      "title": "Let the evening in",
+      "duration_seconds": 26,
+      "narration": "One last request: a cozy evening, my lofi music, and a slow, endless camera. We move in close enough to feel the warm windows and glowing water. The controls fade away. The work is done, and for a moment... we can simply be here.",
+      "tts_narration": "[warmly] One last request: a cozy evening, my lofi music, and a slow, endless camera. [pause] We move in close enough to feel the warm windows and glowing water. The controls fade away. The work is done, and for a moment... we can simply be here.",
+      "visual": "Type the cozy-evening request. Native calls set warm dusk, start music and a close slow continuous camera, then hide the UI. Read back running camera, playback, presentation state and unchanged geometry."
+    },
+    {
+      "id": "closing",
+      "title": "A moment, built together",
+      "duration_seconds": 19,
+      "narration": "A small world. A shared little escape. Built with an agent... and made for a moment of calm.",
+      "tts_narration": "[softly] A small world. A shared little escape. [pause] Built with an agent... and made for a moment of calm.",
+      "visual": "Remain in the same close, slowly orbiting world with its UI hidden. After the final line, leave eight to twelve seconds of music and living scenery. No code cards, no artificial still frame, no replacement scene."
+    }
+  ],
+  "voice": {
+    "provider": "ElevenLabs",
+    "name": "Lily — Velvety Actress",
+    "voice_id": "pFZP5JQG7iQjIQuC4Bku",
+    "model_id": "eleven_v3",
+    "delivery": "Warm, intimate conversational delivery; gentle v3 audio tags and natural punctuation. Original speed, connected phrases, brief intentional pauses.",
+    "prompting_reference": "https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices#prompting-eleven-v3"
+  }
+}

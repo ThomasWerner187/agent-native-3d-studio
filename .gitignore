@@ -2,6 +2,10 @@
 node_modules/
 dist/
 
+# local credentials for optional media production
+.env
+.env.*
+
 # local netlify
 .netlify
 .playwright-mcp/
@@ -10,3 +14,4 @@ dist/
 *.log
 .DS_Store
 *.tmp.*
+scratch-submission-media/

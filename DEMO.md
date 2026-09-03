@@ -1,130 +1,66 @@
-# Demo & Video Kit
+# A moment, built together
 
-Material for the 3-minute submission video and live demos. Beat sheet per submission requirements (< 3 min, with audio).
+A person and their browser agent take a short break by building a quiet place together. The scene remains editable, and each person's choice becomes the agent's starting point.
 
-## Video beat sheet
+**Final film:** 157 seconds, Lily v3 narration, Aurora Drift and 44 aligned English captions. The native capture, final export, proof validation and full audio/video decode are complete. The film uses a visibly labelled functional **Demo browser** with a compact agent sidebar; it does not claim to reproduce Chrome or ChatGPT branding. Public upload and creator full-playback approval remain open.
 
-| Time | Shot | Action / narration |
-|------|------|--------------------|
-| 0:00–0:15 | **The hook.** Press **“▶ Watch the agent build”**. | “This is an agent building a world — through 20 structured tools, while I keep the mouse.” Tool log fills with real calls: batch-planted avenue, golden hour, lofi, cinematic camera flight. Grab the camera mid-show: “Human took control” — that's the collaboration. |
-| 0:15–0:30 | **The problem.** Open DevTools → Elements. Hover the canvas. | “This is what an agent sees when it opens a 3D tool: one empty `<canvas>`. No DOM, no buttons, nothing to scrape. Every object, every light lives in the scene graph — invisible. Without WebMCP this app isn't slow for an agent — it's closed.” |
-| 0:20–1:20 | **The collaboration.** Inspector open next to the studio. Prompt: *“Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area. Make it evening.”* | Objects pop in while you talk. Then — while the agent is still calling tools — **grab the camera and drag an object with the mouse.** Say: “The agent works through WebMCP tools on the live scene. My mouse never stops working. We're two users on one state.” |
-| 1:20–2:10 | **The proof.** Prompt: *“Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.”* Orbit the camera during the staggered spawn. | “Forty trees, exclusion zones respected. This takes twenty minutes by hand — and by hand is the ONLY other way, because a canvas is unreachable for agents.” |
-| 2:10–2:40 | **Trust & transparency.** Show the Tool Log panel, then `chrome://webmcp-internals` or the Inspector's tool list. Call `describe_scene` and point at the JSON. Click ↺ (reset) after an agent mistake — or `undo`. | “Every call is visible to the user. Every mutation is reversible. Agents report only after the scene actually settled — scene_version and operation_id included.” |
-| 2:40–3:00 | **The reveal.** Agent: *“Hide the UI, then fly a cinematic tour: window → lamp → hero shot of the table.”* HUD fades, camera glides, hold on the final shot. | “The agent isn't clicking — it's directing. WebMCP turns the open web into an agent platform: today it made a canvas collaborative, tomorrow every site gets an agent interface designed by the people who know it best.” |
+## Story and narration
 
-## Recording checklist
+| Time | Visual beat | English voice-over |
+| --- | --- | --- |
+| 0:00–0:14 | A place to breathe | What if you and your agent took a little break... and built somewhere to breathe? I start with a pond. Just a quiet patch of water, and a little room to imagine. |
+| 0:14–0:30 | Our starting point | A cabin goes beside it. That's our starting point. I ask for forty trees, mostly behind the house, with a few around the water, and soft lights to make it feel welcoming. |
+| 0:30–0:56 | A forest around our choices | The agent reads the scene I actually made. It keeps my cabin and pond in place, then builds a layered forest behind them. Taller trees at the back, little openings around the water. Warm lights settle between the trees, reflections catch the pond, and the whole place begins to feel alive. |
+| 0:56–1:17 | A path home | Now, a stone path to the front door. The agent follows the space between the cabin and the pond, laying a gentle curve of stepping stones. It's a small detail, but suddenly there's a way into this world. You can imagine walking home. |
+| 1:17–1:33 | A little more us | I move a couple of stones myself. A little more space here, a softer curve there. We can keep taking turns, making small choices until the scene feels like somewhere we'd want to stay. |
+| 1:33–1:52 | The agent sees my changes | WebMCP is what lets us work together. The agent can read the real objects, their positions, and my latest changes. It sees both stones where I left them, so our next step starts from our scene, as it is now. |
+| 1:52–2:18 | Let the evening in | One last request: a cozy evening, my lofi music, and a slow, endless camera. We move in close enough to feel the warm windows and glowing water. The controls fade away. The work is done, and for a moment... we can simply be here. |
+| 2:18–2:37 | A moment, built together | A small world. A shared little escape. Built with an agent... and made for a moment of calm. |
 
-- [ ] Chrome profile with `chrome://flags/#enable-webmcp-testing` enabled (relaunch first!)
-- [ ] Model Context Tool Inspector extension installed
-- [ ] Window ~1600×900, browser zoom 100%, DevTools theme dark
-- [ ] Fresh load before each take (the ↺ reset button also restores the starter scene)
-- [ ] Mic level check; say the tool names out loud — they match the Tool Log entries on screen
-- [ ] Screen capture at 30 fps minimum (spawn animations + camera flies are the product)
+## Actual requests
 
-## Reproducible demo prompts (from boot state)
+Place the pond and cabin through the normal UI, then type into the visible request control:
 
-1. `Set the mood to golden hour, then frame the scene like a movie still.`
-2. `Make it night and let the lamp glow warm, then put some lofi on.`
-3. `Build a cozy camp spot: a table with a chair, a lamp next to it, and a window facing the seating area.`
-4. `Scatter 40 trees across the left half of the meadow, but keep the stepping stones and the seating area completely clear.`
-5. `What's in the scene right now? Then move the table two meters toward the window and give me a hero shot of it.`
-6. `Hide the UI, then fly a cinematic tour: start on the window, sweep past the lamp, and end on a hero shot of the table.`
-7. `Scatter 50 trees on the right side using seed 42 — I want to be able to recreate this exact forest.`
-8. `Build the whole camp in one go — table, chair, lamp, warm light — and end on a hero shot.`  (exercises `batch`)
-9. `Package this scene as a share link I can send to a friend.`  (exercises `export_scene`; the ⧉ button copies the same link)
+> Please grow a layered forest of 40 trees behind the cabin, with some around the pond and warm little lights.
 
-(For prompt 1 after boot the scene already *is* golden hour — the agent should just frame; if you want visible change use: `Set the mood to moonlit, then back to golden hour, then frame the scene like a movie still.`)
+After the forest and lights appear:
 
-## ✅ Verified chess sequence (tested end-to-end, 2026-09-01)
+> Please add a gently curved stone path from the cabin to the pond.
 
-These are the exact tool calls the chess prompts produce — all verified working:
+Move two path stones by hand. Ask the agent to read their changed positions, then type:
 
-```
-1. add_object    { type: "chessboard", position: {x:0.5, z:2.5}, rotation_y: 15, name: "chessboard" }
-2. board_square  { board: "chessboard", square: "e2" }              → world position of e2
-3. add_object    { type: "chess_piece", piece: "pawn", side: "white", position: <e2>, name: "white pawn e2" }   // piece: pawn|rook|knight|bishop|queen|king, side: white|black
-4. set_material  { targets: ["black pawn a7", …], color: "#3a3632" } (black set)
-5. board_square  { square: "e4" }                                    → world position of e4
-6. transform_object { targets: ["white pawn e2"], op: "move", mode: "absolute", x: <e4.x>, z: <e4.z> }
-7. camera_path   { keyframes: [ {target:"chessboard", angle:"front"}, {target:"chessboard", angle:"side"} ] }
-8. delete_objects { name_contains: "pawn" }                          → removes every pawn, undoable
-9. undo          {}                                                  → pawns are back
-```
+> Please set a cozy evening mood, play Aurora Drift, and begin a close endless camera journey.
 
-Verified results: move lands exactly on the square coordinate (±0.01), `delete_objects` removed 9/9 pawns, `undo` restored all 9, camera path completed 2/2 shots.
+The agent inspects live state and uses native `add_grove`, `add_path`, scene queries, lighting, music, camera and presentation tools. The film records those actual calls and the visible human requests. The Demo browser sidebar displays only real requests and actual WebMCP result receipts.
 
-## Manual tool check (Inspector → manual execute, no LLM needed)
+## Continuity and visual direction
 
-```json
-{ "tool": "add_object", "input": { "type": "tree", "position": { "x": -2, "z": 1 }, "name": "pine" } }
-{ "tool": "set_lighting", "input": { "preset": "night_neon", "intensity": 1.2 } }
-{ "tool": "scatter", "input": { "type": "rock", "count": 30, "area": { "center_x": -12, "center_z": 6, "width": 14, "depth": 10 }, "exclusion_zones": [{ "x": -12, "z": 6, "width": 5, "depth": 5 }] } }
-{ "tool": "frame_camera", "input": { "target": "scene", "angle": "hero", "focal_length": 50 } }
-{ "tool": "describe_scene", "input": {} }
-{ "tool": "undo", "input": {} }
+One clean page, one retained scene. The forty-tree grove is designed around the human cabin, dense behind it and lightly framing its sides. A warm, curved path leads the eye between house and pond. Two hand-adjusted stones remain in place after the agent's next actions. The final camera stays close enough to appreciate windows, lanterns and water while moving slowly through a coherent view.
+
+All scene action remains at original speed. The footage covers eight exact contiguous ranges on one native browser page; the same editable scene persists throughout with no cuts. No action is invented, reconstructed or accelerated. The narration follows the real stages, with brief natural pauses; the ending deliberately leaves music and living scenery. No code overlay or evidence card covers it. See [recording-plan.md](docs/recording-plan.md) and [CAPTURE-FORMAT.md](docs/CAPTURE-FORMAT.md).
+
+## YouTube title
+
+A Moment, Built Together — Agent-Native 3D Scene Studio | WebMCP Challenge
+
+## YouTube description draft
+
+Publish only after the new footage and finished film have been reviewed. Replace any link that does not serve the same submitted application build.
+
+```text
+What if you and your agent took a little break — and built somewhere to breathe?
+
+I place a pond and cabin. My browser agent reads the real scene and adds forty trees and warm garden lights around my choices. I ask for a curved stone path, then adjust two stones myself. The agent reads my changes before creating a cozy evening with my lofi music and a close, endless camera. The controls disappear, and we take a moment to enjoy what we made.
+
+WebMCP gives the connected browser agent access to real object identities, positions, human edits and scene actions. The human and agent work in the same editable world. This film keeps one native browser page and one scene throughout, with no cuts or scene replacements. The labelled Demo browser sidebar shows the requests and receipts derived from actual native tool responses. No scene action is invented or reconstructed for the edit.
+
+English narration: ElevenLabs Lily — Velvety Actress, eleven_v3. Music: Aurora Drift, created and supplied by Thomas Werner. English subtitles use actual speech alignment.
+
+Try it: https://agent-native-3d-studio.netlify.app
+Source and MIT license: https://github.com/ThomasWerner187/agent-native-3d-studio
+Testing guide: https://github.com/ThomasWerner187/agent-native-3d-studio/blob/main/docs/JUDGE-GUIDE.md
+
+Built by Thomas Werner with TypeScript, three.js, Vite and WebMCP for The WebMCP Challenge.
 ```
 
-
-## Agent speed test (Codex / CDP-only harness)
-
-Baseline (2026-09-01, before the description-recipe fix): **3m 12s** end-to-end for
-"night_neon + chessboard + white king + black queen + hero shot" — 8 successful tool
-calls, zero scene errors. The wall-clock went into model turns, not the scene
-(scene animations total <3s). Wasted turns observed:
-1. Tab resolution (ChatGPT-internal, not page-fixable).
-2. Failed first `executeTool()` — passed the tool *name*; the API needs the
-   registered tool *object* from `getTools()`. Cost: fail + recovery turn.
-3. One turn reading tool schemas.
-The agent never looked at the console recipe, the DOM manifest or `help` —
-it read the `getTools()` listing. Fix shipped: every tool description now ends
-with the exact invocation recipe (all within the 500-char budget).
-
-**How to re-run the timed test (~30 s of setup):**
-1. Reload https://agent-native-3d-studio.netlify.app (green chip "WebMCP live · 20 tools").
-2. Open the ChatGPT sidebar → New chat.
-3. Paste and send:
-   > Drive the 3D scene in the current browser tab using its WebMCP tools. Steps:
-   > (1) Switch the lighting to the night_neon preset. (2) Add a chessboard, then
-   > place a white king and a black queen on two of its squares. (3) Frame the
-   > chessboard for a hero shot. Report each tool call and its JSON result.
-4. Measure: sidebar "You said" timestamp → first `ok:true` in the page Tool Log.
-   Compare against 3m 12s; check the sidebar transcript for a failed-call turn
-   (there should be none now).
-
-**Retro questions for Codex** (paste into the same chat after the run):
-> Answer briefly, don't touch the scene: (1) What cost you the most turns in that
-> run? (2) The tool descriptions each end with a call recipe now — did you see and
-> use it? (3) What single page change would cut your time-to-first-successful-call
-> the most?
-
-## Current feature showcase (20 tools — smoke-verified 20/20 via `npm run smoke`)
-
-- **Watch the agent build** (button): the curated 25 s show — best first beat, zero setup.
-- **batch**: whole setups in one call — "the measured lesson: turns are the bottleneck, not the scene".
-- **export_scene / ⧉ button**: scene becomes a share link that opens for anyone, no WebMCP — persistence without a backend.
-- **chess_move + board_square**: agent-vs-itself chess with follow/hero cameras — the most surprising beat.
-- **set_music**: three self-made Suno tracks; "…and put some lofi on" lands every time.
-- Full tool smoke test: `npm run smoke` → `20/20 tools verified` (`scripts/smoke-result.json`, CI runs it on every push).
-
-## Driving Codex/ChatGPT when the harness cannot inject WebMCP tools
-
-There are two different Codex surfaces, and they behave differently:
-
-- **The ChatGPT sidebar inside Chrome** — has the "Chrome control skill" and can evaluate JS in the page. It finds the tools itself (`getTools()` + `executeTool()`); a plain prompt like *"Drive the 3D scene using its WebMCP tools…"* works (verified: 8-call neon-chess run, 3m12s baseline).
-- **Desktop/Codex sessions without injection** — they read the page (they quote the green "WebMCP live · 20 tools" chip) but have no injected tool surface, and some will *refuse* instead of using the in-page path (observed: "this session exposes none of those tools for invocation"). The page now carries the recipe as readable text — the **agent bridge** in the tool-log panel and the status chip tooltip — so point the agent at it explicitly.
-
-**Say it like a human** — since the page ships the agent bridge (the readable recipe in the tool-log panel), the natural prompt should just work; the agent reads the bridge and finds the invocation path itself:
-
-> Write "THOMAS" in glowing letters where the OPENAI word stands, add two more chess pieces to the board, and play two real moves — then give me a top view.
-
-Use the explicit version below **only** if an agent still refuses (some surfaces never look at the page and demand injected tools — never phrase it as "use the webmcp tool", singular; agents search for a literal tool with that name):
-
-> Using only this page's WebMCP tools — callable from the page's JS context:
-> `const mc = document.modelContext; const tools = await mc.getTools(); const call = (name, args) => mc.executeTool(tools.find(t => t.name === name), JSON.stringify(args));`
-> First run `await call("help", {})` and read the playbook. Then, still without any DOM clicks:
-> 1. Delete the pixel word "OPENAI" (`delete_objects { name_contains: "OPENAI px" }`) and build the word "THOMAS" the same way (boxes named "THOMAS px N", `animate: false`, same warm glow via one `set_material` over the new names).
-> 2. Place 2 more chess pieces on the forest board (`add_object type:"chess_piece"` with `piece` and `side`), and play 2 real moves with `board_square` + `chess_move`.
-> 3. Finish on a top hero shot of the board.
-
-Never write "use the webmcp tool" (singular) — agents look for a literal tool named "webmcp", find none, and refuse.
+After publication, verify the public YouTube watch page and add its link to Devpost. The green Submitted status is the final submission gate.

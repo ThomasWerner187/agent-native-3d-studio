@@ -1,118 +1,122 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent-Native 3D Scene Studio</title>
-    <meta name="description" content="A 3D scene studio where a human and an AI agent work on the same live scene — via WebMCP." />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>" />
-  </head>
-  <body>
-    <div id="app">
-      <canvas id="viewport"></canvas>
-
-      <!-- top-left brand + WebMCP status -->
-      <header class="hud hud-top">
-        <div class="brand">
-          <div class="brand-title">Agent-Native 3D Scene Studio</div>
-          <div class="brand-sub">human + agent, one live scene</div>
-        </div>
-        <div id="webmcp-status" class="status-chip status-checking" title="WebMCP availability">
-          <span class="status-dot"></span>
-          <span class="status-text">checking WebMCP…</span>
-        </div>
-      </header>
-
-      <!-- tool log, right side -->
-      <aside id="tool-log" class="hud panel">
-        <div class="panel-head">
-          <span class="panel-title">Tool Log</span>
-          <span class="panel-sub">webmcp calls, live</span>
-          <button id="scene-share" class="mini-btn" title="Copy a link to this exact scene — opens anywhere, no WebMCP needed" aria-label="Copy scene share link">⧉</button>
-          <button id="music-toggle" class="mini-btn" title="Lofi on/off — self-made Suno tracks" aria-label="Toggle lofi music">♪</button>
-          <button id="scene-reset" class="mini-btn" title="Reset the scene to its original state" aria-label="Reset scene">↺</button>
-          <button id="tool-log-toggle" class="mini-btn" title="Collapse" aria-label="Collapse tool log">–</button>
-        </div>
-        <div id="tool-log-entries" class="panel-body">
-          <div class="log-empty">No tool calls yet.<br />Open an agent (e.g. the Model Context Tool Inspector) and ask it to build something.</div>
-        </div>
-        <div id="agent-bridge" class="agent-bridge">
-          <div class="agent-bridge-title">AGENTS — no WebMCP client in your harness?</div>
-          <div class="agent-bridge-body">The tools are not injected into your context, but they are callable from this page's JS context. Evaluate exactly this in the page:</div>
-          <pre class="agent-bridge-code">const mc = document.modelContext;
-const tools = await mc.getTools();        // 20 tools
-const help = tools.find(t => t.name === "help");
-await mc.executeTool(help, "{}");         // returns the full playbook JSON</pre>
-          <div class="agent-bridge-body">Call every tool this way — pass <code>JSON.stringify(args)</code> as the second argument. Results are JSON strings with <code>ok</code>, <code>result</code> and <code>scene_version_after</code>.</div>
-        </div>
-      </aside>
-
-      <!-- one story, not nine prompts -->
-      <div id="prompt-card" class="hud panel">
-        <div class="panel-head">
-          <span class="panel-title">Try it with an agent</span>
-          <button id="prompt-card-close" class="mini-btn" title="Dismiss" aria-label="Dismiss prompts">×</button>
-        </div>
-        <div class="panel-body prompts">
-          <p class="story-line">Describe a world. Watch an agent build and direct it — <strong>while you keep control.</strong></p>
-          <button class="prompt hero-prompt" data-copy="Plant an avenue of trees along both sides of the stone path, add a few boulders between them, then fly an exciting camera flight right through the avenue.">
-            <span>“Plant an avenue of trees along the stone path, then fly an exciting camera flight through it.”</span>
-            <span class="copy-hint">copy</span>
-          </button>
-          <details class="experiments">
-            <summary>More experiments</summary>
-            <button class="prompt" data-copy="Play a short chess game against yourself on the board — 6 legal moves total. After each move, perform it with chess_move and switch the camera to the moving side with a follow angle. Finish on a hero shot of the board.">
-              <span>“Play a short chess game against yourself, switching the camera to the moving side after every move.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Set up a chessboard with pieces on the meadow next to the picnic table — name the pawns after their squares. Zoom in with the camera and play your first move against me, animating the piece.">
-              <span>“Set up a chessboard next to the table, zoom in, and play your first move against me.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Delete all pawns from the chessboard so we play kings-only. Then switch the camera to whichever side's turn it is before every move.">
-              <span>“Delete all pawns — kings-only chess. Switch the camera to whoever's turn it is.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Make it night, let the street lamp glow warm, then hide the UI and give me a cozy cinematic shot of the seating area.">
-              <span>“Make it night, let the lamp glow warm, then hide the UI and give me a cozy cinematic shot.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-            <button class="prompt" data-copy="Set the mood to golden hour, put the lofi music on, and frame the whole scene like a movie still — three quarter angle, portrait lens.">
-              <span>“Set the mood to golden hour, put the lofi music on, and frame the scene like a movie still.”</span>
-              <span class="copy-hint">copy</span>
-            </button>
-          </details>
-        </div>
-      </div>
-</div>
-
-      <button id="show-agent" class="hud show-btn">▶ Watch the agent build</button>
-
-      <!-- controls hint, bottom center -->
-      <div id="hint-bar" class="hud">drag to orbit&ensp;·&ensp;scroll to zoom&ensp;·&ensp;click to select&ensp;·&ensp;drag an object to move it&ensp;·&ensp;<kbd>⌫</kbd> delete&ensp;·&ensp;<kbd>H</kbd> hide UI&ensp;·&ensp;<a href="?agent=1" class="hint-link">no WebMCP flag? try the built-in harness →</a></div>
-
-      <div id="toast" class="toast"></div>
-
-      <!-- cinematic overlays -->
-      <div class="vignette"></div>
-      <div class="grain"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent-Native 3D Scene Studio</title>
+  <meta name="description" content="Shape a cinematic forest together. Your hands and your browser agent, on one live 3D canvas through WebMCP." />
+  <meta name="theme-color" content="#09151b" />
+  <meta property="og:title" content="Agent-Native 3D Scene Studio" />
+  <meta property="og:description" content="Build a little world together. A living 3D canvas for you and your WebMCP browser agent." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://agent-native-3d-studio.netlify.app/social-preview.jpg" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23dcab66' d='M20 3 36 12v16L20 37 4 28V12z'/%3E%3Cpath fill='none' stroke='%230d2228' stroke-width='2' d='m5 12 15 9 15-9M20 21v15'/%3E%3C/svg%3E" />
+</head>
+<body>
+<div id="app">
+  <div id="demo-browser-bar" hidden>
+    <span class="demo-browser-label">Demo browser</span>
+    <div class="demo-address"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="8.5" width="9" height="7" rx="2"/><path d="M7 8.5V6a3 3 0 0 1 6 0v2.5"/></svg><span>Scene Studio</span></div>
+    <button id="demo-agent-toggle" type="button" aria-label="Open agent sidebar" aria-expanded="false" aria-controls="demo-agent-panel" title="Open your agent"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M8.5 12h7M12 8.5v7M3 12H1m22 0h-2M12 3V1m0 22v-2"/></svg></button>
+  </div>
+  <aside id="demo-agent-panel" aria-label="Demo agent sidebar" hidden>
+    <header class="demo-agent-head"><div><strong>Agent</strong><span>WebMCP · live actions</span></div><button id="demo-agent-close" type="button" aria-label="Close agent sidebar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></header>
+    <div id="demo-agent-messages" role="log" aria-label="Conversation" aria-live="polite"><p class="demo-agent-empty">A little world.<br>Built together.</p></div>
+    <form id="demo-agent-form"><label class="sr-only" for="demo-agent-input">Message your agent</label><textarea id="demo-agent-input" rows="3" maxlength="1200" placeholder="What shall we make?"></textarea><div class="demo-agent-compose-foot"><span id="demo-agent-status" role="status">Ready for your agent</span><button type="submit" aria-label="Send idea"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V5m-4 4 4-4 4 4"/></svg></button></div></form>
+  </aside>
+  <canvas id="viewport" tabindex="0" aria-label="Interactive 3D forest. Drag empty space to orbit; drag an object to move it. Escape clears selection. H toggles controls."></canvas>
+  <nav id="quiet-controls" class="hud quiet-controls" aria-label="Build your world">
+    <button type="button" data-add-object="pond">Add pond</button>
+    <button type="button" data-add-object="cabin">Add cabin</button>
+    <button id="scene-empty" type="button" title="Clear this scene with an undo point">Start empty</button>
+    <button id="music-toggle" type="button" aria-label="Toggle lofi music" aria-pressed="false" title="Toggle lofi music"><span data-icon="music" aria-hidden="true"></span><span>Sound</span></button>
+    <button id="studio-immersive" type="button" aria-label="Hide controls for an immersive view" title="Hide controls; H brings them back">Immersive</button>
+    <button id="studio-tools-toggle" type="button" aria-expanded="false" aria-controls="studio-header studio-about prompt-card studio-controls selection-coordinates agent-bridge">Studio tools</button>
+  </nav>
+  <header id="studio-header" class="hud hud-top studio-advanced-only">
+    <div class="brand"><span class="brand-mark" data-icon="cube" aria-hidden="true"></span><div><div class="brand-title">Scene Studio</div><div class="brand-sub">Agent-native · WebMCP</div></div></div>
+    <div class="top-actions">
+      <div id="webmcp-status" class="status-chip status-checking"><span class="status-dot"></span><span class="status-text">Connecting tools…</span></div>
+      <button id="scene-share" class="icon-btn" data-icon="share" aria-label="Copy scene share link" title="Copy scene share link"></button>
+      <button id="quality-toggle" class="quality-btn" aria-pressed="true">Cinematic</button>
     </div>
-    <!--
-      AGENTS: this page drives its 3D scene through WebMCP tools
-      (document.modelContext). If your harness cannot inject WebMCP tools,
-      read this manifest and the console for the standard in-page recipe.
-      Human docs: README.md § "How the WebMCP integration works".
-    -->
+  </header>
+  <section id="studio-about" class="hud scene-intro studio-advanced-only" aria-label="About this scene">
+    <h1>A little world.<br><em>To slow down in.</em></h1>
+    <p>Place a pond. Find a home for your cabin.<br>Let your agent grow the world around them.</p>
+    <div class="collaboration-entry" aria-label="Build your world">
+      <div class="build-meta"><span id="world-count">Your world, together</span></div>
+      <p id="build-hint">Add a pond and cabin, then drag them into place.</p>
+    </div>
+    <details class="preset-worlds"><summary>Watch a lofi world</summary><div class="lofi-entry">
+      <div class="world-options"><label class="sr-only" for="lofi-scene">Starting world</label><select id="lofi-scene"><option value="lakeside_cabin">Lakeside cabin</option><option value="lantern_grove">Lantern grove</option><option value="island_hideaway">Island hideaway</option></select><label class="sr-only" for="lofi-mood">Lofi atmosphere</label><select id="lofi-mood"><option value="moonlit">Moonlight</option><option value="golden_hour">Golden evening</option></select></div>
+      <button id="lofi-create">Create a lofi scene <span data-icon="share" aria-hidden="true"></span></button>
+      <label class="wander-option"><input id="lofi-cycle" type="checkbox" checked> Wander to a new world every 3 minutes</label>
+      <small>Creates a new preset world.</small>
+    </div><div id="starter-layout" class="starter-layout"><p>Starter camp layout</p><small>Local tools to rearrange the sample grove.</small><div class="control-group"><button id="layout-try" title="Run the starter layout tool locally">Try layout</button><button id="layout-undo" disabled>Undo layout</button><button id="layout-redo" disabled>Redo</button></div></div></details>
+    <div class="actor-legend"><span class="human-dot"></span> You <span class="agent-dot"></span> Your agent</div>
+  </section>
+  <aside id="tool-log" class="hud panel" aria-label="Tool activity">
+    <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool activity" aria-expanded="true" aria-controls="tool-log-entries agent-bridge"></button></div>
+    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Your hands. Your agent. One world.</div></div>
+    <details id="agent-bridge" class="agent-bridge studio-advanced-only"><summary>Connect your agent</summary>
+      <p>Open this page with a WebMCP-aware browser agent and ask it to continue in its chat. Your agent reads your live placements and builds in the same world. The optional idea composer stores a brief on this page; it does not send a chat message.</p>
+      <p>For a compatible JavaScript harness:</p>
+      <pre>const mc = document.modelContext;
+const tools = await mc.getTools();
+await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
+      <a href="?agent=1">Open local tool inspector ↗</a>
+    </details>
+  </aside>
+  <section id="selection-card" class="hud selection-card" aria-label="Selected object" hidden>
+    <div class="selection-heading"><span class="human-dot"></span><span id="selection-name">Object selected</span><span id="selection-provenance" class="provenance-badge"></span><button id="selection-clear" class="mini-btn" data-icon="close" aria-label="Deselect object"></button></div>
+    <div id="selection-position" class="studio-advanced-only"></div>
+    <div id="selection-coordinates" class="selection-fields studio-advanced-only">
+      <label>X<input id="selection-x" type="number" step="any" min="-58" max="58" aria-label="Object position X"></label>
+      <label>Z<input id="selection-z" type="number" step="any" min="-58" max="58" aria-label="Object position Z"></label>
+      <label>Turn °<input id="selection-rotation" type="number" step="any" aria-label="Object rotation in degrees"></label>
+      <label>Size<input id="selection-scale" type="number" step="any" min="0.1" max="8" aria-label="Object size"></label>
+    </div>
+    <div class="selection-foot"><span id="selection-edit-note" class="studio-advanced-only">Drag to move, or adjust a value.</span><button id="selection-delete" type="button" aria-describedby="selection-name">Delete</button></div>
+  </section>
+  <section id="prompt-card" class="hud command-bar studio-advanced-only is-collapsed" aria-label="Create together">
+    <button id="prompt-card-open" type="button" aria-label="Show idea composer" aria-expanded="false" aria-controls="creative-request-form"><span class="human-dot" aria-hidden="true"></span> Your next idea <span aria-hidden="true">↗</span></button>
+    <form id="creative-request-form" class="request-composer" hidden>
+      <div class="request-heading"><label for="creative-request"><span class="human-dot"></span> Your next idea</label><button id="prompt-card-close" type="button" class="mini-btn" data-icon="close" aria-label="Minimize idea composer" aria-expanded="false" aria-controls="creative-request-form"></button></div>
+      <div class="request-input-row"><textarea id="creative-request" rows="2" maxlength="1200" placeholder="Grow a forest behind my cabin, with warm little lights…" aria-describedby="request-status"></textarea><button id="request-share" type="submit">Share<br>with agent <span aria-hidden="true">↗</span></button></div>
+      <div class="request-suggestions" aria-label="Ideas to begin with"><button id="prompt-build" type="button" data-request="Add 40 trees, mostly as a forest behind my cabin, and beautiful warm lights around the clearing. Keep my pond and cabin where I placed them.">Grow a forest</button><button id="prompt-path" type="button" data-request="Please add a curved stepping-stone path from the cabin porch to the pond.">Lay a stone path</button><button id="prompt-atmosphere" type="button" data-request="Keep my stone edits. Make it cozy evening, add music, and bring the camera closer for a slow endless drift. Hide the controls so we can relax.">Settle into evening</button></div>
+    </form>
+    <div id="request-status" class="command-caption" role="status" hidden>Share your idea, then ask your connected browser agent to continue.</div>
+  </section>
+  <nav id="studio-controls" class="hud scene-controls studio-advanced-only" aria-label="Scene controls">
+    <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Moonlight</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-orbit" aria-pressed="false">Orbit</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
+    <div class="control-group"><button id="scatter-undo" title="Undo the latest scattered additions, keeping later edits" disabled>Undo additions</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
+  </nav>
+  <section id="lofi-player" class="hud lofi-player studio-advanced-only" aria-label="Lofi session" hidden>
+    <div class="lofi-player-head"><div><div id="lofi-progress-label">Growing your world</div><h2 id="lofi-phase" aria-live="polite">A quiet place by the water</h2><p id="lofi-shot">Settling into the scene</p></div><button id="lofi-view" title="Hide interface; H to return">Clean view</button></div>
+    <progress id="lofi-progress" max="100" value="0" aria-label="Scene construction progress"></progress>
+    <div class="lofi-player-controls"><button id="lofi-pause">Pause</button><button id="lofi-next">Next world</button><label class="sr-only" for="lofi-motion">Camera motion</label><select id="lofi-motion"><option value="cinematic">Cinematic drift</option><option value="orbit">Endless orbit</option></select><button id="lofi-sound" aria-pressed="false">Enable sound</button><label class="sr-only" for="lofi-volume">Music volume</label><input id="lofi-volume" type="range" min="0" max="100" value="38" aria-label="Music volume"><button id="lofi-proof" aria-pressed="false">Tool activity</button><button id="lofi-exit" data-icon="close" aria-label="Stop lofi session"></button></div>
+    <p id="lofi-sequence" class="sequence-note"></p>
+    <div class="lofi-player-foot"><span id="lofi-track">Quiet for now</span><span>Live 3D · Yours to change</span></div>
+  </section>
+  <button id="return-controls" aria-label="Show controls">Show controls</button>
+  <button id="show-agent" class="hud show-btn studio-advanced-only">Guided tour</button>
+  <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true"><div id="show-cue-kicker"></div><div id="show-cue-title"></div><div id="show-cue-detail"></div></div>
+  <div id="hint-bar" class="hud studio-advanced-only">DRAG TO ORBIT <span>·</span> SCROLL TO EXPLORE <span>·</span> H TO HIDE UI</div>
+  <div id="toast" class="toast" role="status"></div><div class="vignette"></div><div id="scene-transition" class="scene-transition" aria-hidden="true"></div>
+  <section id="startup-error" class="startup-error" role="alert" hidden><h1>This world needs WebGL.</h1><p>Your browser could not start its 3D renderer. Enable hardware acceleration or open this page in a current browser, then reload.</p><button id="retry-renderer">Reload scene</button></section>
+  <noscript><section class="startup-error"><h1>A little world needs JavaScript.</h1><p>Enable JavaScript to open the interactive studio.</p></section></noscript>
+</div>
     <script type="application/json" id="agent-manifest">
     {
       "page": "Agent-Native 3D Scene Studio (three.js)",
-      "tools": "document.modelContext — 20 tools: help, describe_scene, query_scene, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
-      "start_here": "call the help tool for the full playbook (workflow + recipes)",
+      "tools": "document.modelContext — 29 tools: add_grove, add_path, compose_lofi_scene, control_lofi, set_camera_motion, help, describe_scene, query_scene, arrange_scene, undo_layout, redo_layout, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, undo_scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
+      "start_here": "Call help, then describe_scene and query_scene. Continue the current scene from the user's live placements. Use scatter with anchor and clearance for additive surroundings; do not compose a replacement preset unless asked.",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
-      "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; mutating tools animate and reply after the animation settled",
-      "human_parallel": "the user's mouse works at all times and overrides agent camera moves"
+      "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; most mutations reply after settling; compose_lofi_scene starts a background session and set_camera_motion starts infinite motion, both return immediately; describe_scene reports progress",
+      "human_parallel": "The user's mouse and object inspector work on this same live scene. Read selected_id, human_edits, recent_changes, created_by, last_changed_by and human_revision before continuing. Preserve human edits; undo_scatter removes only untouched additions. Camera motion pauses when the human takes over."
     }
     </script>
     <script type="module" src="/src/main.ts"></script>
-  </body>
+</body>
 </html>

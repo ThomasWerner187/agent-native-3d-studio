@@ -1,35 +1,86 @@
-# Agent-Native 3D Scene Studio — Devpost description
+# Agent-Native 3D Scene Studio
 
-Live: https://agent-native-3d-studio.netlify.app · Code: https://github.com/ThomasWerner187/agent-native-3d-studio
+Copy-ready English Devpost fields. The final application, native evidence and video are complete; publication and the final Devpost checks remain tracked in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).
 
-A live three.js scene studio where an AI agent and a human work the same scene at the same time — the agent through 20 WebMCP tools (building, scattering, lighting, music, cinematic camera direction), the human through the mouse, neither ever blocking the other. Every agent action is a real, inspectable WebMCP tool call; every mutation is reversible.
+## Project name
 
-## Why this use case is a strong fit for WebMCP
+Agent-Native 3D Scene Studio
 
-Canvas applications expose almost no reliable semantic structure to DOM- and accessibility-tree-based agents: a WebGL canvas is a single empty `<canvas>` element — no ids, no queries, no reversible actions. Vision-driven agents can drag pixels, but they cannot verify what they changed. All state (objects, transforms, materials, camera, light) lives invisibly in the scene graph. That makes this project the sharpest possible test of what WebMCP actually is: most demos put agent tools on top of pages an agent could already drive through the DOM, so WebMCP is an accelerant there. Here it is the **prerequisite**. Without WebMCP, this studio is not slow for an agent — it does not exist for the agent. And the pattern is not specific to 3D: CAD, GIS and mapping, medical imaging, DAWs, video editors, data-visualization dashboards, game engines and canvas-based design tools are all agent-inoperable today for exactly the same reason. This studio proves the smallest end-to-end path from "closed canvas" to "agent-native application", with the same properties those tools will need: precise structured operations, live state feedback, and human-safe reversibility.
+## Elevator pitch
 
-## How it creates a better experience
+Take a little break with your browser agent. Place a cabin and pond, grow a forest together, shape a path, then settle into warm light, lofi music and an endless camera. One scene, shared creative control through WebMCP.
 
-For the human: the agent is not a pointer-bot fighting you for the mouse. It works through structured calls while you keep dragging, clicking and orbiting — "Human took control" appears the moment you grab the camera mid-flight, and the agent reports `applied: false` instead of pretending. Every call appears in an on-page tool log told in plain language ("Planting 40 trees", "Setting the mood: golden_hour"), with the full JSON one click away. Every mutation auto-saves a restore point: `undo` steps back, ↺ resets, `export_scene` turns the scene into a share link anyone can open — no backend, no setup.
+## Inspiration
 
-For the agent: 20 tools with typed schemas, enums instead of free text (`piece: pawn|rook|knight|bishop|queen|king`), descriptive self-correcting errors, `scene_version` + `operation_id` on every mutation, side-effect annotations, and a `help` tool that returns the full playbook in one call. Tool descriptions carry the exact in-page invocation recipe, so even harnesses that drive Chrome without a WebMCP client succeed on their first call.
+I wanted to give myself and my agent a short break from getting things done. What if we built somewhere to breathe?
 
-## What people and agents can now do together that was difficult or impossible before
+I could choose where a cabin and pond belong. The agent could do the patient work of planting forty trees and placing small lights. Then I could move a couple of stones, change my mind, and ask it to help again. That simple back-and-forth became the project: a quiet place we make together, where the person keeps the mouse and the agent understands what changed.
 
-- **Simultaneous, conflicting collaboration on one live 3D scene.** The agent directs a 4-shot cinematic camera flight while you drag an object through frame; your grab wins, visibly, and the tool says so. Two users, one state, no lock dialog.
-- **One-sentence world building with guardrails.** "Scatter 40 trees on the left half but keep the path and seating clear" is ~20 minutes of manual click-place-adjust work — and literally impossible for an agent without WebMCP (there is nothing to click). With `scatter` + `exclusion_zones` it is seconds, seeded and reproducible.
-- **Agent chess with directed cinematography.** `board_square` gives the geometry, the agent supplies the rules, `chess_move` performs the move with a small lift and flies a follow camera to the mover's side. The agent plays against itself while switching perspectives — as a live scene, not a log.
-- **Scenes as artifacts.** `export_scene` packs the entire state into a URL; anyone — judge, friend, another agent — opens it and sees the exact scene, then modifies it with their own agent.
-- **Mood, not just geometry.** The agent sets lighting presets, turns on lofi (`set_music`, self-made Suno tracks), hides the HUD and hands you a finished cinematic shot.
+## What it does
 
-## How WebMCP was implemented
+A person places a cabin and pond in a live 3D canvas, then writes an idea into the shared request panel. The connected browser agent reads that request alongside the actual objects, positions and edit history. It can grow a layered forty-tree forest behind the cabin and add warm lights while preserving the human's placements.
 
-- **Registration:** `document.modelContext.registerTool({name, description, inputSchema, execute, annotations}, {signal})` — 20 tools registered at boot behind a feature check; the page shows a live status chip and an on-page tool log of every call.
-- **Schema design:** enums wherever hallucination is possible (object types, chess pieces, lighting presets, camera angles); ids *and* human-readable names as targets; strict validation in code with descriptive, self-correcting errors ("Ambiguous target "tree" matches 3 objects — use an id").
-- **The reliability contract:** a uniform envelope on every invocation — `{ok, operation_id, actor, scene_version_before, scene_version_after, applied, duration_ms, result|code+error}` — generated centrally. Mutating tools `await` their animation and report the *live rendered* values, so an agent's follow-up read always matches its last write. Human interruption is reported as `applied: false` with live state — never as a fake success.
-- **Concurrency & cancellation:** mutating tools accept `expected_scene_version`; a stale call is rejected with a typed `stale_scene` error instead of overwriting the human's work. Cancellation signals propagate through the invocation layer into running animations, and `batch` is atomic: any failed operation rolls the whole batch back to one snapshot.
-- **Annotations & reversibility:** `readOnlyHint` on query tools, `idempotentHint` on state-setting tools, `destructiveHint` on destructive ones; every mutation auto-captures a restore point (`undo`, `snapshot`, ↺ reset).
-- **`batch` — built from measurement:** live testing showed agent wall-clock is dominated by model turns, not the scene: 8 tool calls took 3 min 12 s while scene animation totaled under 3 s. `batch` runs 1–12 operations in one call with one snapshot and whole-batch undo — the biggest agent-speed lever we found, expressed as tool design.
-- **Discovery for every harness:** `help` returns the playbook in one call; a `<script id="agent-manifest">` in the DOM lists all tools for DOM-scraping agents; the console carries the standard `getTools()` + `executeTool()` recipe; and every tool description ends with that exact recipe, because live testing showed agents read the `getTools()` listing first.
+A follow-up request adds a gently curving stepping-stone path from the porch toward the pond. Every stone remains individually editable. When the person moves two of them, the agent reads those changes before continuing from the same scene.
 
-Stack: TypeScript + three.js + Vite, no backend. `npm run smoke` drives all 20 tools in real headless Chrome (20/20 verified, also run in CI); `export_scene`/`import_scene` links let anyone open a scene without installing anything. MIT licensed.
+The last request creates a cozy evening: warm windows and lanterns, the creator's lofi music, and a close, slow camera that moves continuously around the cabin and water. The interface fades away, leaving a small moment to enjoy what we built.
+
+Selective undo removes unchanged agent additions while preserving later human edits. An optional gallery offers three authored starting worlds; the main experience grows around choices made in the current canvas.
+
+## Why WebMCP fits
+
+A 3D canvas shows pixels. Its object identities, bounds, positions and edit history live inside the page. WebMCP exposes that meaningful state and the page's own actions to the connected browser agent.
+
+The agent can read a request, inspect the live scene, make a change and verify the result. “Keep my cabin here” refers to the same object the person just moved. “Keep my stone edits” can be checked against actual positions and human revisions. Shared control matters more than generating a complete scene in one turn: each participant can respond to what the other just did.
+
+The approach applies beyond a little forest. Any rich canvas with domain objects can expose useful actions and current state without asking the agent to reconstruct everything from pixels.
+
+## How I built it
+
+The application uses TypeScript, three.js and Vite. It runs in the browser without an application account, backend or application API key. The connected browser agent supplies the model. Geometry and surface textures are procedural; fonts and creator-supplied music are bundled locally.
+
+Twenty-nine tools register through `document.modelContext.registerTool` with schemas, annotations and executable handlers. They cover scene queries, object editing, grove and path construction, lighting, music, camera movement, presentation, undo and sharing. Objects expose creator, last editor, revision and human revision. Scene versions reject a plan made before a person changed the page.
+
+The grove and path tools work from the current cabin and pond geometry. They plan against real bounds, preserve existing objects and leave the cabin approach open. The grove favors depth behind the cabin and sparse framing at the sides. The path creates separate stones that remain editable after the operation. If an arrangement cannot fit, it reports the problem without partially adding the planned objects.
+
+The camera can focus on the cabin and pond rather than the entire outer forest. A gentle repeating drift keeps the scene's strongest view in frame. Its state remains observable while motion runs in the background, and human camera interaction pauses it.
+
+The activity log distinguishes actual native WebMCP calls, human input and local previews. The shared request panel records the person's idea for the connected agent to read; it does not impersonate an additional model inside the application.
+
+## Challenges and what I learned
+
+A correct object count does not make a good scene. Forty trees need depth and variation, an open foreground, a clear entrance and somewhere for the eye to rest. The camera has to frame the home and water closely enough to feel inviting.
+
+Shared editing also needs dependable behavior. A human's small adjustment must survive the next agent action. Animations, cancellation, stale observations and undo all need to respect that. I learned to make ownership and current state part of the creative experience, alongside light, composition and timing.
+
+## Scope
+
+The library supplies procedural assets; the agent arranges and edits them. The project does not generate arbitrary meshes or new music. Placement uses object bounds on a flat ground plane. The optional gallery contains three authored recipes. Share links preserve scene objects and appearance; running playback and undo history belong to the current page.
+
+## Built with
+
+WebMCP, TypeScript, three.js, Vite, WebGL, Netlify, Playwright. The demonstration uses ElevenLabs Lily v3 narration, creator-supplied Suno music and aligned English subtitles. Film production is separate from the application.
+
+## Links
+
+- Live app: [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app)
+- Public source: [ThomasWerner187/agent-native-3d-studio](https://github.com/ThomasWerner187/agent-native-3d-studio)
+- License: [MIT](LICENSE)
+- Demo video: `[PUBLIC_YOUTUBE_URL]`
+
+## Testing instructions
+
+No application credentials or API key are required. Open the reviewed release in a WebMCP-capable browser with a connected agent. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch and connect a compatible client. Confirm **WebMCP live · 29 tools**.
+
+Click **Start empty**, then **Add pond** and **Add cabin**. Place them beside one another with room between the porch and water. In **Your next idea**, write and share:
+
+> Add forty trees, mostly as a forest behind my cabin, and warm garden lights around the clearing. Keep my cabin and pond where I placed them, with an open view and a clear entrance.
+
+Ask the connected agent to read the shared request and live scene, then act on it. Follow with a request for a curved stepping-stone path from porch to pond. Move two stones yourself and ask the agent to read your latest changes before setting a cozy evening, music and a close endless camera. Ask it to hide the controls when finished.
+
+Click **Enable sound** if the browser requires a gesture. Inspect actual calls and responses in Tool activity. The [judge guide](docs/JUDGE-GUIDE.md) gives exact checks for object preservation, both human edits, playback, camera control and selective undo.
+
+Local controls and the developer harness exercise page handlers without invoking an AI model. A browser reporting WebMCP unavailable cannot demonstrate native discovery there. Check [FINAL-REVIEW.md](docs/FINAL-REVIEW.md) for the verified native capture, film export and release evidence.
+
+## Development during the challenge
+
+Application history begins on September 1, 2026, within the submission period. Dated commits record the original studio (`6ea0c7c`), operation contract (`00cc089`), cooperative layouts (`4729a8c`), and lofi/camera work (`0ed6909`). The current zen co-creation work adds the designed grove, editable path, shared requests, close camera and revised visual presentation. Final commit and release evidence belong in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).

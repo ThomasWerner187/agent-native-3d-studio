@@ -1,14 +1,23 @@
+import type { LofiSession } from './lofi';
+import { getCreativeRequests } from './creative-requests';
+import { musicState } from './ambience';
+import { decodeSceneLink, encodeSceneHash } from './share-codec';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
-import { SceneStore, round2 } from './store';
-import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
+import { MAX_SCENE_OBJECTS, SceneStore, round2, type SceneActor, type SceneEntry } from './store';
+import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, buildObject, disposeObject } from './factory';
+import { planScatter, seededRandom, type Footprint, type ScatterShape } from './scatter-planner';
+import { scatterHistory } from './scatter-history';
+import { inCabinFrame, planGrove, planStonePath, placedBounds, intersects, type ZenShape, type ZenPlacement, type CabinFrame } from './zen-planner';
 import type { SnapshotManager } from './snapshot';
+import type { LayoutManager } from './layout';
 import { AGENT_PLAYBOOK } from './agent-guide';
 import { setMusic, isMusicOn } from './ambience';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
   holdCamera, despawn, tween, EASES,
+  getCanonicalScale,
 } from './anim';
 
 /**
@@ -29,25 +38,21 @@ export interface ToolContext {
   studio: Studio;
   store: SceneStore;
   snapshots: SnapshotManager;
+  layout: LayoutManager;
+  lofi: LofiSession;
   select: (id: string | null) => void;
+  /** Native invocation cancellation; each call receives its own context copy. */
+  signal?: AbortSignal;
+  /** Origin of the invocation, carried into semantic object mutations. */
+  actor?: SceneActor;
+  /** Batch-local accounting distinguishes its own human edits from takeover. */
+  humanChanges?: { count: number };
 }
 
 type Args = Record<string, unknown>;
 
 const MAX_OUTPUT_OBJECTS = 40;
 const MAX_SCATTER = 200;
-
-/** Deterministic PRNG (mulberry32) so seeded scatter runs are reproducible. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 export function fail(error: string, code = 'invalid_request'): string {
   return JSON.stringify({ ok: false, code, error });
@@ -77,6 +82,38 @@ function isHex(v: unknown): v is string {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+function recordMutation<T>(ctx: ToolContext, mutate: () => T): T {
+  const before = ctx.store.humanRevision;
+  const result = mutate();
+  if (ctx.humanChanges) ctx.humanChanges.count += ctx.store.humanRevision - before;
+  return result;
+}
+
+/** Synchronous bounds observation includes the intended size of a revealing object. */
+export function fullSizeBounds(group: THREE.Group): THREE.Box3 {
+  const visibleScale = group.scale.clone();
+  try {
+    group.scale.copy(getCanonicalScale(group));
+    group.updateMatrix();
+    return new THREE.Box3().setFromObject(group);
+  } finally {
+    group.scale.copy(visibleScale);
+    group.updateMatrix();
+    group.updateMatrixWorld(true);
+  }
+}
+
+/** A cabin's front steps need a usable approach beyond its visible geometry. */
+export function semanticClearances(entry: SceneEntry): Array<Zone & { object_id: string; reason: string }> {
+  if (entry.type !== 'cabin') return [];
+  const group = entry.group;
+  const matrix = new THREE.Matrix4().compose(group.position, group.quaternion, getCanonicalScale(group));
+  if (group.parent) { group.parent.updateWorldMatrix(true, false); matrix.premultiply(group.parent.matrixWorld); }
+  const box = new THREE.Box3(new THREE.Vector3(-0.4, 0, 3.8), new THREE.Vector3(1.8, 0, 7)).applyMatrix4(matrix);
+  return [{ object_id: entry.id, reason: 'cabin_entrance', x: (box.min.x + box.max.x) / 2,
+    z: (box.min.z + box.max.z) / 2, width: box.max.x - box.min.x, depth: box.max.z - box.min.z }];
 }
 
 function resolveTargets(ctx: ToolContext, raw: unknown): { ids: string[]; names: string[] } | string {
@@ -138,6 +175,12 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       id: e.id,
       name: e.name,
       type: e.type,
+      layout_role: e.layoutRole,
+      human_edited: e.humanRevision > 0,
+      created_by: e.createdBy,
+      last_changed_by: e.lastChangedBy,
+      revision: e.revision,
+      human_revision: e.humanRevision,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
       s: uniform,
@@ -150,6 +193,21 @@ export function describeScene(ctx: ToolContext, args: Args): string {
   const body: Record<string, unknown> = {
     ok: true,
     scene_version: ctx.store.version,
+    selected_id: ctx.store.selectedId,
+    creative_requests: { latest: getCreativeRequests().at(-1) ?? null, history: getCreativeRequests() },
+    human_revision: ctx.store.humanRevision,
+    human_edits: ctx.store.all().filter(e => e.humanRevision > 0).map(e => ({
+      id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
+      human_revision: e.humanRevision, created_by: e.createdBy, last_changed_by: e.lastChangedBy,
+    })),
+    recent_changes: ctx.store.recentChanges,
+    scatter_history: scatterHistory(ctx.store).state,
+    keep_clear_zones: ctx.store.all().flatMap(semanticClearances),
+    layout: ctx.layout.state,
+    lofi: ctx.lofi.state,
+    camera_motion: ctx.studio.director.state,
+    music: musicState(),
+    rendering: ctx.studio.frameStats,
     object_count: entries.length,
     counts,
     objects: compact,
@@ -163,7 +221,7 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       fov: round2(cam.fov),
     },
     lighting: { preset: ctx.studio.currentPreset, intensity: ctx.studio.currentIntensity },
-    ground_radius: 60,
+    ground_radius: ctx.studio.terrain.radius,
     note: entries.length > MAX_OUTPUT_OBJECTS
       ? `Showing first ${MAX_OUTPUT_OBJECTS} of ${entries.length}. Use query_scene (limit/offset/filter) for the full, paginated list.`
       : 'All values are the live rendered scene state. Use query_scene for pagination and per-object bounds.',
@@ -214,7 +272,9 @@ export function queryScene(ctx: ToolContext, args: Args): string {
   const objects = page.map((e) => {
     const g = e.group;
     const mat = e.materials[0];
-    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type };
+    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type, layout_role: e.layoutRole,
+      human_edited: e.humanRevision > 0, created_by: e.createdBy, last_changed_by: e.lastChangedBy,
+      revision: e.revision, human_revision: e.humanRevision, keep_clear_zones: semanticClearances(e) };
     if (e.type === 'chess_piece' && e.variant) o.piece = e.variant;
     if (want('pose')) {
       const uniform =
@@ -267,6 +327,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
   }
+  if (ctx.store.size >= MAX_SCENE_OBJECTS) return fail(`Scene limit reached (${MAX_SCENE_OBJECTS} objects). Delete objects before adding more.`, 'scene_full');
 
   // Chess piece preset params — validated strictly so agents self-correct.
   let piece: string | undefined;
@@ -309,22 +370,26 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   }
 
   const opId = newOpId();
-  const entry = ctx.store.spawn(type, {
+  const entry = recordMutation(ctx, () => ctx.store.spawn(type, {
     name: typeof args.name === 'string' ? args.name : undefined,
     scale,
     rotationYDeg: num(args.rotation_y),
     variant: piece,
-  });
+    actor: ctx.actor ?? 'agent',
+  }));
   if (side) entry.materials[0]?.color.set(CHESS_SIDES[side as 'white' | 'black']);
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
   const lazy = args.animate === false;
+  let completed = true;
   if (lazy) {
     // Bulk placement: still pops in (staggered), but the call returns at once.
-    spawnPop(entry.group, Math.random() * 1400);
+    const requestedDelay = num(args.delay_ms);
+    const delay = requestedDelay == null ? Math.random() * 1400 : clamp(requestedDelay, 0, 2000);
+    spawnPop(entry.group, delay);
   } else {
     spawnPop(entry.group);
-    await awaitGroup(`spawn:${entry.group.uuid}`);
+    completed = (await awaitGroup(`spawn:${entry.group.uuid}`)).completed;
   }
   ctx.store.bump();
 
@@ -336,6 +401,7 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
     ...(piece || side ? { piece: piece ?? 'pawn', side: side ?? 'white' } : {}),
     position: { x: round2(entry.group.position.x), y: 0, z: round2(entry.group.position.z) },
     scale: round2(entry.group.scale.x),
+    ...interruptedNote(completed),
   });
 }
 
@@ -360,19 +426,22 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
   const y = num(args.y);
   const z = num(args.z);
   const uniform = num(args.uniform);
-  if (op !== 'scale' && x == null && y == null && z == null && uniform == null) {
+  if (x == null && y == null && z == null && (op !== 'scale' || uniform == null)) {
     return fail(`Provide at least one of x, y, z${op === 'scale' ? ' or uniform' : ''}.`);
   }
+  if (op !== 'scale' && uniform != null) return fail('uniform only applies to scale operations.');
 
   const opId = newOpId();
   const groups: string[] = [];
-  for (const id of targets.ids) {
-    const g = ctx.store.get(id)!.group;
+  const entries = targets.ids.map(id => ctx.store.get(id)!);
+  for (const entry of entries) {
+    recordMutation(ctx, () => ctx.store.markChanged(entry.id, ctx.actor ?? 'agent', 'transform'));
+    const g = entry.group;
     if (op === 'move') {
       const to = {
-        x: mode === 'absolute' ? (x != null ? clamp(x, -58, 58) : undefined) : (x ?? 0) + g.position.x,
-        z: mode === 'absolute' ? (z != null ? clamp(z, -58, 58) : undefined) : (z ?? 0) + g.position.z,
-        y: mode === 'relative' ? Math.max(0, (y ?? 0) + g.position.y) : y != null ? Math.max(0, y) : undefined,
+        x: x == null ? undefined : clamp(mode === 'relative' ? x + g.position.x : x, -58, 58),
+        z: z == null ? undefined : clamp(mode === 'relative' ? z + g.position.z : z, -58, 58),
+        y: y == null ? undefined : clamp(mode === 'relative' ? y + g.position.y : y, 0, 58),
       };
       moveObject(g, to);
       groups.push(`pos:${g.uuid}`);
@@ -407,12 +476,14 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
 
   const results = await Promise.all(groups.map(awaitGroup));
   const allCompleted = results.every((r) => r.completed);
+  // An observation made during the transition must be stale after it settles.
+  ctx.store.bump();
 
-  const updated = targets.ids.map((id) => {
-    const entry = ctx.store.get(id)!;
+  const surviving = entries.filter(entry => ctx.store.get(entry.id) === entry);
+  const updated = surviving.map((entry) => {
     const g = entry.group;
     return {
-      id,
+      id: entry.id,
       name: entry.name,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
@@ -426,7 +497,8 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
     mode,
     count: updated.length,
     updated: updated.slice(0, 25),
-    ...interruptedNote(allCompleted),
+    ...interruptedNote(allCompleted && surviving.length === entries.length),
+    ...(surviving.length < entries.length ? { removed_ids: entries.filter(entry => !surviving.includes(entry)).map(entry => entry.id) } : {}),
   });
 }
 
@@ -464,6 +536,7 @@ export async function setMaterial(ctx: ToolContext, args: Args): Promise<string>
   const groups: string[] = [];
   for (const id of targets.ids) {
     const entry = ctx.store.get(id)!;
+    recordMutation(ctx, () => ctx.store.markChanged(id, ctx.actor ?? 'agent', 'material'));
     for (const mat of entry.materials) {
       if (isHex(color)) {
         fadeMaterialColor(mat, 'color', color);
@@ -482,19 +555,30 @@ export async function setMaterial(ctx: ToolContext, args: Args): Promise<string>
         mat.needsUpdate = true;
       }
     }
-    // keep a lamp's actual light in sync with its glow
-    const light = entry.group.userData.light as THREE.PointLight | undefined;
-    if (light) {
-      const headMat = entry.materials[2] ?? entry.materials[0];
-      const k = headMat.emissiveIntensity / 0.85;
-      light.intensity = 6 * clamp(k, 0, 4);
-      light.color.copy(headMat.emissive);
-    }
   }
   ctx.store.bump();
 
   const results = await Promise.all(groups.map(awaitGroup));
   const allCompleted = results.every((r) => r.completed);
+  if (groups.length) ctx.store.bump();
+
+  // Read the emissive color after its tween has settled, so the emitted
+  // light matches the final visible glow rather than its previous color.
+  for (const id of targets.ids) {
+    const entry = ctx.store.get(id);
+    if (!entry) continue;
+    const light = entry.group.userData.light as THREE.PointLight | undefined;
+    if (light && (emissive != null || emissiveIntensity != null)) {
+      const headMat = (entry.group.userData.emissiveMaterial as THREE.MeshStandardMaterial | undefined)
+        ?? entry.materials.reduce((best, mat) => mat.emissiveIntensity > best.emissiveIntensity ? mat : best);
+      if (emissive != null) light.color.copy(headMat.emissive);
+      if (emissiveIntensity != null) {
+        const baseLight = Number(entry.group.userData.lightBaseIntensity ?? 6);
+        const baseGlow = Number(entry.group.userData.emissiveBaseIntensity ?? 0.85);
+        light.intensity = baseLight * clamp(headMat.emissiveIntensity / baseGlow, 0, 4);
+      }
+    }
+  }
 
   return ok(ctx, {
     operation_id: opId,
@@ -524,6 +608,7 @@ export async function setLighting(ctx: ToolContext, args: Args): Promise<string>
   ctx.store.bump();
 
   const { completed } = await awaitGroup('lighting');
+  ctx.store.bump();
 
   return ok(ctx, {
     operation_id: opId,
@@ -578,7 +663,9 @@ function framingPose(
   const dirs: Record<(typeof ANGLES)[number], THREE.Vector3> = {
     front: new THREE.Vector3(0, 0.22, 1),
     side: new THREE.Vector3(1, 0.22, 0),
-    top: new THREE.Vector3(0.001, 1, 0.001),
+    // Keep a tiny +z component to define a stable roll when looking straight
+    // down: world +x stays screen-right and -z stays screen-up.
+    top: new THREE.Vector3(0, 1, 0.001),
     three_quarter: new THREE.Vector3(0.8, 0.55, 0.8),
     low: new THREE.Vector3(0.7, 0.08, 0.7),
     hero: new THREE.Vector3(0.75, 0.2, 0.75),
@@ -613,6 +700,7 @@ export async function frameCamera(ctx: ToolContext, args: Args): Promise<string>
   ctx.store.bump();
 
   const { completed } = await awaitGroup('camera');
+  ctx.store.bump();
   const cam = ctx.studio.camera;
 
   return ok(ctx, {
@@ -711,6 +799,7 @@ export async function cameraPath(ctx: ToolContext, args: Args): Promise<string> 
   }
 
   const cam = ctx.studio.camera;
+  ctx.store.bump();
   return ok(ctx, {
     operation_id: opId,
     keyframes_total: frames.length,
@@ -761,111 +850,301 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
   }
-  const count = Math.round(num(args.count) ?? 10);
-  if (count < 1 || count > MAX_SCATTER) return fail(`count must be between 1 and ${MAX_SCATTER}.`);
-
-  const areaRaw = (args.area ?? {}) as Record<string, unknown>;
-  const centerX = clamp(num(areaRaw.center_x) ?? 0, -58, 58);
-  const centerZ = clamp(num(areaRaw.center_z) ?? 0, -58, 58);
-  const width = clamp(num(areaRaw.width) ?? 10, 0.5, 110);
-  const depth = clamp(num(areaRaw.depth) ?? 10, 0.5, 110);
-
+  const count = num(args.count) ?? 10;
+  if (!Number.isSafeInteger(count) || count < 1 || count > MAX_SCATTER) return fail(`count must be an integer between 1 and ${MAX_SCATTER}.`);
+  if (ctx.store.size + count > MAX_SCENE_OBJECTS) return fail(`This scatter exceeds the ${MAX_SCENE_OBJECTS}-object scene limit. Delete objects or reduce count.`, 'scene_full');
+  const clearance = num(args.clearance) ?? 0.4;
+  if (clearance < 0 || clearance > 5) return fail('clearance must be between 0 and 5.');
   const jitter = clamp(num(args.jitter) ?? 0.75, 0, 1);
   const scaleVariance = clamp(num(args.scale_variance) ?? 0.2, 0, 1);
   const rotationVariance = clamp(num(args.rotation_variance) ?? 1, 0, 1);
-
+  const seed = num(args.seed) ?? Math.floor(Math.random() * 0xffffffff);
+  if (!Number.isSafeInteger(seed)) return fail('seed must be an integer.');
+  const rng = seededRandom(seed);
+  let anchor;
+  if (args.anchor != null) {
+    const resolved = ctx.store.resolve(String(args.anchor));
+    if (!resolved.ok) return fail(resolved.error, 'unknown_anchor');
+    anchor = resolved.entry;
+  }
   const zonesRaw = Array.isArray(args.exclusion_zones) ? args.exclusion_zones : [];
-  const zones: Zone[] = [];
+  const obstacles: Footprint[] = [];
   for (const raw of zonesRaw) {
     const z = parseZone(raw);
-    if (!z) {
-      return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.', 'bad_request');
-    }
-    zones.push(z);
+    if (!z) return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.', 'bad_request');
+    obstacles.push({ minX: z.x - z.width / 2, maxX: z.x + z.width / 2, minZ: z.z - z.depth / 2, maxZ: z.z + z.depth / 2 });
   }
-
-  // optional seeded RNG: same seed ⇒ identical layout (reproducible scenes/demos)
-  const seed = Math.round(num(args.seed) ?? Math.floor(Math.random() * 0xffffffff));
-  const rng = mulberry32(seed);
-
-  // optional object avoidance; footprint 'actual_bounds' uses the 2D projection
-  // of each object's real bounding box instead of a fixed pad around its origin
   const avoidRaw = Array.isArray(args.avoid_object_ids) ? args.avoid_object_ids.map(String) : [];
-  const actualBounds = args.footprint === 'actual_bounds';
-  const avoids: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
   for (const q of avoidRaw) {
     const r = ctx.store.resolve(q);
     if (!r.ok) return fail(`avoid_object_ids: ${r.error}`, 'unknown_target');
-    if (actualBounds) {
-      const box = new THREE.Box3().setFromObject(r.entry.group);
-      avoids.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
-    } else {
-      const p = r.entry.group.position;
-      avoids.push({ minX: p.x - 0.6, maxX: p.x + 0.6, minZ: p.z - 0.6, maxZ: p.z + 0.6 });
-    }
   }
-  const boundPad = 0.25;
+  ctx.store.syncMatrices();
+  const preserved = ctx.store.all();
+  const footprint = (box: THREE.Box3): Footprint => ({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
+  for (const entry of preserved) {
+    obstacles.push(footprint(fullSizeBounds(entry.group)));
+    for (const zone of semanticClearances(entry)) obstacles.push({ minX: zone.x - zone.width / 2,
+      maxX: zone.x + zone.width / 2, minZ: zone.z - zone.depth / 2, maxZ: zone.z + zone.depth / 2 });
+  }
+  const anchorBounds = anchor ? fullSizeBounds(anchor.group) : null;
 
-  const inZone = (x: number, z: number, posPad: number): boolean =>
-    zones.some((zo) => Math.abs(x - zo.x) < zo.width / 2 + posPad && Math.abs(z - zo.z) < zo.depth / 2 + posPad) ||
-    avoids.some((b) => x > b.minX - boundPad && x < b.maxX + boundPad && z > b.minZ - boundPad && z < b.maxZ + boundPad);
+  // Measure the exact procedural variants that spawn() will create. Temporary
+  // geometry is never registered and is always disposed, including failures.
+  const shapes: ScatterShape[] = [];
+  for (let index = 0; index < count; index++) {
+    const scale = Math.max(0.35, 1 + (rng() * 2 - 1) * scaleVariance);
+    const rotation = rng() * 360 * rotationVariance;
+    const built = buildObject(type, undefined, ctx.store.idCount + index + 1);
+    try {
+      built.group.scale.setScalar(scale);
+      built.group.rotation.y = THREE.MathUtils.degToRad(rotation);
+      shapes.push({ scale, rotation, bounds: footprint(new THREE.Box3().setFromObject(built.group)) });
+    } finally { disposeObject(built.group); }
+  }
+  const widest = Math.max(...shapes.map(shape => Math.max(shape.bounds.maxX - shape.bounds.minX, shape.bounds.maxZ - shape.bounds.minZ)));
+  const anchorSize = anchorBounds?.getSize(new THREE.Vector3());
+  const anchorCenter = anchorBounds?.getCenter(new THREE.Vector3());
+  const roomyWidth = anchorBounds
+    ? Math.max(12, Math.max(anchorSize!.x, anchorSize!.z) + Math.sqrt(count) * (widest + clearance) * 1.65)
+    : 10;
+  const expandedArea = shapes.reduce((sum, shape) => sum
+    + (shape.bounds.maxX - shape.bounds.minX + clearance) * (shape.bounds.maxZ - shape.bounds.minZ + clearance), 0);
+  const anchorArea = anchorSize ? anchorSize.x * anchorSize.z : 0;
+  // Begin with a grove, not a sparse field. The extra room handles irregular
+  // footprints; bounded retries account for the other preserved human objects.
+  const compactWidth = Math.max(12, Math.ceil(Math.sqrt(expandedArea * 2 + anchorArea)));
+  const areaRaw = (args.area ?? {}) as Record<string, unknown>;
+  const centerX = clamp(num(areaRaw.center_x) ?? anchorCenter?.x ?? 0, -58, 58);
+  const centerZ = clamp(num(areaRaw.center_z) ?? anchorCenter?.z ?? 0, -58, 58);
+  const automaticArea = anchorBounds !== null && args.area == null;
+  const requestedWidth = clamp(num(areaRaw.width) ?? roomyWidth, 0.5, 110);
+  const requestedDepth = clamp(num(areaRaw.depth) ?? roomyWidth, 0.5, 110);
+  const widths = automaticArea
+    ? [...new Set([compactWidth, compactWidth * 1.08, compactWidth * 1.18, compactWidth * 1.35, roomyWidth]
+      .map(width => clamp(Math.min(width, roomyWidth), 0.5, 110)))].sort((a, b) => a - b)
+    : [requestedWidth];
+  let area: Footprint = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  let plan: ReturnType<typeof planScatter> = null;
+  for (const width of widths) {
+    const depth = automaticArea ? width : requestedDepth;
+    area = { minX: Math.max(-58, centerX - width / 2), maxX: Math.min(58, centerX + width / 2),
+      minZ: Math.max(-58, centerZ - depth / 2), maxZ: Math.min(58, centerZ + depth / 2) };
+    plan = planScatter(shapes, area, obstacles, clearance, jitter, rng);
+    if (plan) break;
+  }
+  if (!plan) return fail(`Could not safely place all ${count} objects. Nothing changed. Enlarge area, reduce count, or reduce clearance.`, 'no_space');
+  if (ctx.signal?.aborted) return fail('Scatter cancelled before any objects were added.', 'cancelled');
 
-  const opId = newOpId();
-
-  // jittered grid keeps even coverage; exclusions fall back to random retry spots
-  const cols = Math.ceil(Math.sqrt((count * width) / Math.max(depth, 0.001)));
-  const rows = Math.ceil(count / cols);
-  const cellW = width / cols;
-  const cellD = depth / rows;
-  const posPad = actualBounds ? 0.25 : 0.5;
-
-  const ids: string[] = [];
-  const spawnGroups: string[] = [];
-  let skipped = 0;
-  let placed = 0;
-  let delayIndex = 0;
+  const opId = newOpId(), actor = ctx.actor ?? 'agent';
+  const entries = plan.map(item => {
+    const entry = recordMutation(ctx, () => ctx.store.spawn(type, { scale: item.scale, rotationYDeg: item.rotation, actor }));
+    entry.group.position.set(item.x, 0, item.z);
+    ctx.studio.scene.add(entry.group);
+    return entry;
+  });
+  const undoId = scatterHistory(ctx.store).record(entries);
+  const revisions = entries.map(entry => entry.revision);
+  const humanRevision = ctx.store.humanRevision;
   const stagger = Math.min(600 / count, 45);
-
-  for (let r = 0; r < rows && placed < count; r++) {
-    for (let c = 0; c < cols && placed < count; c++) {
-      let x = centerX - width / 2 + cellW * (c + 0.5) + (rng() - 0.5) * cellW * jitter;
-      let z = centerZ - depth / 2 + cellD * (r + 0.5) + (rng() - 0.5) * cellD * jitter;
-      if (inZone(x, z, posPad)) {
-        let found = false;
-        for (let t = 0; t < 6; t++) {
-          x = centerX + (rng() - 0.5) * width;
-          z = centerZ + (rng() - 0.5) * depth;
-          if (!inZone(x, z, posPad)) { found = true; break; }
-        }
-        if (!found) { skipped++; continue; }
-      }
-      const s = Math.max(0.35, 1 + (rng() * 2 - 1) * scaleVariance);
-      const rot = rng() * 360 * rotationVariance;
-      const entry = ctx.store.spawn(type, { scale: s, rotationYDeg: rot });
-      entry.group.position.set(round2(x), 0, round2(z));
-      ctx.studio.scene.add(entry.group);
-      spawnPop(entry.group, delayIndex * stagger);
-      spawnGroups.push(`spawn:${entry.group.uuid}`);
-      ids.push(entry.id);
-      placed++;
-      delayIndex++;
+  const results = await Promise.all(entries.map((entry, index) => {
+    spawnPop(entry.group, index * stagger);
+    return awaitGroup(`spawn:${entry.group.uuid}`);
+  }));
+  // Cancellation hands complete, editable assets back to the human. Never
+  // overwrite an entry whose semantic revision changed during its reveal.
+  entries.forEach((entry, index) => {
+    if (ctx.store.get(entry.id) === entry && entry.revision === revisions[index]) {
+      entry.group.scale.setScalar(plan[index].scale);
     }
-  }
+  });
   ctx.store.bump();
-
-  await Promise.all(spawnGroups.map(awaitGroup));
-
+  const completed = results.every(result => result.completed) && ctx.store.humanRevision === humanRevision;
+  const liveEntries = entries.filter(entry => ctx.store.get(entry.id) === entry);
   return ok(ctx, {
     operation_id: opId,
-    added: placed,
-    skipped_excluded: skipped,
-    type,
-    seed,
-    footprint: actualBounds ? 'actual_bounds' : 'pad',
-    area: { center_x: centerX, center_z: centerZ, width, depth },
-    ids: ids.slice(0, 60),
-    ...(ids.length > 60 ? { note: `Showing first 60 of ${ids.length} ids.` } : {}),
+    added: entries.length, live_added: liveEntries.length, requested_count: count,
+    exact_count: liveEntries.length === count, skipped_excluded: 0,
+    type, seed, clearance, footprint: 'actual_bounds',
+    anchor_id: anchor?.id ?? null, anchor_position: anchor?.group.position.toArray() ?? null,
+    preserved_ids: preserved.map(entry => entry.id), undo_id: undoId,
+    area: { center_x: (area.minX + area.maxX) / 2, center_z: (area.minZ + area.maxZ) / 2,
+      width: area.maxX - area.minX, depth: area.maxZ - area.minZ },
+    ids: entries.map(entry => entry.id),
+    ...(liveEntries.length < count ? { removed_ids: entries.filter(entry => !liveEntries.includes(entry)).map(entry => entry.id) } : {}),
+    ...interruptedNote(completed),
   });
+}
+
+/** Compositional tools operate on live anchors, never replace a shared world. */
+function groundBounds(box: THREE.Box3): Footprint {
+  return { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
+}
+function cabinFrame(entry: SceneEntry): CabinFrame {
+  const scale = getCanonicalScale(entry.group);
+  return { x: entry.group.position.x, z: entry.group.position.z, rotation: entry.group.rotation.y,
+    scaleX: scale.x, scaleZ: scale.z };
+}
+function livePathEndpoints(cabin: SceneEntry, pond: SceneEntry) {
+  const frame = cabinFrame(cabin), cabinBox = fullSizeBounds(cabin.group);
+  let start = inCabinFrame(frame, 0.7, 5.4);
+  // A rotated porch may still lie inside its conservative world AABB. Begin
+  // just beyond that footprint instead of putting the first stone in timber.
+  for (let step = 0; step < 20 && start.x > cabinBox.min.x - 0.65 && start.x < cabinBox.max.x + 0.65
+    && start.z > cabinBox.min.z - 0.65 && start.z < cabinBox.max.z + 0.65; step++) {
+    start = inCabinFrame(frame, 0.7, 5.65 + step * 0.25);
+  }
+  const box = fullSizeBounds(pond.group), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  const dx = start.x - center.x, dz = start.z - center.z, distance = Math.hypot(dx, dz);
+  if (distance < 0.01) return null;
+  const nx = dx / distance, nz = dz / distance;
+  const bank = 1 / Math.max(Math.abs(nx) / (size.x / 2), Math.abs(nz) / (size.z / 2));
+  const end = { x: center.x + nx * (bank + 0.9), z: center.z + nz * (bank + 0.9) };
+  return { start, end, length: Math.hypot(end.x - start.x, end.z - start.z) };
+}
+function measuredZenShape(ctx: ToolContext, type: 'tree' | 'lamp' | 'rock', offset: number,
+  scale: number, rotation: number, flattened = false): ZenShape {
+  const built = buildObject(type, undefined, ctx.store.idCount + offset + 1);
+  try {
+    built.group.scale.set(scale, flattened ? scale * 0.38 : scale, flattened ? scale * 0.82 : scale);
+    built.group.rotation.y = THREE.MathUtils.degToRad(rotation);
+    return { scale, rotation, bounds: groundBounds(new THREE.Box3().setFromObject(built.group)) };
+  } finally { disposeObject(built.group); }
+}
+async function revealZen(ctx: ToolContext, items: Array<ZenPlacement & { type: 'tree' | 'lamp' | 'rock'; name: string; role: 'forest' | 'lantern' | 'path' }>, seconds: number) {
+  const entries = items.map(item => {
+    const scale = item.role === 'path' ? { x: item.scale, y: item.scale * 0.38, z: item.scale * 0.82 } : item.scale;
+    const entry = recordMutation(ctx, () => ctx.store.spawn(item.type, { name: item.name, scale, rotationYDeg: item.rotation, actor: ctx.actor ?? 'agent' }));
+    entry.layoutRole = item.role;
+    entry.group.position.set(item.x, 0, item.z);
+    ctx.studio.scene.add(entry.group);
+    return entry;
+  });
+  const undoId = scatterHistory(ctx.store).record(entries), revisions = entries.map(entry => entry.revision);
+  const humanRevision = ctx.store.humanRevision;
+  const scales = entries.map(entry => entry.group.scale.clone());
+  const results = await Promise.all(entries.map((entry, index) => {
+    spawnPop(entry.group, index / Math.max(1, entries.length - 1) * seconds * 1000);
+    return awaitGroup(`spawn:${entry.group.uuid}`);
+  }));
+  entries.forEach((entry, index) => {
+    if (ctx.store.get(entry.id) === entry && entry.revision === revisions[index]) entry.group.scale.copy(scales[index]);
+  });
+  ctx.store.bump();
+  const live = entries.filter(entry => ctx.store.get(entry.id) === entry);
+  return { entries, undoId, live, completed: results.every(result => result.completed) && ctx.store.humanRevision === humanRevision };
+}
+
+export async function addGrove(ctx: ToolContext, args: Args): Promise<string> {
+  const anchor = ctx.store.resolve(String(args.cabin ?? 'cabin'));
+  if (!anchor.ok || anchor.entry.type !== 'cabin') return fail(anchor.ok ? 'cabin must identify a cabin.' : anchor.error, 'unknown_anchor');
+  const pond = args.pond != null ? ctx.store.resolve(String(args.pond)) : null;
+  if (pond && (!pond.ok || pond.entry.type !== 'pond')) return fail(pond.ok ? 'pond must identify a pond.' : pond.error, 'unknown_anchor');
+  const count = num(args.count) ?? 40, lightCount = num(args.lights) ?? 8, seed = num(args.seed) ?? 42;
+  const revealSeconds = num(args.reveal_seconds) ?? 6;
+  if (!Number.isSafeInteger(count) || count < 1 || count > 100 || !Number.isSafeInteger(lightCount) || lightCount < 0 || lightCount > 12
+    || !Number.isSafeInteger(seed) || revealSeconds < 0 || revealSeconds > 15) return fail('count must be 1–100, lights 0–12, seed an integer, and reveal_seconds 0–15.');
+  if (ctx.store.size + count + lightCount > MAX_SCENE_OBJECTS) return fail('The grove exceeds the scene object limit.', 'scene_full');
+  ctx.store.syncMatrices();
+  const preserved = ctx.store.all(), frame = cabinFrame(anchor.entry), rng = seededRandom(seed);
+  const obstacles = preserved.map(entry => groundBounds(fullSizeBounds(entry.group)));
+  for (const entry of preserved) for (const zone of semanticClearances(entry)) obstacles.push({ minX: zone.x - zone.width / 2,
+    maxX: zone.x + zone.width / 2, minZ: zone.z - zone.depth / 2, maxZ: zone.z + zone.depth / 2 });
+  if (pond?.ok) {
+    const connection = livePathEndpoints(anchor.entry, pond.entry);
+    if (connection && connection.length >= 1.8) {
+      const count = Math.max(4, Math.min(24, Math.floor(connection.length / 0.9) + 1));
+      const corridorShape: ZenShape = { bounds: { minX: -0.28, maxX: 0.28, minZ: -0.28, maxZ: 0.28 }, scale: 1, rotation: 0 };
+      const route = planStonePath(connection.start, connection.end, count, Array.from({ length: count }, () => corridorShape), obstacles, 2);
+      if (route) for (const point of route) obstacles.push({ minX: point.x - 0.85, maxX: point.x + 0.85, minZ: point.z - 0.85, maxZ: point.z + 0.85 });
+    }
+  }
+  const rearCount = Math.ceil(count * 0.8);
+  const shapes = Array.from({ length: count }, (_, index) => measuredZenShape(ctx, 'tree', index,
+    index < rearCount ? 1.05 + rng() * 0.3 : 0.8 + rng() * 0.2, rng() * 360));
+  let plan = planGrove(frame, shapes, obstacles, seed);
+  if (!plan) return fail('No safe space for the entire grove. Nothing changed. Move the anchors away from existing objects or the world edge.', 'no_space');
+  const items: Parameters<typeof revealZen>[1] = plan.map((item, index) => ({ ...item, type: 'tree', role: 'forest', name: `${item.region === 'rear' ? 'Forest' : 'Framing'} pine ${index + 1}` }));
+  // Reserve the warm accents first, then let new trees grow around them.
+  const occupied = [...obstacles];
+  const candidates = [[-3.8, 3.2], [3.8, 3.2], [-4.8, -0.8], [4.8, -0.8], [-4.5, 6.8], [4.5, 6.8], [-3.5, -4], [3.5, -4]]
+    .map(([x, z]) => inCabinFrame(frame, x, z));
+  if (pond?.ok) {
+    const box = fullSizeBounds(pond.entry.group), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    for (const side of [-1, 1]) for (const front of [-1, 1]) candidates.unshift({ x: center.x + side * (size.x / 2 + 0.85), z: center.z + front * (size.z / 2 + 0.65) });
+  }
+  for (let index = 0; index < lightCount; index++) {
+    const shape = measuredZenShape(ctx, 'lamp', count + index, 1.35 + rng() * 0.2, rng() * 360);
+    let chosen;
+    for (const base of candidates) {
+      for (const spread of [0, 0.6, 1.2, 1.8, 2.4]) {
+        const point = { x: round2(base.x + (rng() - 0.5) * spread), z: round2(base.z + (rng() - 0.5) * spread) };
+        const box = placedBounds(shape, point);
+        if (box.minX < -58 || box.maxX > 58 || box.minZ < -58 || box.maxZ > 58 || occupied.some(obstacle => intersects(box, obstacle, 0.32))) continue;
+        chosen = point; break;
+      }
+      if (chosen) break;
+    }
+    if (!chosen) return fail('No safe space for all the requested lanterns. Nothing changed. Retry with fewer lights.', 'no_space');
+    items.push({ ...shape, ...chosen, type: 'lamp', role: 'lantern', name: `Warm garden lantern ${index + 1}` });
+    // Lamps need breathing room so the whole count cannot pile up in one corner.
+    occupied.push({ minX: chosen.x - 1.35, maxX: chosen.x + 1.35, minZ: chosen.z - 1.35, maxZ: chosen.z + 1.35 });
+  }
+  const lightItems = items.filter(item => item.type === 'lamp');
+  plan = planGrove(frame, shapes, [...obstacles, ...lightItems.map(item => placedBounds(item, item))], seed);
+  if (!plan) return fail('No safe space for the complete forest around the lanterns. Nothing changed.', 'no_space');
+  items.splice(0, count, ...plan.map((item, index) => ({ ...item, type: 'tree' as const, role: 'forest' as const, name: `${item.region === 'rear' ? 'Forest' : 'Framing'} pine ${index + 1}` })));
+  if (ctx.signal?.aborted) return fail('Cancelled before adding the grove.', 'cancelled');
+  const result = await revealZen(ctx, items, revealSeconds);
+  const liveTrees = result.live.filter(entry => entry.type === 'tree').length;
+  const liveLights = result.live.filter(entry => entry.type === 'lamp').length;
+  return ok(ctx, { operation_id: newOpId(), type: 'tree', requested_count: count, added: count,
+    live_added: liveTrees, live_lights_added: liveLights,
+    exact_count: liveTrees === count && liveLights === lightCount,
+    lights_added: lightCount, ids: result.entries.filter(entry => entry.type === 'tree').map(entry => entry.id),
+    light_ids: result.entries.filter(entry => entry.type === 'lamp').map(entry => entry.id),
+    rear_count: plan.filter(item => item.region === 'rear').length, side_count: plan.filter(item => item.region === 'side').length,
+    anchor_id: anchor.entry.id, pond_id: pond?.ok ? pond.entry.id : null, preserved_ids: preserved.map(entry => entry.id),
+    undo_id: result.undoId, seed, arrangement: 'Layered forest behind the live cabin, sparse side framing, open porch and pond.',
+    ...interruptedNote(result.completed) });
+}
+
+export async function addPath(ctx: ToolContext, args: Args): Promise<string> {
+  const cabin = ctx.store.resolve(String(args.cabin ?? 'cabin')), pond = ctx.store.resolve(String(args.pond ?? 'pond'));
+  if (!cabin.ok || cabin.entry.type !== 'cabin') return fail(cabin.ok ? 'cabin must identify a cabin.' : cabin.error, 'unknown_anchor');
+  if (!pond.ok || pond.entry.type !== 'pond') return fail(pond.ok ? 'pond must identify a pond.' : pond.error, 'unknown_anchor');
+  const seed = num(args.seed) ?? 24, bend = num(args.bend) ?? 2, revealSeconds = num(args.reveal_seconds) ?? 3;
+  if (!Number.isSafeInteger(seed) || Math.abs(bend) > 8 || revealSeconds < 0 || revealSeconds > 15) return fail('seed must be an integer, bend between -8 and 8, reveal_seconds 0–15.');
+  ctx.store.syncMatrices();
+  const connection = livePathEndpoints(cabin.entry, pond.entry);
+  if (!connection) return fail('The pond and porch overlap. Move one anchor first.', 'no_space');
+  const { start, end, length } = connection;
+  const count = num(args.count) ?? Math.max(4, Math.min(24, Math.floor(length / 0.9) + 1));
+  if (!Number.isSafeInteger(count) || count < 3 || count > 40) return fail('count must be an integer between 3 and 40.');
+  if (ctx.store.size + count > MAX_SCENE_OBJECTS) return fail('The path exceeds the scene object limit.', 'scene_full');
+  const preserved = ctx.store.all(), obstacles = preserved.map(entry => groundBounds(fullSizeBounds(entry.group))), rng = seededRandom(seed);
+  // Fit each stepping stone to the actual gap, leaving visible grass between them.
+  const scale = Math.max(0.35, Math.min(0.85, length / (count - 1) * 0.48));
+  const shapes = Array.from({ length: count }, (_, index) => measuredZenShape(ctx, 'rock', index, scale * (0.94 + rng() * 0.12), rng() * 360, true));
+  const plan = planStonePath(start, end, count, shapes, obstacles, bend);
+  if (!plan) return fail('The live anchors do not leave a safe, continuous stone path. Nothing changed. Move an obstacle, separate the anchors, or try fewer stones.', 'no_space');
+  if (ctx.signal?.aborted) return fail('Cancelled before adding the path.', 'cancelled');
+  const result = await revealZen(ctx, plan.map((item, index) => ({ ...item, type: 'rock', role: 'path', name: `Stepping stone ${index + 1}` })), revealSeconds);
+  return ok(ctx, { operation_id: newOpId(), added: result.entries.length, live_added: result.live.length,
+    exact_count: result.live.length === count, ids: result.entries.map(entry => entry.id), undo_id: result.undoId,
+    cabin_id: cabin.entry.id, pond_id: pond.entry.id, start, end, preserved_ids: preserved.map(entry => entry.id),
+    editable: true, arrangement: 'Curved, individually editable stepping stones from the live porch to the pond bank.',
+    ...interruptedNote(result.completed) });
+}
+
+/** Remove only unchanged additions; never restore a snapshot over human work. */
+export async function undoScatter(ctx: ToolContext, args: Args): Promise<string> {
+  const edit = scatterHistory(ctx.store).take(typeof args.undo_id === 'string' ? args.undo_id : undefined);
+  if (!edit) return fail('No matching scatter addition to undo.', 'nothing_to_undo');
+  const ids = edit.removable.map(entry => entry.id);
+  if (ids.length) await deleteObjects(ctx, { targets: ids });
+  return ok(ctx, { undo_id: edit.id, removed_ids: ids, skipped_ids: edit.skipped,
+    note: 'Only unchanged additions removed. Later edits and the existing world are preserved.' });
 }
 
 /* ------------------------------------------------------------------ */
@@ -930,8 +1209,9 @@ export async function deleteObjects(ctx: ToolContext, args: Args): Promise<strin
   const ids = entries.map((e) => e.id);
   const names = entries.map((e) => e.name);
   for (const e of entries) {
-    ctx.store.remove(e.id);
+    recordMutation(ctx, () => ctx.store.remove(e.id, ctx.actor ?? 'agent'));
   }
+  if (ctx.store.selectedId && ids.includes(ctx.store.selectedId)) ctx.select(null);
   ctx.store.bump();
 
   // staggered shrink-out, mirroring scatter's spawn rhythm
@@ -1038,10 +1318,10 @@ export async function chessMove(ctx: ToolContext, args: Args): Promise<string> {
   const size = 1.8;
   const cell = size / 8;
   const half = size / 2;
-  const local = new THREE.Vector3(-half + (file + 0.5) * cell, 0, -half + (rank + 0.5) * cell);
+  const local = new THREE.Vector3(-half + (file + 0.5) * cell, BOARD_SURFACE_Y, -half + (rank + 0.5) * cell);
   const world = board.group.localToWorld(local.clone());
   const from = piece.group.position.clone();
-  const to = new THREE.Vector3(world.x, BOARD_SURFACE_Y, world.z);
+  const to = world;
 
   // Animated move with a small lift — visible, never a hard cut.
   const lift = 0.16;
@@ -1102,49 +1382,39 @@ export function setMusicTool(_ctx: ToolContext, args: Args): string {
 /* export_scene / import_scene — scenes become shareable artifacts     */
 /* ------------------------------------------------------------------ */
 
-function b64urlEncode(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function b64urlDecode(s: string): string {
-  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
-export function exportScene(ctx: ToolContext, _args: Args): string {
+export async function exportScene(ctx: ToolContext, _args: Args): Promise<string> {
   const json = ctx.snapshots.exportJson();
-  const hash = `#scene=${b64urlEncode(json)}`;
+  const objects = ctx.store.size, snapshotVersion = ctx.store.version;
+  let hash: string;
+  try { hash = await encodeSceneHash(json); }
+  catch (error) { return fail(error instanceof Error ? error.message : 'Scene compression failed.', 'export_failed'); }
   const url = `${location.origin}${location.pathname}${hash}`;
-  if (location.hash !== hash) history.replaceState(null, '', hash);
   return ok(ctx, {
-    bytes: json.length,
-    objects: ctx.store.size,
+    bytes: new TextEncoder().encode(json).byteLength,
+    encoding: 'gzip-v1',
+    snapshot_scene_version: snapshotVersion,
+    objects,
     url,
     note:
       url.length > 30_000
-        ? 'Share link created, but it is very long (large scene). Anyone can open it — no WebMCP needed.'
-        : 'Share link created (also set as this page URL). Anyone can open it — no WebMCP needed. import_scene restores the JSON.',
+        ? 'Compressed share link created, but this large scene may still exceed browser-agent URL limits. Copy or save it before reloading. The active page URL stays unchanged.'
+        : 'Compressed share link created. Copy or save it before reloading; the active page URL stays unchanged. Anyone can open it, and import_scene restores it.',
   });
 }
 
 export async function importScene(ctx: ToolContext, args: Args): Promise<string> {
+  const versionBeforeDecode = ctx.store.version;
   let json = args.json != null ? String(args.json) : '';
   if (!json && args.url != null) {
-    const m = String(args.url).match(/#scene=([A-Za-z0-9\-_]+)/);
-    if (!m) return fail('url contains no #scene= fragment.', 'bad_request');
-    json = b64urlDecode(m[1]);
+    try { json = await decodeSceneLink(String(args.url)); }
+    catch (error) { return fail(error instanceof Error ? error.message : 'Invalid scene link.', 'bad_request'); }
   }
   if (!json) return fail('Provide the exported json or a share url (with #scene=...).', 'bad_request');
+  if (ctx.signal?.aborted) return fail('Scene import was cancelled before applying it.', 'cancelled');
+  if (ctx.store.version !== versionBeforeDecode) return fail('The scene changed while decoding the link. Your current work was preserved; observe the scene and retry.', 'scene_changed_during_import');
   // invoke() already captured the pre-import snapshot — no nested capture here
   const r = ctx.snapshots.importJson(json);
   if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');
-  const target = new THREE.Vector3(...(JSON.parse(json).camera?.t ?? [0, 0.8, 0]));
-  ctx.studio.controls.target.copy(target);
-  await awaitGroup('camera');
   return ok(ctx, {
     restored: r.restored,
     note: 'Scene replaced. undo returns to the previous state — modify freely from here.',

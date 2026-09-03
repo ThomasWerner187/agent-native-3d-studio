@@ -4,13 +4,23 @@
  * 2. <script type="application/json" id="agent-manifest"> in the DOM
  *    (for DOM-scraping agents),
  * 3. the console banner (for CDP/console-driven agents).
- * Keep the playbook under ~1300 chars so it fits one tool-result budget.
+ * Keep this focused on the shared workflow and current tool contracts.
  */
 
 export const AGENT_PLAYBOOK = [
-  'WORKFLOW: start with describe_scene — objects have ids ("obj_3") and names; both target tools. Mutating tools animate and reply only AFTER the scene settled, with live values + scene_version. undo steps back, so experiment freely.',
-  'BUILD: add_object{type,position{x,z},scale,name} — types: box/sphere/cylinder/plane/tree/rock/lamp/window/chair/table/chessboard/chess_piece. scatter{type,count,area{cx,cz,w,d},seed} places many with natural variation. set_material{targets,color"#hex",emissive} makes things glow; set_lighting{preset:golden_hour|night_neon|studio|overcast|moonlit,intensity}.',
-  'CAMERA: frame_camera{target:"scene"|id,angle:front|side|top|three_quarter|low|hero,select:false}. camera_path{keyframes:[{target,angle,hold_ms}]} flies sequences — fly-throughs, reveals. Hide the HUD with set_ui{visible:false} for clean shots.',
+  'CO-CREATE: the human can Start empty, Add pond/Add cabin, drag objects or change position/rotation/size in the inspector. Continue THAT live world. Start with describe_scene, then query_scene{include_bounds:true}; inspect creative_requests.latest for the latest human typed brief, selected_id, human_edits, recent_changes, created_by, last_changed_by, revision and human_revision. Re-read after each human edit; use current expected_scene_version. Never replace the world with a preset unless asked.',
+
+  'ZEN GARDEN: after a human places a cabin and pond, add_grove{cabin,pond,count:40,lights:8,seed:42,reveal_seconds:6,expected_scene_version} grows a layered forest mainly behind the live cabin, frames its sides and places warm garden lanterns. add_path{cabin,pond,bend:2,reveal_seconds:3,expected_scene_version} connects the live porch to the pond bank with individually editable stepping stones. Both plan the complete arrangement first and preserve every existing object. Their undo_id works with undo_scatter. Re-read after the human moves stones; never rerun a whole composition over their edits.',
+
+  'GROW: scatter{type:"tree",count:30,anchor:"live cabin id",clearance:0.6,seed:42} derives its area from the anchor LIVE bounds and adds around existing geometry. Other groups can add rocks and lamps. Every scatter preserves existing objects and returns its exact added count, ids, preserved_ids and undo_id. If insufficient space, nothing is added: expand area and retry. undo_scatter{undo_id} removes only untouched additions, preserving later human edits; describe_scene exposes scatter_history. Verify counts and anchors afterward.',
+
+  'LOFI: compose_lofi_scene{scene:"lakeside_cabin"|"lantern_grove"|"island_hideaway",mood:"moonlit"|"golden_hour",build_seconds:32,seed:42,camera:"cinematic"|"orbit",music:true,cycle:true,hold_seconds:180} progressively builds an authored world, fades in music and loops the camera. Cycling visits all three worlds, using one undo point. Returns immediately with session_id; describe_scene reports actual progress, sequence countdown, camera and audio. control_lofi{action:"pause"|"resume"|"stop"|"next"}. Human input pauses the entire sequence; explicitly resume. Music may need a user gesture. The local Create button invokes the same handler, not an AI model. Recording is not implemented.',
+
+  'CAMP LAYOUT: arrange_scene{anchor:"camp",expected_scene_version} adapts an existing tagged grove/path/lanterns to the camp LIVE placement, preserving human edits. undo_layout and redo_layout restore ONLY layout positions, skipping later edits. Generic undo restores the entire scene; use targeted undo_scatter or undo_layout for shared work. Try layout / Guided tour are local handlers, not AI sessions.',
+  'WORKFLOW: start with describe_scene — objects have ids ("obj_3") and names; both target tools. Finite mutations reply after settling; lofi and continuous camera return immediately with observable state, with live values + scene_version. undo steps back, so experiment freely.',
+  'BUILD: add_object{type,position:{x,z},scale,name} — types: box/sphere/cylinder/plane/tree/rock/lamp/window/chair/table/chessboard/chess_piece/camp/cabin/pond. scatter also accepts area:{center_x,center_z,width,depth}. set_material{targets,color:"#hex",emissive} makes things glow; set_lighting{preset:golden_hour|night_neon|studio|overcast|moonlit,intensity}.',
+  'ATMOSPHERE: after the human edits one object, inspect the scene again. Keep all geometry/materials intact; set_lighting{preset:"golden_hour",intensity:0.9} adds warmth. set_camera_motion{action:"start",mode:"drift",targets:["live cabin id","live pond id"],distance:22,height:8,azimuth_degrees:18,sweep_degrees:50,loop_seconds:240} starts an intimate endless front-facing sweep on the CURRENT world; adapt heading to the live cabin rotation. set_music{on:true,volume:0.35} and set_ui{visible:false} finish a requested quiet moment. The human can press H to return. It returns immediately; verify camera_motion with describe_scene. Human input pauses it; resume explicitly. No preset composition is needed.',
+  'CAMERA: frame_camera{target:"scene"|id,angle:front|side|top|three_quarter|low|hero,select:false}. camera_path{keyframes:[{target,angle,hold_ms}]} flies finite sequences. Hide the HUD with set_ui{visible:false} only when the human wants clean shots.',
   'CHESS: add_object{type:"chessboard"} → board_square{square:"e4"} shows positions → add chess pieces (piece:"queen",side:"black") → chess_move{piece:"white pawn e2",to:"e4",camera:"follow"} performs the move and flies the camera. delete_objects{name_contains:"pawn"} clears groups. You supply the rules; the scene supplies geometry.',
   'HUMANS: the mouse always works, even mid-call. A human grabbing the camera interrupts agent camera moves — the result then says applied:false.',
 ].join('\n');
@@ -23,7 +33,7 @@ export const AGENT_PLAYBOOK = [
 export const NO_CLIENT_RECIPE = [
   '// No WebMCP tool surface in your harness? Call the page tools via the standard in-page API:',
   'const mc = document.modelContext;',
-  'const tools = await mc.getTools();                    // 20 tools, alphabetically sorted',
+  'const tools = await mc.getTools();                    // discover the current tools',
   'const add = tools.find(t => t.name === "add_object");',
   'await mc.executeTool(add, JSON.stringify({ type: "tree", position: { x: 2, z: 1 } }));',
   '// every result is a JSON string {ok, scene_version, ...}; read back with describe_scene.',
