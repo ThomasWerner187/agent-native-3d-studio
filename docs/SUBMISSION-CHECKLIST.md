@@ -12,12 +12,13 @@ Current candidate: 29 WebMCP tools and the final 157-second zen co-creation film
 - [x] Original 4,710 frames, 24 native events, narration alignment, separate SRT and final proof manifest are saved locally.
 - [x] Submission story, judge guide, run instructions, MIT license, music provenance and font licenses are prepared.
 - [x] Current GitHub main is anonymously public and GitHub detects the MIT license.
+- [x] Final source branch is published and anonymously reachable; its raw MIT license is accessible.
+- [x] Matching production deploy `6a99b2c3a59b2a796bbe67c1` serves the recorded JS/CSS bundles. A fresh native browser load discovered all 29 tools.
 
 ## Remaining external gates
 
 - [ ] Creator watches/listens to this exact final film and approves voice, captions and pacing.
-- [ ] Publish the final source ref, then verify it anonymously and confirm GitHub still detects MIT.
-- [ ] Publish the matching production application and verify its clean URL and native 29-tool access without login or saved scene state.
+- [ ] Merge the final branch into the default branch, or use the exact published branch URL in Devpost; repeat the anonymous GitHub check after any merge.
 - [ ] Upload the final film as Public on YouTube, wait for processing and verify logged-out playback.
 - [ ] Update Devpost with the current story, final live/source/video links, testing instructions and team details; save.
 - [ ] Confirm every teammate invitation is accepted.
@@ -33,8 +34,8 @@ Current candidate: 29 WebMCP tools and the final 157-second zen co-creation film
 | Film and YouTube copy | [DEMO.md](../DEMO.md) |
 | Verified results | [FINAL-REVIEW.md](FINAL-REVIEW.md), [native-capture-summary.json](native-capture-summary.json) |
 | Recorded Demo browser | [zen-review `?demo=1`](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1), application `419e5554`, deploy `6a99a8cac0c3582112f75f73` |
-| Production | [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app/) — matching release pending |
-| Source | [ThomasWerner187/agent-native-3d-studio](https://github.com/ThomasWerner187/agent-native-3d-studio) — final source ref pending |
+| Production | [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app/), deploy `6a99b2c3a59b2a796bbe67c1`, bundle `index-DMV7pxmZ.js` |
+| Source | [`codex/zen-co-creation`](https://github.com/ThomasWerner187/agent-native-3d-studio/tree/codex/zen-co-creation) — public final branch; merge pending |
 | Film | `scratch-submission-media/submission-demo.mp4` — 157 s, Lily v3, Aurora Drift, 44 captions, SHA-256 `9677df…3333` |
 | Public video | `[PUBLIC_YOUTUBE_URL]` |
 | Devpost | Draft 1168246 was previously observed at 2/5 steps; not edited this run. |

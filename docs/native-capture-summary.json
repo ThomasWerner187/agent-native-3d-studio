@@ -276,5 +276,12 @@
     "full_audio_video_decode": "passed",
     "review": "Contact sheet, poster, captions and ending inspected. Creator full playback approval remains open."
   },
-  "method": "Codex operated the actual UI and pointer route for human actions and the native WebMCP route for agent actions inside a visibly labelled functional Demo browser. One scene persists, all retained actions run at original speed, and no application model or fake agent execution was inserted."
+  "method": "Codex operated the actual UI and pointer route for human actions and the native WebMCP route for agent actions inside a visibly labelled functional Demo browser. One scene persists, all retained actions run at original speed, and no application model or fake agent execution was inserted.",
+  "production": {
+    "url": "https://agent-native-3d-studio.netlify.app/",
+    "deploy_id": "6a99b2c3a59b2a796bbe67c1",
+    "bundle": "index-DMV7pxmZ.js",
+    "native_tools": 29,
+    "verified": true
+  }
 }

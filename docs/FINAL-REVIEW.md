@@ -1,6 +1,6 @@
 # Final submission review
 
-Reviewed September 3, 2026. **The final zen co-creation film is 2:37, with ElevenLabs Lily v3 narration, Thomas Werner's Aurora Drift and 44 English subtitle cues.** It records one functional Demo browser page, one retained scene, actual pointer actions and native WebMCP calls. Public YouTube upload, matching production publication and the final Devpost Submitted check remain open.
+Reviewed September 3, 2026. **The final zen co-creation film is 2:37, with ElevenLabs Lily v3 narration, Thomas Werner's Aurora Drift and 44 English subtitle cues.** It records one functional Demo browser page, one retained scene, actual pointer actions and native WebMCP calls. Public YouTube upload, creator playback approval and the final Devpost Submitted check remain open.
 
 ## Verified collaboration
 
@@ -34,11 +34,11 @@ The [capture summary](native-capture-summary.json) contains exact poses, provena
 
 ## Application and remaining release work
 
-Recorded application: `419e5554fc7f3b77e4ba2f75ebcd0a6255c2c5a1` at the [Demo browser review URL](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1), deploy `6a99a8cac0c3582112f75f73`, bundle `index-DMV7pxmZ.js`.
+Recorded application: `419e5554fc7f3b77e4ba2f75ebcd0a6255c2c5a1` at the [Demo browser review URL](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1), deploy `6a99a8cac0c3582112f75f73`. The identical application bundle, `index-DMV7pxmZ.js`, is now published at the [canonical production URL](https://agent-native-3d-studio.netlify.app/) as deploy `6a99b2c3a59b2a796bbe67c1`. A fresh native browser load discovered all 29 tools.
 
 Integrated checks passed: build/typecheck, 29/29 tools, 76/76 behavior checks, animation regression, lofi/zen regressions, current-view orbit coverage, one valid native-evidence fixture and sixteen rejection cases. The final capture separately verifies discovery, human edits, native actions, playback and presentation state.
 
-The repository is anonymously public and GitHub detects the MIT license on the current main branch. The final source branch still needs publication and the same anonymous check. The canonical production site still needs the matching release. Public YouTube upload and Devpost submission remain open in [SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md). Devpost was not edited in this run; draft 1168246 was previously observed at 2/5 steps, which is not current submission confirmation.
+The final source is published on branch [`codex/zen-co-creation`](https://github.com/ThomasWerner187/agent-native-3d-studio/tree/codex/zen-co-creation). Anonymous access returns HTTP 200 and its raw MIT license is reachable. The branch still needs merging to the default branch or an explicit branch link in Devpost. Public YouTube upload and Devpost submission remain open in [SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md). Devpost was not edited in this run; draft 1168246 was previously observed at 2/5 steps, which is not current submission confirmation.
 
 ## Honest assessment
 
