@@ -15,21 +15,27 @@
 <body>
 <div id="app">
   <canvas id="viewport" tabindex="0" aria-label="Interactive 3D forest. Drag empty space to orbit; drag an object to move it. Escape clears selection. H toggles controls."></canvas>
-  <header class="hud hud-top">
+  <nav id="quiet-controls" class="hud quiet-controls" aria-label="Build your world">
+    <button type="button" data-add-object="pond">Add pond</button>
+    <button type="button" data-add-object="cabin">Add cabin</button>
+    <button id="scene-empty" type="button" title="Clear this scene with an undo point">Start empty</button>
+    <button id="music-toggle" type="button" aria-label="Toggle lofi music" aria-pressed="false" title="Toggle lofi music"><span data-icon="music" aria-hidden="true"></span><span>Sound</span></button>
+    <button id="studio-immersive" type="button" aria-label="Hide controls for an immersive view" title="Hide controls; H brings them back">Immersive</button>
+    <button id="studio-tools-toggle" type="button" aria-expanded="false" aria-controls="studio-header studio-about prompt-card studio-controls selection-coordinates agent-bridge">Studio tools</button>
+  </nav>
+  <header id="studio-header" class="hud hud-top studio-advanced-only">
     <div class="brand"><span class="brand-mark" data-icon="cube" aria-hidden="true"></span><div><div class="brand-title">Scene Studio</div><div class="brand-sub">Agent-native · WebMCP</div></div></div>
     <div class="top-actions">
       <div id="webmcp-status" class="status-chip status-checking"><span class="status-dot"></span><span class="status-text">Connecting tools…</span></div>
       <button id="scene-share" class="icon-btn" data-icon="share" aria-label="Copy scene share link" title="Copy scene share link"></button>
-      <button id="music-toggle" class="icon-btn" data-icon="music" aria-label="Toggle lofi music" aria-pressed="false" title="Toggle lofi music"></button>
       <button id="quality-toggle" class="quality-btn" aria-pressed="true">Cinematic</button>
     </div>
   </header>
-  <section class="hud scene-intro" aria-label="About this scene">
+  <section id="studio-about" class="hud scene-intro studio-advanced-only" aria-label="About this scene">
     <h1>A little world.<br><em>To slow down in.</em></h1>
     <p>Place a pond. Find a home for your cabin.<br>Let your agent grow the world around them.</p>
     <div class="collaboration-entry" aria-label="Build your world">
-      <div class="build-actions"><button type="button" data-add-object="pond">Add pond</button><button type="button" data-add-object="cabin">Add cabin</button></div>
-      <div class="build-meta"><button id="scene-empty" type="button" title="Clear this scene with an undo point">Start empty</button><span id="world-count">Your world, together</span></div>
+      <div class="build-meta"><span id="world-count">Your world, together</span></div>
       <p id="build-hint">Add a pond and cabin, then drag them into place.</p>
     </div>
     <details class="preset-worlds"><summary>Watch a lofi world</summary><div class="lofi-entry">
@@ -42,9 +48,9 @@
   </section>
   <aside id="tool-log" class="hud panel" aria-label="Tool activity">
     <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool activity" aria-expanded="true" aria-controls="tool-log-entries agent-bridge"></button></div>
-    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Make the first move.<br>Add a pond and cabin, then ask your agent to build around your placements.</div></div>
-    <details id="agent-bridge" class="agent-bridge"><summary>Connect your agent</summary>
-      <p>Open this page with a WebMCP-aware browser agent, then share an idea below and ask it to continue. Your agent can read your live placements and add to the same world.</p>
+    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Your hands. Your agent. One world.</div></div>
+    <details id="agent-bridge" class="agent-bridge studio-advanced-only"><summary>Connect your agent</summary>
+      <p>Open this page with a WebMCP-aware browser agent and ask it to continue in its chat. Your agent reads your live placements and builds in the same world. The optional idea composer stores a brief on this page; it does not send a chat message.</p>
       <p>For a compatible JavaScript harness:</p>
       <pre>const mc = document.modelContext;
 const tools = await mc.getTools();
@@ -54,29 +60,29 @@ await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
   </aside>
   <section id="selection-card" class="hud selection-card" aria-label="Selected object" hidden>
     <div class="selection-heading"><span class="human-dot"></span><span id="selection-name">Object selected</span><span id="selection-provenance" class="provenance-badge"></span><button id="selection-clear" class="mini-btn" data-icon="close" aria-label="Deselect object"></button></div>
-    <div id="selection-position"></div>
-    <div class="selection-fields">
+    <div id="selection-position" class="studio-advanced-only"></div>
+    <div id="selection-coordinates" class="selection-fields studio-advanced-only">
       <label>X<input id="selection-x" type="number" step="any" min="-58" max="58" aria-label="Object position X"></label>
       <label>Z<input id="selection-z" type="number" step="any" min="-58" max="58" aria-label="Object position Z"></label>
       <label>Turn °<input id="selection-rotation" type="number" step="any" aria-label="Object rotation in degrees"></label>
       <label>Size<input id="selection-scale" type="number" step="any" min="0.1" max="8" aria-label="Object size"></label>
     </div>
-    <div class="selection-foot"><span id="selection-edit-note">Drag to move, or adjust a value.</span><button id="selection-delete" type="button">Delete</button></div>
+    <div class="selection-foot"><span id="selection-edit-note" class="studio-advanced-only">Drag to move, or adjust a value.</span><button id="selection-delete" type="button" aria-describedby="selection-name">Delete</button></div>
   </section>
-  <section id="prompt-card" class="hud command-bar" aria-label="Create together">
-    <button id="prompt-card-open" type="button" aria-label="Show idea composer" aria-expanded="false" aria-controls="creative-request-form" hidden><span class="human-dot" aria-hidden="true"></span> Your next idea <span aria-hidden="true">↗</span></button>
-    <form id="creative-request-form" class="request-composer">
-      <div class="request-heading"><label for="creative-request"><span class="human-dot"></span> Your next idea</label><button id="prompt-card-close" type="button" class="mini-btn" data-icon="close" aria-label="Minimize idea composer" aria-expanded="true" aria-controls="creative-request-form"></button></div>
+  <section id="prompt-card" class="hud command-bar studio-advanced-only is-collapsed" aria-label="Create together">
+    <button id="prompt-card-open" type="button" aria-label="Show idea composer" aria-expanded="false" aria-controls="creative-request-form"><span class="human-dot" aria-hidden="true"></span> Your next idea <span aria-hidden="true">↗</span></button>
+    <form id="creative-request-form" class="request-composer" hidden>
+      <div class="request-heading"><label for="creative-request"><span class="human-dot"></span> Your next idea</label><button id="prompt-card-close" type="button" class="mini-btn" data-icon="close" aria-label="Minimize idea composer" aria-expanded="false" aria-controls="creative-request-form"></button></div>
       <div class="request-input-row"><textarea id="creative-request" rows="2" maxlength="1200" placeholder="Grow a forest behind my cabin, with warm little lights…" aria-describedby="request-status"></textarea><button id="request-share" type="submit">Share<br>with agent <span aria-hidden="true">↗</span></button></div>
       <div class="request-suggestions" aria-label="Ideas to begin with"><button id="prompt-build" type="button" data-request="Add 40 trees, mostly as a forest behind my cabin, and beautiful warm lights around the clearing. Keep my pond and cabin where I placed them.">Grow a forest</button><button id="prompt-path" type="button" data-request="Please add a curved stepping-stone path from the cabin porch to the pond.">Lay a stone path</button><button id="prompt-atmosphere" type="button" data-request="Keep my stone edits. Make it cozy evening, add music, and bring the camera closer for a slow endless drift. Hide the controls so we can relax.">Settle into evening</button></div>
     </form>
-    <div id="request-status" class="command-caption" role="status">Share your idea, then ask your connected browser agent to continue.</div>
+    <div id="request-status" class="command-caption" role="status" hidden>Share your idea, then ask your connected browser agent to continue.</div>
   </section>
-  <nav class="hud scene-controls" aria-label="Scene controls">
+  <nav id="studio-controls" class="hud scene-controls studio-advanced-only" aria-label="Scene controls">
     <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Moonlight</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-orbit" aria-pressed="false">Orbit</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
     <div class="control-group"><button id="scatter-undo" title="Undo the latest scattered additions, keeping later edits" disabled>Undo additions</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
   </nav>
-  <section id="lofi-player" class="hud lofi-player" aria-label="Lofi session" hidden>
+  <section id="lofi-player" class="hud lofi-player studio-advanced-only" aria-label="Lofi session" hidden>
     <div class="lofi-player-head"><div><div id="lofi-progress-label">Growing your world</div><h2 id="lofi-phase" aria-live="polite">A quiet place by the water</h2><p id="lofi-shot">Settling into the scene</p></div><button id="lofi-view" title="Hide interface; H to return">Clean view</button></div>
     <progress id="lofi-progress" max="100" value="0" aria-label="Scene construction progress"></progress>
     <div class="lofi-player-controls"><button id="lofi-pause">Pause</button><button id="lofi-next">Next world</button><label class="sr-only" for="lofi-motion">Camera motion</label><select id="lofi-motion"><option value="cinematic">Cinematic drift</option><option value="orbit">Endless orbit</option></select><button id="lofi-sound" aria-pressed="false">Enable sound</button><label class="sr-only" for="lofi-volume">Music volume</label><input id="lofi-volume" type="range" min="0" max="100" value="38" aria-label="Music volume"><button id="lofi-proof" aria-pressed="false">Tool activity</button><button id="lofi-exit" data-icon="close" aria-label="Stop lofi session"></button></div>
@@ -84,9 +90,9 @@ await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
     <div class="lofi-player-foot"><span id="lofi-track">Quiet for now</span><span>Live 3D · Yours to change</span></div>
   </section>
   <button id="return-controls" aria-label="Show controls">Show controls</button>
-  <button id="show-agent" class="hud show-btn">Guided tour</button>
+  <button id="show-agent" class="hud show-btn studio-advanced-only">Guided tour</button>
   <div id="show-cue" class="show-cue" aria-live="polite" aria-atomic="true"><div id="show-cue-kicker"></div><div id="show-cue-title"></div><div id="show-cue-detail"></div></div>
-  <div id="hint-bar" class="hud">DRAG TO ORBIT <span>·</span> SCROLL TO EXPLORE <span>·</span> H TO HIDE UI</div>
+  <div id="hint-bar" class="hud studio-advanced-only">DRAG TO ORBIT <span>·</span> SCROLL TO EXPLORE <span>·</span> H TO HIDE UI</div>
   <div id="toast" class="toast" role="status"></div><div class="vignette"></div><div id="scene-transition" class="scene-transition" aria-hidden="true"></div>
   <section id="startup-error" class="startup-error" role="alert" hidden><h1>This world needs WebGL.</h1><p>Your browser could not start its 3D renderer. Enable hardware acceleration or open this page in a current browser, then reload.</p><button id="retry-renderer">Reload scene</button></section>
   <noscript><section class="startup-error"><h1>A little world needs JavaScript.</h1><p>Enable JavaScript to open the interactive studio.</p></section></noscript>

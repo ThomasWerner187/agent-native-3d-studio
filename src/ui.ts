@@ -94,6 +94,7 @@ function renderEntry(entry: LogEntry): HTMLElement {
   div.className = 'log-entry' + (entry.ok === false ? ' err' : '');
   div.dataset.actor = entry.actor ?? 'system';
   if (entry.tool === '__info') {
+    div.classList.add('is-info');
     const info = document.createElement('div');
     info.className = 'log-result';
     info.textContent = firstLine(entry.result ?? '', 300);
@@ -117,7 +118,7 @@ function renderEntry(entry: LogEntry): HTMLElement {
 
   if (entry.tool === 'creative_request') return div;
   const raw = document.createElement('details');
-  raw.className = 'log-raw';
+  raw.className = 'log-raw studio-advanced-only';
   const summary = document.createElement('summary');
   summary.textContent = `${entry.tool}()`;
   raw.appendChild(summary);
@@ -167,6 +168,10 @@ export function pushLog(entry: LogEntry): void {
   if (empty) empty.remove();
   body.prepend(renderEntry(entry));
   while (body.children.length > MAX_ENTRIES) body.lastChild?.remove();
+  // The quiet view shows three real actions; expanded tools retain the full log.
+  body.querySelectorAll<HTMLElement>('.log-entry:not(.is-info)').forEach((node, index) => {
+    node.classList.toggle('quiet-log-entry', index < 3);
+  });
 }
 
 export function logToolCall(tool: string, args: Record<string, unknown>, result: string): void {
@@ -210,14 +215,32 @@ export function initChrome(onReset?: () => void): void {
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach(node => {
     node.innerHTML = icon(node.dataset.icon ?? '');
   });
-  // Opacity alone leaves invisible controls in the keyboard focus order.
+  const studioTools = el<HTMLButtonElement>('studio-tools-toggle');
+  const immersive = el<HTMLButtonElement>('studio-immersive');
+  // Hidden panels leave the keyboard order; closing tools returns focus to their switch.
   const syncVisibility = () => {
     const hidden = document.body.classList.contains('ui-hidden');
-    document.querySelectorAll<HTMLElement>('.hud').forEach(node => { node.inert = hidden; });
+    const advanced = document.body.classList.contains('studio-advanced');
+    document.querySelectorAll<HTMLElement>('.hud').forEach(node => {
+      node.inert = hidden || (!advanced && node.classList.contains('studio-advanced-only'));
+    });
+    studioTools.setAttribute('aria-expanded', String(advanced));
     if (hidden && document.activeElement?.closest('.hud')) {
-      document.getElementById('return-controls')?.focus({ preventScroll: true });
+      el('return-controls').focus({ preventScroll: true });
+    } else if (!advanced && document.activeElement?.closest('.studio-advanced-only')) {
+      studioTools.focus({ preventScroll: true });
     }
   };
+  studioTools.addEventListener('click', () => {
+    document.body.classList.toggle('studio-advanced');
+    syncVisibility();
+  });
+  immersive.addEventListener('click', () => document.body.classList.add('ui-hidden'));
+  el('return-controls').addEventListener('click', () => {
+    document.body.classList.remove('ui-hidden');
+    syncVisibility();
+    immersive.focus({ preventScroll: true });
+  });
   new MutationObserver(syncVisibility).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   syncVisibility();
   // collapse toggle
@@ -229,7 +252,6 @@ export function initChrome(onReset?: () => void): void {
     toggle.setAttribute('aria-expanded', String(!collapsed));
     toggle.setAttribute('aria-label', collapsed ? 'Expand tool activity' : 'Collapse tool activity');
   };
-  if (window.matchMedia('(max-width: 700px)').matches) panel.classList.add('collapsed');
   syncToggle();
   el('tool-log-toggle').addEventListener('click', () => {
     panel.classList.toggle('collapsed');

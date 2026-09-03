@@ -65,7 +65,7 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
     if (!requestInput.value.trim()) { requestInput.focus(); return; }
     const request = addCreativeRequest(requestInput.value, ctx.store.version, ctx.store.selectedId);
     pushLog({ tool: 'creative_request', args: { text: request.text }, ok: true, actor: 'human', time: new Date() });
-    requestStatus.textContent = 'Idea ready. Ask your connected browser agent to continue with it.';
+    requestStatus.textContent = 'Brief saved here. Ask your connected agent to read it in the chat.';
     requestInput.value = '';
     requestInput.placeholder = 'What would you like to shape next?';
   });

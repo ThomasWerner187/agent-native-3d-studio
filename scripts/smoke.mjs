@@ -55,7 +55,11 @@ async function newTestPage() {
 }
 async function testQuality(page) {
   // Same scene and tool contract; CI has no hardware GPU for post-processing.
-  if (process.env.CI) await page.getByRole('button', { name: 'Cinematic', exact: true }).click();
+  if (process.env.CI) {
+    const studioTools = page.getByRole('button', { name: 'Studio tools', exact: true });
+    if (await studioTools.getAttribute('aria-expanded') === 'false') await studioTools.click();
+    await page.getByRole('button', { name: 'Cinematic', exact: true }).click();
+  }
 }
 try {
   try {
@@ -611,11 +615,14 @@ try {
   await badPage2.goto(BASE);
   await badPage2.waitForFunction(() => !document.querySelector('#webmcp-status').classList.contains('status-checking'));
   const phone = await badPage2.evaluate(() => {
-    const intro = document.querySelector('.scene-intro').getBoundingClientRect();
+    const controls = document.querySelector('#quiet-controls').getBoundingClientRect();
     const rail = document.querySelector('#tool-log').getBoundingClientRect();
-    return { fits: document.documentElement.scrollWidth <= innerWidth, separated: intro.bottom <= rail.top };
+    return {
+      fits: document.documentElement.scrollWidth <= innerWidth && controls.left >= 0 && controls.right <= innerWidth && controls.bottom <= innerHeight,
+      separated: controls.height > 0 && rail.height > 0 && rail.bottom < controls.top,
+    };
   });
-  check('mobile controls fit without intro overlap', phone.fits && phone.separated, JSON.stringify(phone));
+  check('mobile palette fits without activity overlap', phone.fits && phone.separated, JSON.stringify(phone));
   await badPage2.screenshot({ path: 'docs/diorama-mobile.png' });
 
   check('no shader compilation or asset errors', renderErrors.length === 0, renderErrors.join('\n'));
