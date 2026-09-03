@@ -1,6 +1,6 @@
 # Judge guide
 
-Open [Agent-Native 3D Scene Studio](https://agent-native-3d-studio.netlify.app). No application account, credentials or API key are required. A connected browser agent supplies the model. Confirm that this URL serves the reviewed **29-tool zen co-creation release** before evaluating it; release status is in [FINAL-REVIEW.md](FINAL-REVIEW.md).
+Open [Agent-Native 3D Scene Studio](https://studio.wernerverse.de/). The hosted release uses HTTP Basic protection; testing credentials are supplied separately. The application itself needs no account or API key. A connected browser agent supplies the model. Confirm that this URL serves the reviewed **29-tool zen co-creation release** before evaluating it; release status is in [FINAL-REVIEW.md](FINAL-REVIEW.md).
 
 ## Connect and begin
 
@@ -76,6 +76,7 @@ The optional lofi gallery has three authored worlds and intentionally replaces t
 
 | Observed state | Next step |
 | --- | --- |
+| HTTP authentication prompt | Use the separately supplied testing credentials; they are not an application account. |
 | WebMCP unavailable | Use a supporting browser with a connected client. |
 | Tool count differs from 29 | Confirm the reviewed release URL; older deployments have fewer tools. |
 | Browser policy verification denied | Restore authorized browser access; do not bypass the policy. |

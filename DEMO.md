@@ -56,7 +56,8 @@ WebMCP gives the connected browser agent access to real object identities, posit
 
 English narration: ElevenLabs Lily — Velvety Actress, eleven_v3. Music: Aurora Drift, created and supplied by Thomas Werner. English subtitles use actual speech alignment.
 
-Try it: https://agent-native-3d-studio.netlify.app
+Try it: https://studio.wernerverse.de/
+Hosted access is currently protected; testing credentials are supplied separately.
 Source and MIT license: https://github.com/ThomasWerner187/agent-native-3d-studio
 Testing guide: https://github.com/ThomasWerner187/agent-native-3d-studio/blob/main/docs/JUDGE-GUIDE.md
 
@@ -64,3 +65,5 @@ Built by Thomas Werner with TypeScript, three.js, Vite and WebMCP for The WebMCP
 ```
 
 After publication, verify the public YouTube watch page and add its link to Devpost. The green Submitted status is the final submission gate.
+
+The original film was captured on the final Netlify review build. That capture URL is historical evidence. The same application build is packaged for the current Netcup host; see [deployment provenance](docs/netcup-hosting.md).

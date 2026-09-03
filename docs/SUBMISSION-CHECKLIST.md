@@ -13,7 +13,8 @@ Current candidate: 29 WebMCP tools and the final 157-second zen co-creation film
 - [x] Submission story, judge guide, run instructions, MIT license, music provenance and font licenses are prepared.
 - [x] Current GitHub main is anonymously public and GitHub detects the MIT license.
 - [x] Final source branch is published and anonymously reachable; its raw MIT license is accessible.
-- [x] Matching production deploy `6a99b2c3a59b2a796bbe67c1` serves the recorded JS/CSS bundles. A fresh native browser load discovered all 29 tools.
+- [x] Current Netcup production serves the recorded JS/CSS bundles. All 12 runtime files were checked against the upload manifest; authenticated native scene inspection, editing and current-view orbit passed. See [hosting evidence](netcup-hosting.md).
+- [x] Both project-specific Netlify sites are disabled; seven production/review/deployment endpoints return `404`.
 
 ## Remaining external gates
 
@@ -21,6 +22,7 @@ Current candidate: 29 WebMCP tools and the final 157-second zen co-creation film
 - [ ] Merge the final branch into the default branch, or use the exact published branch URL in Devpost; repeat the anonymous GitHub check after any merge.
 - [ ] Upload the final film as Public on YouTube, wait for processing and verify logged-out playback.
 - [ ] Update Devpost with the current story, final live/source/video links, testing instructions and team details; save.
+- [ ] Include the separately supplied HTTP Basic testing credentials in the private judge instructions and verify evaluation access to the current Netcup URL.
 - [ ] Confirm every teammate invitation is accepted.
 - [ ] Submit and verify the green **Submitted** label on [My projects](https://devpost.com/submit-to/31011-the-webmcp-challenge/manage/submissions).
 - [ ] Record the final source ref, deployment, public video URL and Submitted screenshot; freeze repository, site and video through judging.
@@ -33,8 +35,9 @@ Current candidate: 29 WebMCP tools and the final 157-second zen co-creation film
 | Native walkthrough | [JUDGE-GUIDE.md](JUDGE-GUIDE.md) |
 | Film and YouTube copy | [DEMO.md](../DEMO.md) |
 | Verified results | [FINAL-REVIEW.md](FINAL-REVIEW.md), [native-capture-summary.json](native-capture-summary.json) |
-| Recorded Demo browser | [zen-review `?demo=1`](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1), application `419e5554`, deploy `6a99a8cac0c3582112f75f73` |
-| Production | [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app/), deploy `6a99b2c3a59b2a796bbe67c1`, bundle `index-DMV7pxmZ.js` |
+| Current Demo browser | [studio.wernerverse.de `?demo=1`](https://studio.wernerverse.de/?demo=1), HTTP Basic testing credentials supplied separately |
+| Historical recording origin | `zen-review--agent-native-3d-studio.netlify.app/?demo=1`, application `419e5554`, deploy `6a99a8cac0c3582112f75f73`; this Netlify site is now disabled |
+| Production | [studio.wernerverse.de](https://studio.wernerverse.de/), bundle `index-DMV7pxmZ.js`; [deployment and access details](netcup-hosting.md) |
 | Source | [`codex/zen-co-creation`](https://github.com/ThomasWerner187/agent-native-3d-studio/tree/codex/zen-co-creation) — public final branch; merge pending |
 | Film | `scratch-submission-media/submission-demo.mp4` — 157 s, Lily v3, Aurora Drift, 44 captions, SHA-256 `9677df…3333` |
 | Public video | `[PUBLIC_YOUTUBE_URL]` |

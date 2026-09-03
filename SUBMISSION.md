@@ -58,18 +58,18 @@ The library supplies procedural assets; the agent arranges and edits them. The p
 
 ## Built with
 
-WebMCP, TypeScript, three.js, Vite, WebGL, Netlify, Playwright. The demonstration uses ElevenLabs Lily v3 narration, creator-supplied Suno music and aligned English subtitles. Film production is separate from the application.
+WebMCP, TypeScript, three.js, Vite, WebGL, Netcup, Playwright. The demonstration uses ElevenLabs Lily v3 narration, creator-supplied Suno music and aligned English subtitles. Film production is separate from the application.
 
 ## Links
 
-- Live app: [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app)
+- Live app: [studio.wernerverse.de](https://studio.wernerverse.de/)
 - Public source: [ThomasWerner187/agent-native-3d-studio](https://github.com/ThomasWerner187/agent-native-3d-studio)
 - License: [MIT](LICENSE)
 - Demo video: `[PUBLIC_YOUTUBE_URL]`
 
 ## Testing instructions
 
-No application credentials or API key are required. Open the reviewed release in a WebMCP-capable browser with a connected agent. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch and connect a compatible client. Confirm **WebMCP live · 29 tools**.
+The hosted release currently requires HTTP Basic authentication; testing credentials are supplied separately and must be included in the private judge instructions before submission. The application itself needs no account or API key. Open [the studio](https://studio.wernerverse.de/) in a WebMCP-capable browser with a connected agent. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch and connect a compatible client. Confirm **WebMCP live · 29 tools**.
 
 Click **Start empty**, then **Add pond** and **Add cabin**. Place them beside one another with room between the porch and water. In **Your next idea**, write and share:
 

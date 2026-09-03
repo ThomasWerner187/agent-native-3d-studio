@@ -34,7 +34,9 @@ The [capture summary](native-capture-summary.json) contains exact poses, provena
 
 ## Application and remaining release work
 
-Recorded application: `419e5554fc7f3b77e4ba2f75ebcd0a6255c2c5a1` at the [Demo browser review URL](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1), deploy `6a99a8cac0c3582112f75f73`. The identical application bundle, `index-DMV7pxmZ.js`, is now published at the [canonical production URL](https://agent-native-3d-studio.netlify.app/) as deploy `6a99b2c3a59b2a796bbe67c1`. A fresh native browser load discovered all 29 tools.
+The current application is hosted at [studio.wernerverse.de](https://studio.wernerverse.de/), with the [Demo browser](https://studio.wernerverse.de/?demo=1) on the same origin. HTTP Basic protection is active; testing credentials are supplied separately. The JavaScript bundle `index-DMV7pxmZ.js` and CSS `index-Ch-Z9Ez9.css` match the recorded application. The Netcup upload and native editing/current-view orbit verification are documented in [hosting evidence](netcup-hosting.md).
+
+Historical recording provenance: application `419e5554fc7f3b77e4ba2f75ebcd0a6255c2c5a1` at `https://zen-review--agent-native-3d-studio.netlify.app/?demo=1`, deploy `6a99a8cac0c3582112f75f73`. The same bundle was previously published on Netlify production as deploy `6a99b2c3a59b2a796bbe67c1`, where a fresh native load discovered all 29 tools. Both project-specific Netlify sites are now disabled; those URLs document the capture and earlier release, not current entry points.
 
 Integrated checks passed: build/typecheck, 29/29 tools, 76/76 behavior checks, animation regression, lofi/zen regressions, current-view orbit coverage, one valid native-evidence fixture and sixteen rejection cases. The final capture separately verifies discovery, human edits, native actions, playback and presentation state.
 
@@ -44,4 +46,4 @@ The final source is published on branch [`codex/zen-co-creation`](https://github
 
 The strongest part is genuine turn-taking: the agent works around human choices, reads subsequent edits and keeps them. The visual result is a coherent cozy procedural world, and the film now explains the collaboration without covering it in interface text. It remains a focused scene studio rather than arbitrary 3D generation. A strong jury result still depends on the public release matching this reviewed build and on the submission page telling the same simple story.
 
-The earlier 161-second collaboration film, 135-second gallery montage and first 157-second v2 film are preserved historical artifacts. The current application needs no login or application API key. MIT licensing, font notices and owner-provided music provenance are in the repository.
+The earlier 161-second collaboration film, 135-second gallery montage and first 157-second v2 film are preserved historical artifacts. The application needs no account or application API key; the current host separately requires HTTP Basic testing credentials. MIT licensing, font notices and owner-provided music provenance are in the repository.

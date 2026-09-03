@@ -2,13 +2,13 @@
 
 **Build a little world together.** Place a pond and cabin yourself, then ask your browser agent to grow a forest around them. Ask for a stone path, then move two stones by hand. The agent reads that change, keeps your placement, and gives the same world its lighting, music and a slow cinematic camera.
 
-[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:37 film plan](DEMO.md) · [MIT license](LICENSE)
+[Open the studio](https://studio.wernerverse.de/) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:37 film plan](DEMO.md) · [MIT license](LICENSE)
 
-No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The final 157-second collaboration film and its native evidence are tracked in the [review record](docs/FINAL-REVIEW.md).
+The hosted studio currently uses HTTP Basic access protection; testing credentials are supplied separately. The application itself needs no account, API key or backend. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The final 157-second collaboration film and its native evidence are tracked in the [review record](docs/FINAL-REVIEW.md).
 
 ![The shared forest, cabin, pond and path from the final native film](docs/zen-co-creation.jpg)
 
-Actual frame from the final co-creation film. [Try the recorded Demo browser build](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1).
+Actual frame from the final co-creation film. [Try the Demo browser](https://studio.wernerverse.de/?demo=1). The film's original Netlify capture URLs remain in the historical evidence; the current host is Netcup.
 
 ## Build with an agent
 
@@ -71,6 +71,8 @@ The useful handoff is concrete: “Keep what I placed; build around it.” The p
 Registration in [src/webmcp.ts](src/webmcp.ts) uses `document.modelContext.registerTool`. JSON schemas describe inputs and side-effect annotations. Results include `ok`, `operation_id`, `actor`, scene versions, `applied`, `duration_ms` and a result or error. Finite animations settle before reporting live values; background camera and gallery sessions acknowledge acceptance and expose ongoing state separately.
 
 ## Run and verify
+
+The current deployment and repeatable upload procedure are documented in [Netcup hosting](docs/netcup-hosting.md). Server access protection is separate from the application build.
 
 Use Node.js 22, as in CI. The application needs no environment variables.
 
