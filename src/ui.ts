@@ -241,7 +241,23 @@ export function initChrome(onReset?: () => void): void {
 
   // prompt card
   const card = el('prompt-card');
-  el('prompt-card-close').addEventListener('click', () => card.remove());
+  const composer = el('creative-request-form');
+  const composerStatus = el('request-status');
+  const composerClose = el('prompt-card-close');
+  const composerOpen = el('prompt-card-open');
+  const setComposerCollapsed = (collapsed: boolean) => {
+    card.classList.toggle('is-collapsed', collapsed);
+    composer.hidden = collapsed;
+    composerStatus.hidden = collapsed;
+    composerOpen.hidden = !collapsed;
+    composerOpen.setAttribute('aria-expanded', String(!collapsed));
+    composerClose.setAttribute('aria-expanded', String(!collapsed));
+    // Keep the original textarea and its draft; only change presentation.
+    if (collapsed) composerOpen.focus({ preventScroll: true });
+    else el<HTMLTextAreaElement>('creative-request').focus({ preventScroll: true });
+  };
+  composerClose.addEventListener('click', () => setComposerCollapsed(true));
+  composerOpen.addEventListener('click', () => setComposerCollapsed(false));
   card.querySelectorAll<HTMLButtonElement>('.prompt').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const text = btn.dataset.copy ?? '';

@@ -975,3 +975,12 @@ select { font: inherit; color: inherit; color-scheme: dark; }
 body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .brand { position: relative; isolation: isolate; }
 body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .brand::before { content: ""; position: absolute; inset: -8px -10px; z-index: -1; border-radius: 8px; background: #10272fef; pointer-events: none; }
 body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .scene-intro { padding: 12px; margin: -12px; border-radius: 10px; background: #10272fef; }
+
+/* The idea composer folds away while people shape their world, then returns with its draft. */
+#prompt-card.is-collapsed { left: 40px; bottom: 100px; width: max-content; max-width: calc(100% - 80px); transform: none; }
+#prompt-card-open { display: inline-flex; align-items: center; gap: 9px; min-height: 36px; padding: 8px 12px; border: 1px solid #a5c4be55; border-radius: 9px; background: #10272fe8; color: #d6e8e3; font: 11px/1.4 "DM Sans", sans-serif; box-shadow: 0 3px 14px #061a2026; }
+#prompt-card-open:hover { border-color: #a5c4be99; background: #203f46; }
+#prompt-card-open > span:last-child { margin-left: 3px; color: var(--agent); }
+#prompt-card-open[hidden], #creative-request-form[hidden], #request-status[hidden] { display: none; }
+@media (max-width: 1050px) { #prompt-card.is-collapsed { left: 24px; bottom: 106px; } }
+@media (max-width: 700px) { #prompt-card.is-collapsed { left: 14px; bottom: 132px; max-width: calc(100% - 28px); } }

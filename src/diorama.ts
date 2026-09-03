@@ -16,7 +16,10 @@ export class Diorama {
     top.rotateX(-Math.PI / 2);
     const topMat = material("#718263", "earth", 0.98);
     const map = surfaceTexture("earth").clone();
-    map.repeat.set(2, 2);
+    // This hand-painted wash is not tileable. A single clamped copy avoids
+    // wrap seams through the middle of the meadow, amplified by its bump map.
+    map.repeat.set(1, 1);
+    map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
     map.needsUpdate = true;
     topMat.map = topMat.bumpMap = map;
     this.ground = new THREE.Mesh(top, topMat);
