@@ -127,6 +127,12 @@ export function initDemoBrowser(ctx: ToolContext): void {
     } else if (restoreFocus) toggle.focus({ preventScroll: true });
     requestResize();
   }
+  const visibilityObserver = new MutationObserver(() => {
+    if (!document.body.classList.contains('ui-hidden')) return;
+    if (open) setOpen(false, false);
+    document.getElementById('return-controls')?.focus({ preventScroll: true });
+  });
+  visibilityObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   toggle.addEventListener('click', () => setOpen(!open));
   close.addEventListener('click', () => setOpen(false));
   panel.addEventListener('keydown', event => {
@@ -218,6 +224,7 @@ export function initDemoBrowser(ctx: ToolContext): void {
   window.addEventListener('pagehide', event => {
     if (event.persisted) return;
     resizeObserver.disconnect();
+    visibilityObserver.disconnect();
     window.removeEventListener('resize', requestResize);
     window.removeEventListener('studio:tool-result', receiveToolResult);
     if (resizeFrame) cancelAnimationFrame(resizeFrame);

@@ -243,7 +243,7 @@ function addCaptionAssets(capture = null) {
         addAsset(`${cue.asset_id}-${index}`, {
           kind: 'caption', width: sidebarOpen ? 880 : 1040,
           height: demoBrowser ? 76 : 77, body: cue.text,
-        }, shot.id, start, end, sidebarOpen ? 40 : 120, 620);
+        }, shot.id, start, end, sidebarOpen ? 40 : 120, 568);
       });
     }
   }
@@ -544,8 +544,8 @@ run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(plan.dura
 const captionSources = [...new Set(timeline.segments.map(segment => segment.caption_timing))];
 const segmentMetadata = timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, voice_offset: voiceOffset, audio: segment.audio, audio_duration: segment.audio_duration, alignment: segment.alignment || null, provenance: segment.provenance || null, caption_timing: segment.caption_timing, captions: segment.caption_cues.length }));
 const captionLayout = demoBrowser ? {
-  sidebar_open: { x: 40, y: 620, width: 880, height: 76 },
-  sidebar_closed: { x: 120, y: 620, width: 1040, height: 76 },
+  sidebar_open: { x: 40, y: 568, width: 880, height: 76 },
+  sidebar_closed: { x: 120, y: 568, width: 1040, height: 76 },
   other_editorial_overlays: false,
 } : { default: { x: 120, y: 620, width: 1040, height: 77 }, other_editorial_overlays: true };
 writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_at: new Date().toISOString(), story_id: plan.story_id, capture_id: capture.capture_id, app_revision: capture.app_revision, capture_continuity: capture.continuity, capture_layout: capture.layout || null, presentation: capture.presentation || [], caption_layout: captionLayout, master, format: final, shots, voice: narration.voice, provider: narration.provider, model: narration.model, narration, segments: segmentMetadata, captions: cues.length, native_events: events.length, music, source: 'native-capture.json', caption_timing: captionSources.join(' '), audio_processing: { narration_speed: 1, narration_time_stretch: false, voice_lead_in_seconds: voiceOffset, narration_loudness_target_lufs: -16, music_loudness_target_lufs: musicLoudness, music_ducking: { ...ducking, sidechain: 'normalized narration bus' } }, audio_metrics: audioMetrics }, null, 2));

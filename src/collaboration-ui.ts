@@ -87,11 +87,11 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
       const previousSelection = ctx.store.selectedId;
       const type = button.dataset.addObject;
       const demo = new URL(location.href).searchParams.get('demo') === '1';
-      const preferred = demo && type === 'pond' && !ctx.store.all().some(entry => entry.type === 'pond')
-        ? { x: -5, z: 6 }
-        : demo && type === 'cabin' && !ctx.store.all().some(entry => entry.type === 'cabin')
-          ? { x: 3, z: -3 }
-          : ctx.store.freeSpot(7);
+      const candidate = demo && type === 'pond' ? { x: -5, z: 6 }
+        : demo && type === 'cabin' ? { x: 3, z: -3 } : null;
+      const preferred = candidate && !ctx.store.all().some(entry =>
+        (entry.group.position.x - candidate.x) ** 2 + (entry.group.position.z - candidate.z) ** 2 < 7 ** 2)
+        ? candidate : ctx.store.freeSpot(7);
       const result = await run('add_object', {
         type,
         position: preferred,
