@@ -13,7 +13,7 @@ Actual frame from the new co-creation film. [Try the recorded review build](http
 ## Build with an agent
 
 1. Click **Start empty**, then **Add cabin** and **Add pond**. Drag them where you want them, or use the position fields.
-2. Type an idea in **Your next idea** and share it. Ask your connected browser agent to read the latest request and continue. Its actual native calls appear as **AGENT · WEBMCP** in Tool activity.
+2. Type your request in the connected browser agent's real chat sidebar. Its actual native calls appear in the compact **Working together** panel.
 3. Keep shaping the same world yourself. Each object retains its identity and edit history.
 
 > Add 40 trees, mostly as a forest behind my cabin, and beautiful warm lights around the clearing. Keep my pond and cabin where I placed them.
@@ -28,7 +28,7 @@ After moving two stones:
 
 The browser agent reads `describe_scene` and `query_scene`, then uses `add_grove` and `add_path`. These tools plan additions against the live anchors and preserve existing objects. The forest has a dense backdrop and sparse side framing; the path follows the actual porch and pond bank. `set_camera_motion` can frame the cabin and pond together with an explicit distance, height and gentle endless sweep.
 
-The idea field shares text with the connected browser agent. It does not run a model inside the application. The agent must read the request and call the tools; every displayed agent result comes from those calls.
+The default view keeps the world, a small control bar and three recent actions visible. **Studio tools** reveals the coordinates, full activity log and optional idea composer. That composer stores a brief on the page; it does not send a chat message or run a model. The connected agent reads state and calls the tools.
 
 ## What the shared state provides
 

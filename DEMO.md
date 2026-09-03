@@ -4,6 +4,8 @@ A person and their browser agent take a short break by building a quiet place to
 
 **New v2 film:** 157 seconds, fresh Lily v3 narration and 44 aligned English captions. Native capture, final export and full audio/video decode are complete. Public upload and creator playback approval remain open.
 
+**Requested presentation revision:** keep subtitles and compact Working together, remove the other default text panels, and record the real ChatGPT sidebar in Chrome. The quieter UI is deployed; that revised full-window recording is pending access to the existing Chrome tab. The current v2 MP4 remains preserved.
+
 ## Story and narration
 
 | Time | Visual beat | English voice-over |

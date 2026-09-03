@@ -1,5 +1,7 @@
 # Final submission review
 
+**Presentation follow-up:** the creator liked the new film and requested less on-screen text plus the real ChatGPT sidebar in Chrome. The quieter application is now deployed as `1c3989bcf55765e18a300ee8092d4dd29fdd0219` (deploy `6a999e2fe405caa978160131`, bundle `index-DGGThsRe.js`). Build/typecheck passes. The existing Chrome tab is held by another agent session, so visual verification and a new full-window recording remain pending. The completed film and evidence below retain their original application revision; they do not claim to show this later UI revision or the Chrome sidebar.
+
 Reviewed September 3, 2026. **The new zen co-creation film is 2:37, with fresh Lily v3 narration, Aurora Drift and 44 English subtitle cues.** It follows the actual human–agent workflow on one native browser page. Public YouTube upload, matching production publication and the Devpost Submitted check remain open.
 
 ## Verified collaboration

@@ -15,6 +15,7 @@ Current candidate: 29 tools and the new 157-second zen co-creation film. Mark ex
 
 ## Remaining
 
+- [ ] Verify the quieter UI revision `1c3989b` in the existing Chrome tab, then capture the real ChatGPT sidebar alongside the scene. Current access is held by another agent session. Keep subtitles and compact Working together; do not add a substitute chat interface.
 - [ ] Creator watches/listens to the final film and approves voice and pacing.
 - [ ] Publish final source and verify anonymous repository access and MIT detection on the chosen submission ref.
 - [ ] Publish the matching production application and check its clean URL and native tools without login or saved scene state.
