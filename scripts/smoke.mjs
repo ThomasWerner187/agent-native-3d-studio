@@ -467,7 +467,8 @@ try {
   await run('frame_camera', { target: 'camp', angle: 'top', distance: 18, select: false });
   await badPage2.mouse.move(640, 360);
   await badPage2.mouse.down();
-  await badPage2.mouse.move(695, 370, { steps: 12 });
+  // Keep a real multi-event drag without paying for twelve software-GPU frames.
+  await badPage2.mouse.move(695, 370, { steps: process.env.CI ? 4 : 12 });
   await badPage2.mouse.up();
   const human = await describe();
   const camp = (j(await run('query_scene', { type: 'camp' })).result.objects)[0];

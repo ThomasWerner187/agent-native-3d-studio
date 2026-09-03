@@ -73,7 +73,7 @@ export async function collaborationChecks({ page, run, describe, check, decodeSc
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   await page.mouse.move(viewport.width / 2, viewport.height / 2);
   await page.mouse.down();
-  await page.mouse.move(viewport.width / 2 + 55, viewport.height / 2 + 12, { steps: 12 });
+  await page.mouse.move(viewport.width / 2 + 55, viewport.height / 2 + 12, { steps: process.env.CI ? 4 : 12 });
   await page.mouse.up();
   const human = await describe();
   const adopted = (await query({ id_or_name: adoptedId }))[0];
@@ -88,13 +88,24 @@ export async function collaborationChecks({ page, run, describe, check, decodeSc
   const posesBeforeAtmosphere = (await query({})).map(object => ({ id: object.id, pose: object.pose }));
   await call('set_lighting', { preset: 'moonlit', expected_scene_version: human.scene_version });
   const motion = await call('set_camera_motion', { action: 'start', mode: 'cinematic', loop_seconds: 60 });
-  const cameraBefore = (await describe()).camera.p;
-  await page.waitForTimeout(1400);
-  const moving = await describe();
+  const motionBefore = await describe();
+  // On a software GPU, the gentle blend may need several slow frames before
+  // describe_scene's rounded camera position changes. Wait for observed motion.
+  const motionDeadline = Date.now() + (process.env.CI ? 60_000 : 10_000);
+  let moving = motionBefore;
+  const hasMoved = () => moving.camera_motion.elapsed_seconds > motionBefore.camera_motion.elapsed_seconds
+    && JSON.stringify(moving.camera.p) !== JSON.stringify(motionBefore.camera.p);
+  while (!hasMoved() && moving.camera_motion.status === 'running' && Date.now() < motionDeadline) {
+    await page.waitForTimeout(500);
+    moving = await describe();
+  }
   const posesAfterAtmosphere = (await query({})).map(object => ({ id: object.id, pose: object.pose }));
   check('endless camera frames the current off-center world and survives readbacks', motion.ok
     && moving.camera_motion.status === 'running' && moving.camera_motion.infinite
-    && moving.camera_motion.focus[0] > 5 && JSON.stringify(cameraBefore) !== JSON.stringify(moving.camera.p), JSON.stringify(moving.camera_motion));
+    && moving.camera_motion.focus[0] > 5 && hasMoved(), JSON.stringify({
+      before: { motion: motionBefore.camera_motion, position: motionBefore.camera.p },
+      after: { motion: moving.camera_motion, position: moving.camera.p },
+    }));
   check('lighting and camera preserve every shared object pose', JSON.stringify(posesBeforeAtmosphere) === JSON.stringify(posesAfterAtmosphere));
   await page.mouse.move(800, 330);
   await page.mouse.down({ button: 'right' });
