@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Studio } from './scene';
 import type { SceneStore } from './store';
 import type { SnapshotManager } from './snapshot';
-import { despawn, cancelGroup } from './anim';
+import { despawn, cancelGroup, settleSpawn } from './anim';
 import { disposeObject } from './factory';
 import { logToolCall } from './ui';
 
@@ -99,6 +99,9 @@ export class Interaction {
     if (!this.downAt || ev.pointerId !== this.activePointer) return;
     const dist = Math.hypot(ev.clientX - this.downAt.x, ev.clientY - this.downAt.y);
     if (!this.dragging && dist > 5 && this.downHitId) {
+      const entry = this.store.get(this.downHitId);
+      if (!entry) return;
+      settleSpawn(entry.group);
       this.dragging = true;
       this.snapshots.capture('before human move');
       this.store.markHumanEdit(this.downHitId);
@@ -125,11 +128,11 @@ export class Interaction {
       const hit = new THREE.Vector3();
       if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
         hit.add(this.dragOffset);
-        const r = Math.hypot(hit.x, hit.z);
-        const max = 38;
-        if (r > max) hit.multiplyScalar(max / r);
-        entry.group.position.x = hit.x;
-        entry.group.position.z = hit.z;
+        // Match the tool/inspector bounds. Grabbing an off-center agent object
+        // must not snap it back into an unrelated circle around the origin.
+        entry.group.position.x = THREE.MathUtils.clamp(hit.x, -58, 58);
+        entry.group.position.z = THREE.MathUtils.clamp(hit.z, -58, 58);
+        this.store.bump(); // A plan read during an ongoing drag must also become stale.
         this.studio.invalidateShadows();
       }
     }
@@ -215,9 +218,11 @@ export class Interaction {
     if (!entry) return;
     this.select(null);
     this.snapshots.capture('before human delete');
-    this.store.markHumanEdit(id);
-    this.store.remove(id);
+    this.store.remove(id, 'human');
     this.store.bump();
+    logToolCall('human_delete', { name: entry.name }, JSON.stringify({
+      ok: true, actor: 'human', result: { id: entry.id, deleted: true },
+    }));
     despawn(entry.group, () => {
       this.studio.scene.remove(entry.group);
       disposeObject(entry.group);

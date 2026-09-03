@@ -1,75 +1,71 @@
 # Judge guide
 
-Open [Agent-Native 3D Scene Studio](https://agent-native-3d-studio.netlify.app). No application account, credentials, API key or installation is required. A desktop browser with WebGL is recommended for the cinematic view. The browser agent supplies its own model connection.
+Open [Agent-Native 3D Scene Studio](https://agent-native-3d-studio.netlify.app). No application account, credentials or API key are required. A desktop WebGL browser is recommended; a connected browser agent supplies the model.
 
-## 1. Connect a browser agent
+## Connect
 
-Use the ChatGPT desktop app's WebMCP-capable in-app browser, or **Chrome 149+** with `chrome://flags/#enable-webmcp-testing` set to **Enabled**, then relaunch Chrome. In Chrome, also connect a compatible WebMCP agent/client; enabling the flag exposes the page API but does not itself add an agent. These are the paths described in the [challenge rules](https://webmcp.devpost.com/rules) and [Chrome documentation](https://developer.chrome.com/docs/ai/webmcp).
+Use a WebMCP-capable in-app browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled. Relaunch Chrome after changing the flag and connect a compatible agent/client. The flag exposes the API but does not itself add an agent.
 
-Open the app directly as a top-level page. The status should show **WebMCP live · 26 tools**. Ask:
+The application status should show **WebMCP live · 27 tools**. Ask:
 
-> Discover this page's WebMCP tools. Call help, then describe_scene, and tell me what is in the scene.
+> Discover the page's tools. Call help and describe_scene, then tell me what is in the scene.
 
-The result includes objects, `scene_version`, `selected_id`, `human_edits`, lofi session state, camera motion and music playback. Actual native calls appear as **AGENT · WEBMCP** in the activity log. Expand an entry to inspect its arguments and result. The label identifies the invocation path; it does not authenticate a particular model or provider.
+Native calls appear as **AGENT · WEBMCP**. Expand Tool activity to inspect the real arguments and response. A local preview or `?agent=1` developer harness is useful for testing handlers but does not establish native discovery.
 
-## 2. Create an endless lofi sequence
+## Place something yourself
 
-Send this to the connected browser agent:
+Click **Start empty**, then **Add pond** and **Add cabin**. Drag them into position. The selected-object inspector provides **X**, **Z**, **Turn °** and **Size** for precise edits. These controls make human changes.
 
-> Use compose_lofi_scene to create an endless moonlit retreat. Start with scene lakeside_cabin, cycle true, hold_seconds 180, build_seconds 20, seed 42, a cinematic camera and music. Then use describe_scene to report real build progress, the next scene, camera state and sound status.
+Ask the agent to read the live scene, using `query_scene` with `include_bounds:true` where needed. It can see stable object IDs, positions, actual bounds, reserved cabin entrance space and ownership fields: `created_by`, `last_changed_by`, `revision` and `human_revision`. `describe_scene` also includes `selected_id`, `human_edits` and `recent_changes`.
 
-The corresponding tool input is:
+## Let the agent add the environment
 
-```json
-{"scene":"lakeside_cabin","cycle":true,"hold_seconds":180,"mood":"moonlit","build_seconds":20,"seed":42,"camera":"cinematic","music":true}
-```
+The **Build around my scene** button copies a prompt; it does not invoke a model. Paste it into the connected browser agent, or use:
+
+> Read my pond and cabin, their current positions, bounds and human edits. Keep both exactly where I placed them. Add thirty pine trees around them. Keep the water, shoreline and cabin entrance clear. Verify the actual count and my unchanged placements.
 
 Expected behavior:
 
-- The tool acknowledges a background session with a `session_id`. A pond, cabin, pines, path and lanterns appear while the progress indicator advances.
-- Leave the page visible. When construction finishes, `lofi.status` becomes `playing`, progress reaches 100, and the camera continues moving. The sequence holds for 180 seconds before the next scene. A reduced-motion preference keeps the default camera still.
-- `describe_scene` can inspect progress without interrupting construction or the camera. Tool values are inside the response's `result` object.
-- If audio is requested but blocked, the player offers **Enable sound**. Click it; `music.playing` reports actual playback. The three tracks are bundled recordings, not newly generated music.
-- Drag an empty part of the canvas to take the camera. The complete sequence pauses, including construction and automatic transitions. **Resume** continues it when you are ready.
+- The agent reads the current objects and uses `scatter` with an appropriate area, anchor and clearances.
+- A successful operation adds exactly 30 trees. `added`, `live_added`, `exact_count`, `ids` and `preserved_ids` describe the actual outcome.
+- The pond and cabin retain their IDs and poses. Placement respects existing bounds and entrance space.
+- If the available area cannot fit the request, `no_space` leaves the scene unchanged. Let the agent widen the area or request fewer objects; do not treat an error as a successful forest.
 
-To demonstrate the transition without waiting for the hold countdown, ask:
+Then ask for six shoreline rocks and four warm lanterns, preserving existing objects and the cabin approach. Keep the tool results so the additions can be inspected and undone.
 
-> Use control_lofi with action next, then describe_scene to tell me which scene is now building and what follows it.
+## Make another human decision
 
-The image dips gently for about three seconds, then the next recipe builds. Reduced-motion preference skips the dip. The authored order is **Lakeside Cabin → Lantern Grove → Island Hideaway**, repeated while cycling is enabled. `describe_scene.result.lofi` reports `scene`, `scene_title` and `sequence`, including the next scene and remaining hold time. A transition reports `status:"transitioning"`.
+Drag one of the agent-created trees to a noticeably different position. Ask:
 
-`control_lofi` accepts `pause`, `resume`, `stop` and `next`. Stop retains the built objects for editing and prevents further transitions. `undo` restores the scene from before the sequence; it is a whole-scene restore. `cycle` defaults to false when omitted. `hold_seconds` accepts 120–1800; its default is 180 after each build completes.
+> I moved one tree. Read my current selection and recent human edits. Identify the tree and its new position, and keep it there. Give the scene soft moonlit lighting and start a slow continuous cinematic camera around it. Keep all object placements unchanged. Verify camera motion and actual music playback.
 
-## 3. Let the agent work around a human placement
+The same tree ID should now report `last_changed_by:"human"` and an increased `human_revision`. The lighting and camera change while object poses stay fixed. `set_camera_motion` accepts the scene or a specific object as its target. Read-only state checks leave that motion running. Grabbing the camera pauses it; an explicit resume returns control.
 
-1. Click **Reset** to return to the starter camp. Use the base URL without `#scene=…`; a shared link intentionally has its own reset baseline.
-2. Drag the wooden camp a short distance across the island. Its selection outline and **YOU** activity entry identify the human edit. The selection card shows its position.
-3. Send this prompt:
+Click **Enable sound** if the browser requires a gesture. Verify `music.playing`, not only a request to play. The tracks are bundled recordings supplied by the creator.
 
-   > Read the scene, my selection and human edits. Keep the camp exactly where I placed it. Call arrange_scene around this camp with the current expected_scene_version, then describe_scene again to confirm the camp position stayed the same. Leave the camera still.
+## Check selective undo
 
-4. Watch the tagged path, grove and lanterns rearrange. The response lists preserved and moved ids. The camp position remains unchanged. If the requested placement is blocked, the tool returns an error before moving the layout; try a small camp move nearer the island center.
-5. After the arrangement completes, drag a lantern that the arrangement moved. Click **Undo layout**. Layout positions revert, while your camp and the later lantern edit stay in place. The result lists `moved_ids` and `skipped_ids`.
+For a separate optional check, call `undo_scatter` with the tree scatter's `undo_id`. The untouched additions disappear, while the tree you moved remains. The result lists `removed_ids` and `skipped_ids`. **Undo additions** applies this behavior to the most recent scatter; specify the tree operation's ID if rocks or lanterns were added afterward.
 
-Use **Undo layout** for this check. General `undo` restores an entire scene snapshot and has different semantics. The layout tool operates on the starter diorama's tagged objects, not arbitrary objects in the lofi recipe.
+General `undo` restores a whole scene and has different effects. The older `undo_layout` journal applies to position changes in the starter camp example.
 
-## 4. Save and inspect
+## Save and explore
 
-Use the **Share** arrow or ask for `export_scene`. Open the returned URL in another tab to restore the objects, materials, lighting and camera. The viewer does not need WebMCP. Session timers, audio playback and undo history are not serialized into the link. A reload without a saved link starts a fresh scene.
+Use **Share** or `export_scene`, then reopen the returned link. It restores objects, materials, light and camera pose. Export does not change the current address. Restoration clears the hash before native tool registration, so reloading or bookmarking that resulting clean URL does not retain the scene: keep the copied share link.
 
-For a larger scene, `query_scene` supports filters, pagination and actual world-space bounds. The [README tool table](../README.md#tools-26) lists all 26 operations and links to their implementation.
+The optional **Watch a lofi world** section contains the three authored gallery scenes and **Create a lofi scene**. Gallery composition intentionally replaces the scene, so test it after the collaboration walkthrough. The starter camp layout and its local controls are also secondary examples.
 
-## If something looks different
+## When a check cannot run
 
-| What you see | What to do |
+| Observed state | Next step |
 | --- | --- |
-| **WebMCP unavailable here** | Use the supported browser setup above and reload. Local preview controls still work; they are not proof of native WebMCP discovery. |
-| Only 20 tools, or no lofi control | Check that you opened the submitted URL and reload the page. The final candidate described here has 26 tools. |
-| Slow cinematic rendering | Click **Cinematic** to switch to **Performance**. This reduces visual effects; the scene tools and collaboration behavior stay available. |
-| Sound is requested but silent | Click **Enable sound**, check the volume, and inspect `music.playing`. |
-| Build is paused | Keep the tab visible, then click **Resume** or call `control_lofi` with `{"action":"resume"}`. |
-| A tool reports `lofi_busy` | Wait for construction or the transition, or call `control_lofi` with `{"action":"stop"}` before an ordinary scene edit. |
-| A tool reports `stale_scene` | Read `describe_scene` again and use its current `scene_version` for the next edit. |
-| Interface is hidden | Press **H** or click **Controls**. |
+| WebMCP unavailable | Use a supporting browser and connected client. A local preview is not a native substitute. |
+| Tool count differs from 27 | Check the reviewed release URL and reload; older deployments have fewer tools. |
+| Browser access denied by admin-policy verification | Restore authorized browser access. Keep native verification open; do not bypass the policy. |
+| `stale_scene` | Read the latest scene and use its version for the next mutation. |
+| `no_space` | Increase the placement area or reduce the requested count. The failed scatter leaves the scene unchanged. |
+| `lofi_busy` | Stop the gallery session before ordinary editing. |
+| Cinematic view is slow | Switch to Performance mode; the scene semantics stay available. |
+| UI is hidden | Press H or click Controls. |
 
-**Create a lofi scene** and **Try layout** call the handlers locally as human actions. **Guided tour** is a labeled local script. The `?agent=1` inspector is a developer harness for handler testing. None of these local routes connects to an AI model or substitutes for the native WebMCP test in step 1.
+Release evidence is in [FINAL-REVIEW.md](FINAL-REVIEW.md). A native result from an earlier build does not verify a newly added collaboration feature.

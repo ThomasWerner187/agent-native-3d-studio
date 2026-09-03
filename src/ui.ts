@@ -30,7 +30,7 @@ function activityLine(tool: string, args: Record<string, unknown>): string {
   const targets = typeof args.targets === 'string' ? args.targets : Array.isArray(args.targets) ? `${args.targets.length} objects` : 'objects';
   switch (tool) {
     case 'compose_lofi_scene': return 'Started a lofi world';
-    case 'control_lofi': return args.action === 'pause' ? 'Paused the lofi session' : args.action === 'resume' ? 'Resumed the lofi session' : 'Stopped the session · kept the scene';
+    case 'control_lofi': return args.action === 'pause' ? 'Paused the lofi session' : args.action === 'resume' ? 'Resumed the lofi session' : args.action === 'next' ? 'Visiting the next lofi world' : 'Stopped the session · kept the scene';
     case 'set_camera_motion': return args.action === 'start' ? 'Started a continuous camera journey' : `${args.action === 'pause' ? 'Paused' : args.action === 'resume' ? 'Resumed' : 'Stopped'} the camera`;
     case 'human_move': return `Placed ${args.name ?? 'object'} · position preserved`;
     case 'arrange_scene': return 'Adapted the grove, path & lanterns';
@@ -46,6 +46,7 @@ function activityLine(tool: string, args: Record<string, unknown>): string {
     case 'frame_camera': return `Framing ${args.target ?? 'scene'} (${args.angle ?? 'default'})`;
     case 'camera_path': return `Directing a camera flight`;
     case 'scatter': return `Planting ${args.count} ${args.type}s`;
+    case 'undo_scatter': return 'Undid additions · kept later edits';
     case 'set_ui': return args.visible === false ? 'Hiding the HUD for a clean shot' : 'Bringing the HUD back';
     case 'delete_objects': return 'Clearing objects away';
     case 'board_square': return `Asking the board where ${String(args.square ?? '').toUpperCase()} is`;
@@ -57,6 +58,7 @@ function activityLine(tool: string, args: Record<string, unknown>): string {
     case 'import_scene': return 'Restoring a shared scene';
     case 'batch': return `Running ${Array.isArray(args.ops) ? args.ops.length : '?'} steps as one`;
     case 'reset': return 'Restored the original scene';
+    case 'start_empty': return 'Started an empty world';
     default: return `${tool}`;
   }
 }
@@ -144,6 +146,7 @@ function renderEntry(entry: LogEntry): HTMLElement {
         const parsed = JSON.parse(r);
         const inner = (parsed.result ?? parsed) as Record<string, unknown>;
         if (inner.id) ids.push(inner.id as string);
+        if (Array.isArray(inner.ids)) ids.push(...inner.ids as string[]);
         if (Array.isArray(inner.moved_ids)) ids.push(...inner.moved_ids as string[]);
         if (inner.piece) ids.push(inner.piece as string);
         if (Array.isArray(inner.results)) for (const sub of inner.results as Record<string, unknown>[]) if (sub?.id) ids.push(sub.id as string);

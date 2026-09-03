@@ -123,9 +123,28 @@ export function updateTweens(now: number): void {
   }
 }
 
+// A reveal is presentation, not an edit to the object's intended scale.
+const spawnTargets = new WeakMap<THREE.Object3D, THREE.Vector3>();
+
+export function getCanonicalScale(obj: THREE.Object3D): THREE.Vector3 {
+  return (spawnTargets.get(obj) ?? obj.scale).clone();
+}
+
+/** Hand over a newly appearing object at its intended size. */
+export function settleSpawn(obj: THREE.Object3D): void {
+  if (spawnTargets.has(obj)) cancelGroup(`spawn:${obj.uuid}`);
+}
+
 /** Pop-in spawn: scale from 0 to 1 with a little overshoot. */
 export function spawnPop(obj: THREE.Object3D, delay = 0, dur = 420): void {
+  settleSpawn(obj);
   const target = obj.scale.clone();
+  spawnTargets.set(obj, target);
+  const finish = () => {
+    obj.scale.copy(target);
+    obj.updateMatrix();
+    spawnTargets.delete(obj);
+  };
   obj.scale.setScalar(0.001);
   tween({
     delay,
@@ -135,12 +154,15 @@ export function spawnPop(obj: THREE.Object3D, delay = 0, dur = 420): void {
       const s = Math.max(0.001, k);
       obj.scale.set(target.x * s, target.y * s, target.z * s);
     },
+    done: finish,
+    cancelled: finish,
     group: `spawn:${obj.uuid}`,
   });
 }
 
 /** Shrink to nothing, then remove from parent. */
 export function despawn(obj: THREE.Object3D, done: () => void, dur = 260, delay = 0): void {
+  settleSpawn(obj);
   const start = obj.scale.clone();
   tween({
     delay,
@@ -192,6 +214,7 @@ export function rotateObject(obj: THREE.Object3D, to: { x?: number; y?: number; 
 }
 
 export function scaleObject(obj: THREE.Object3D, to: { x: number; y: number; z: number }, dur = 450): void {
+  settleSpawn(obj);
   const from = obj.scale.clone();
   const target = new THREE.Vector3(to.x, to.y, to.z);
   tween({

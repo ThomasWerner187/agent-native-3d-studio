@@ -867,3 +867,92 @@ select { font: inherit; color: inherit; color-scheme: dark; }
   .lofi-entry { margin-top: 10px; }
   .lofi-player { bottom: 14px; padding: 14px 20px; }
 }
+
+/* Shared world-building extends the existing quiet canvas controls. */
+.scene-intro { max-height: calc(100dvh - 245px); overflow-y: auto; padding-right: 8px; }
+.collaboration-entry { pointer-events: auto; width: 272px; margin: 22px 0 15px; }
+.build-actions { display: flex; gap: 8px; }
+.build-actions button { flex: 1; min-height: 42px; padding: 10px 14px; border: 1px solid #bad0c430; border-radius: 8px; background: #173339e8; color: var(--ink); font-size: 12px; }
+.build-actions button:hover:not(:disabled) { border-color: #e5bb8280; background: #28464a; }
+.build-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 5px; }
+#scene-empty { border: 0; background: transparent; padding: 7px 0; min-height: 36px; font-size: 11px; color: var(--agent); }
+#scene-empty:hover:not(:disabled) { color: #ffe0b4; text-decoration: underline; text-underline-offset: 3px; }
+#world-count { font-size: 10px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.scene-intro #build-hint { max-width: 272px; margin: 2px 0 0; font-size: 11px; line-height: 1.6; }
+.preset-worlds { pointer-events: auto; width: 272px; color: var(--ink-dim); font-size: 11px; }
+.preset-worlds > summary { cursor: pointer; padding: 9px 0; min-height: 36px; text-underline-offset: 3px; }
+.preset-worlds > summary:hover { color: var(--ink); }
+.preset-worlds .lofi-entry { margin: 8px 0 12px; width: 100%; }
+.preset-worlds .lofi-entry small { font-size: 10px; line-height: 1.6; }
+.starter-layout { margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--glass-border); }
+.scene-intro .starter-layout p { display: block; margin: 0 0 4px; font-size: 11px; color: var(--ink); }
+.starter-layout small { display: block; font-size: 10px; line-height: 1.6; }
+.starter-layout .control-group { flex-wrap: wrap; margin-top: 8px; padding: 0; border: 0; background: transparent; }
+.starter-layout .control-group button { padding: 8px; font-size: 10px; }
+.actor-legend { margin-top: 16px; }
+.prompt-options { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; }
+.prompt-options .prompt { flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; min-width: 0; }
+.prompt-options .prompt + .prompt { border-left: 1px solid var(--glass-border); padding-left: 16px; }
+.prompt-options .copy-hint { margin-left: 0; font-size: 10px; white-space: nowrap; max-width: none; }
+.prompt-options .prompt:hover:not(:disabled) > span:first-child { color: var(--agent); }
+.command-main { align-items: stretch; }
+.command-main > .prompt-star, .command-main > .mini-btn { align-self: center; }
+.selection-card { display: block; left: 40px; bottom: 190px; transform: none; width: 300px; max-width: none; padding: 12px 14px; white-space: normal; }
+.selection-heading { display: grid; grid-template-columns: 6px minmax(0, 1fr) 28px; align-items: center; gap: 6px 8px; min-height: 25px; }
+.selection-heading .mini-btn { grid-column: 3; grid-row: 1; margin-left: auto; }
+#selection-name { max-width: 150px; }
+.provenance-badge { grid-column: 2 / 4; grid-row: 2; color: var(--ink-dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provenance-badge[data-actor="human"] { color: var(--human); }
+.provenance-badge[data-actor="agent"] { color: var(--agent); }
+#selection-position { margin: 4px 0 10px; font-size: 10px; }
+.selection-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.selection-fields label { display: flex; flex-direction: column; gap: 5px; color: #b7cdce; font-size: 10px; }
+.selection-fields input { width: 100%; min-width: 0; min-height: 36px; border: 1px solid #9dbcbc38; border-radius: 5px; background: #0b2028; color: var(--ink); font: 12px "DM Sans", sans-serif; font-variant-numeric: tabular-nums; padding: 7px 8px; }
+.selection-fields input:hover:not(:disabled) { border-color: #67b7ff88; }
+.selection-fields input:disabled { opacity: .5; }
+.selection-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; color: #b7cdce; font-size: 10px; }
+#selection-delete { border: 0; background: transparent; color: #e7b9aa; font-size: 10px; min-height: 28px; padding: 4px 0 4px 10px; }
+#selection-delete:hover:not(:disabled) { color: #ffdbcd; }
+.control-group button[hidden] { display: none; }
+.has-selection .scene-intro > h1, .has-selection .scene-intro > p, .has-selection .preset-worlds, .has-selection .actor-legend { display: none; }
+.lofi-active .collaboration-entry, .lofi-active .preset-worlds { display: none; }
+.lofi-active .selection-card { bottom: 260px; }
+@media (max-width: 1050px) {
+  .collaboration-entry, .preset-worlds { width: 235px; }
+  .selection-card { left: 24px; bottom: 210px; width: 280px; }
+}
+@media (max-width: 700px) {
+  .scene-intro { max-height: calc(100dvh - 365px); width: calc(100% - 44px); }
+  .collaboration-entry { width: 238px; margin-top: 12px; margin-bottom: 4px; }
+  .build-actions button { min-height: 40px; padding: 9px 13px; }
+  .scene-intro #build-hint { display: block; max-width: 238px; font-size: 10px; }
+  .preset-worlds { width: 238px; font-size: 10px; }
+  .prompt-options { gap: 10px; }
+  .prompt-options .prompt { padding-top: 10px; padding-bottom: 10px; font-size: 11px; line-height: 1.5; }
+  .prompt-options .prompt + .prompt { padding-left: 10px; }
+  .prompt-options .copy-hint { font-size: 9px; }
+  .command-main { gap: 9px; }
+  .command-main > .prompt-star { display: none; }
+  .selection-card { left: 14px; bottom: 274px; padding: 10px 12px; width: calc(100% - 28px); }
+  .selection-heading { gap: 6px; }
+  .selection-heading .mini-btn { min-height: 28px; min-width: 28px; }
+  #selection-name { max-width: 112px; }
+  .provenance-badge { font-size: 9px; }
+  .selection-fields { gap: 6px; }
+  .selection-fields input { min-height: 38px; padding: 7px 5px; font-size: 12px; }
+  .selection-foot { font-size: 9px; }
+  .has-selection .scene-intro > h1, .has-selection .preset-worlds { display: none; }
+  .has-selection .collaboration-entry { margin-top: 0; }
+  .has-selection #tool-log { display: none; }
+  .lofi-active .selection-card { bottom: 285px; }
+}
+@media (max-height: 600px) and (min-width: 701px) {
+  .scene-intro { max-height: calc(100dvh - 180px); }
+  .collaboration-entry { margin-top: 12px; }
+  .selection-card { bottom: 216px; padding-top: 8px; padding-bottom: 8px; }
+}
+
+/* Light skies need a small backing behind otherwise floating labels. */
+body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .brand { position: relative; isolation: isolate; }
+body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .brand::before { content: ""; position: absolute; inset: -8px -10px; z-index: -1; border-radius: 8px; background: #10272fef; pointer-events: none; }
+body:is([data-lighting="golden_hour"], [data-lighting="studio"], [data-lighting="overcast"]) .scene-intro { padding: 12px; margin: -12px; border-radius: 10px; background: #10272fef; }

@@ -13,6 +13,8 @@ import { createServer } from 'node:net';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import './animation-regression.mjs';
 import './share-regression.mjs';
+import './scatter-regression.mjs';
+import { collaborationChecks } from './collaboration-smoke.mjs';
 
 function decodeScene(url) {
   const payload = new URL(url).hash.slice('#scene='.length);
@@ -108,7 +110,8 @@ try {
       keyframes: [{ target: 'scene', angle: 'three_quarter' }, { target: 'scene', angle: 'front', hold_ms: 120 }],
     });
     r.set_ui = await window.__call('set_ui', { visible: true });
-    r.scatter = await window.__call('scatter', { type: 'rock', count: 2, area: { center_x: 4, center_z: 4, width: 4, depth: 4 }, seed: 42 });
+    r.scatter = await window.__call('scatter', { type: 'rock', count: 2, area: { center_x: 18, center_z: 18, width: 6, depth: 6 }, seed: 42 });
+    r.undo_scatter = await window.__call('undo_scatter', { undo_id: r.scatter.result?.undo_id });
     r.delete_objects = await window.__call('delete_objects', { name_contains: 'smoke tree' });
     const board = await window.__call('add_object', { type: 'chessboard', name: 'smoke board' });
     const piece = await window.__call('add_object', { type: 'chess_piece', piece: 'king', side: 'white', name: 'smoke king' });
@@ -498,6 +501,8 @@ try {
   const afterInvalid = await describe();
   check('invalid layout is side-effect free', !invalidLayout.ok && beforeInvalid.scene_version === afterInvalid.scene_version && JSON.stringify(beforeInvalid.layout) === JSON.stringify(afterInvalid.layout));
   check('local harness reports demo provenance', layout.actor === 'demo');
+
+  await collaborationChecks({ page: badPage2, run, describe, check, decodeScene });
 
   // Lofi is a cancellable background job; observing it must not steal its camera.
   const beforeLofi = await describe();

@@ -19,6 +19,7 @@ jobs:
       - run: npm run build
       - run: npm run test:animations
       - run: npm run test:lofi
+      - run: npm run test:demo
       - name: Install chromium for the smoke test
         run: npx playwright-core install --with-deps chromium
       - name: Smoke-test all tools

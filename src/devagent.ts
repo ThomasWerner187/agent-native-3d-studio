@@ -22,7 +22,7 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
   ].join(';');
 
   panel.innerHTML = `
-    <div style="font-weight:700;margin-bottom:6px;color:#ffb36b">DEV HARNESS · tool caller</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:6px;color:#ffb36b">DEV HARNESS · tool caller<button id="dev-close" aria-label="Close local tool inspector" style="border:0;background:transparent;color:inherit;padding:6px;cursor:pointer">✕</button></div>
     <div style="margin-bottom:6px;color:rgba(245,236,223,0.6)">Calls the same handlers WebMCP exposes. Add ?agent=1.</div>
     <select id="dev-tool" style="width:100%;margin-bottom:6px;padding:5px;border-radius:8px;background:#2a211a;color:inherit;border:1px solid rgba(255,214,170,0.2)">
       ${TOOL_DEFS.map((t) => `<option>${t.name}</option>`).join('')}
@@ -40,6 +40,7 @@ export function initDevAgent(ctx: ToolContext, log: ToolLogger): void {
   const toolSel = $<HTMLSelectElement>('#dev-tool');
   const argsBox = $<HTMLTextAreaElement>('#dev-args');
   const out = $<HTMLElement>('#dev-out');
+  $<HTMLButtonElement>('#dev-close').addEventListener('click', () => { panel.hidden = true; });
 
   const EXAMPLES: Record<string, string> = {
     describe_scene: '{}',

@@ -4,6 +4,19 @@ import { buildObject, type ObjectType } from './factory';
 /** Shared editing/import budget: every scene we can build must remain portable. */
 export const MAX_SCENE_OBJECTS = 600;
 
+export type SceneActor = 'human' | 'agent' | 'demo' | 'unknown';
+export type SceneChangeKind = 'created' | 'transform' | 'material' | 'deleted';
+export interface SceneChange {
+  sequence: number;
+  id: string;
+  name: string;
+  type: ObjectType;
+  actor: SceneActor;
+  action: SceneChangeKind;
+  revision: number;
+  human_revision: number;
+}
+
 /**
  * The scene registry — the single source of truth both the mouse (selection,
  * dragging) and the agent (WebMCP tools) read from and write to.
@@ -16,6 +29,10 @@ export interface SceneEntry {
   /** Preset variant, e.g. the chess piece kind ('queen'); survives snapshots. */
   variant?: string;
   layoutRole?: 'path' | 'forest' | 'lantern';
+  createdBy: SceneActor;
+  lastChangedBy: SceneActor;
+  /** Semantic edits, independent of animation frames. */
+  revision: number;
   humanRevision: number;
   transformCache: Float64Array;
   group: THREE.Group;
@@ -33,15 +50,30 @@ export class SceneStore {
   version = 0;
   selectedId: string | null = null;
   humanRevision = 0;
+  /** Invalidates addition journals when a scene is replaced, even if ids repeat. */
+  generation = 0;
+  private changeSequence = 0;
+  private changes: SceneChange[] = [];
   onHumanEdit?: (id: string) => void;
   onClear?: () => void;
 
-  markHumanEdit(id: string): void {
+  get recentChanges(): SceneChange[] { return this.changes.map(change => ({ ...change })); }
+
+  markHumanEdit(id: string, kind: SceneChangeKind = 'transform'): void {
+    this.markChanged(id, 'human', kind);
+  }
+
+  markChanged(id: string, actor: SceneActor, kind: SceneChangeKind = 'transform'): void {
     const entry = this.get(id);
     if (!entry) return;
-    entry.humanRevision = ++this.humanRevision;
+    entry.revision++;
+    entry.lastChangedBy = actor;
+    if (actor === 'human') entry.humanRevision = ++this.humanRevision;
+    this.changes.push({ sequence: ++this.changeSequence, id, name: entry.name, type: entry.type,
+      actor, action: kind, revision: entry.revision, human_revision: entry.humanRevision });
+    this.changes = this.changes.slice(-40);
     this.bump();
-    this.onHumanEdit?.(id);
+    if (actor === 'human') this.onHumanEdit?.(id);
   }
 
   /** Highest id handed out (read for snapshot serialization). */
@@ -86,6 +118,7 @@ export class SceneStore {
       variant?: string;
       /** Used when restoring snapshots so object ids stay stable. */
       forceId?: string;
+      actor?: SceneActor;
     } = {},
   ): SceneEntry {
     if (this.objects.size >= MAX_SCENE_OBJECTS) throw new Error(`Scene limit reached (${MAX_SCENE_OBJECTS} objects). Delete objects before adding more.`);
@@ -108,6 +141,9 @@ export class SceneStore {
       name: opts.name?.trim() || `${type} ${n2}`,
       type,
       variant: opts.variant,
+      createdBy: opts.actor ?? 'unknown',
+      lastChangedBy: opts.actor ?? 'unknown',
+      revision: 0,
       humanRevision: 0,
       transformCache: new Float64Array(10).fill(NaN),
       group: built.group,
@@ -116,6 +152,7 @@ export class SceneStore {
     built.group.matrixAutoUpdate = false;
     built.group.userData.entryId = id;
     this.objects.set(id, entry);
+    if (opts.actor && opts.actor !== 'unknown') this.markChanged(id, opts.actor, 'created');
     return entry;
   }
 
@@ -129,13 +166,16 @@ export class SceneStore {
     }
   }
 
-  remove(id: string): boolean {
+  remove(id: string, actor?: SceneActor): boolean {
+    if (actor) this.markChanged(id, actor, 'deleted');
     return this.objects.delete(id);
   }
 
   clear(): void {
     this.onClear?.();
     this.objects.clear();
+    this.generation++;
+    this.changes = [];
     this.typeCounters.clear();
     this.idCounter = 0;
     // Versions identify observations, not saved content. Replacing a scene

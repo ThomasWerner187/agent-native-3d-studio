@@ -1,7 +1,8 @@
 import type { ToolContext } from './tools';
+import * as THREE from 'three';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
-  frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
+  frameCamera, cameraPath, scatter, undoScatter, snapshotTool, undoTool, setUi, fullSizeBounds,
   deleteObjects, boardSquare, chessMove, setMusicTool, helpTool,
   exportScene, importScene, fail, ok,
 } from './tools';
@@ -95,12 +96,25 @@ export const TOOL_DEFS: ToolDef[] = [
       action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
       mode: { type: 'string', enum: ['orbit', 'cinematic'] },
       loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One full circuit. Default 240 seconds.' },
+      target: { type: 'string', description: 'Scene, or any object id/name to orbit. Default scene; uses its live bounds.' },
     }, required: ['action'] },
     run: (ctx, args) => {
       const action = args.action, mode = args.mode ?? 'cinematic', period = args.loop_seconds ?? 240;
       if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
       const director = ctx.studio.director;
-      if (action === 'start') { ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic'); director.start(mode as 'orbit' | 'cinematic', period); }
+      if (action === 'start') {
+        const target = String(args.target ?? 'scene');
+        const bounds = new THREE.Box3();
+        if (target === 'scene') for (const entry of ctx.store.all()) bounds.union(fullSizeBounds(entry.group));
+        else {
+          const resolved = ctx.store.resolve(target);
+          if (!resolved.ok) return fail(resolved.error, 'unknown_target');
+          bounds.copy(fullSizeBounds(resolved.entry.group));
+        }
+        const sphere = bounds.isEmpty() ? new THREE.Sphere(ctx.studio.controls.target.clone(), 5) : bounds.getBoundingSphere(new THREE.Sphere());
+        ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic');
+        director.start(mode as 'orbit' | 'cinematic', period, sphere.center, sphere.radius);
+      }
       if (action === 'pause') director.pause();
       if (action === 'stop') director.stop();
       if (action === 'resume' && !director.resume()) return fail('No paused camera motion to resume.');
@@ -393,18 +407,20 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'scatter',
     description:
-      'The power tool: distribute many copies of one type across a rectangular area with natural variation — ' +
-      'forests, boulder fields, lantern rows. exclusion_zones keep paths clear; avoid_object_ids dodge existing ' +
-      'objects. Pass a seed to reproduce the exact layout. Use instead of many add_object calls.',
+      'Add exactly count objects around any live anchor or within area. Preserves and avoids all existing objects, ' +
+      'their real footprints, and other additions. Seeded planning either fits every object or changes nothing. ' +
+      'Returns undo_id; undo_scatter keeps later human edits.',
     inputSchema: {
       type: 'object',
       properties: {
         ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'What to scatter (usually tree, rock or lamp).' },
-        count: { type: 'number', minimum: 1, maximum: 200, description: 'How many instances to place.' },
+        count: { type: 'integer', minimum: 1, maximum: 200, description: 'Exact number to place; fails without changes if they cannot all fit.' },
+        anchor: { type: 'string', description: 'Any existing object id/name. Without area, derives a spacious region around its live bounds.' },
+        clearance: { type: 'number', minimum: 0, maximum: 5, description: 'Minimum gap between real footprints and preserved objects. Default 0.4.' },
         area: {
           type: 'object',
-          description: 'Rectangle to fill. Default: 10x10 around the center.',
+          description: 'Rectangle containing complete object footprints. Default: around anchor, or 10x10 at the origin.',
           properties: {
             center_x: { type: 'number', description: 'Center of the area, world x.' },
             center_z: { type: 'number', description: 'Center of the area, world z.' },
@@ -431,21 +447,31 @@ export const TOOL_DEFS: ToolDef[] = [
         },
         avoid_object_ids: {
           type: 'array',
-          description: 'Keep clear of these existing objects (ids or names).',
+          description: 'Additional named obstacles (ids/names), validated before planning. All existing objects are always avoided.',
           items: { type: 'string' },
         },
         footprint: {
           type: 'string',
           enum: ['pad', 'actual_bounds'],
-          description: 'pad = fixed safety margin around each avoided object; actual_bounds = real bounding box. Default pad.',
+          description: 'Compatibility parameter. Both values now preserve full actual bounds; clearance sets the gap.',
         },
-        seed: { type: 'number', description: 'RNG seed for reproducible layouts. Omit to get a random one (returned in the result).' },
+        seed: { type: 'integer', description: 'RNG seed for reproducible layouts. Omit to get a random one (returned in the result).' },
       },
       required: ['type', 'count'],
     },
-    annotations: { idempotentHint: true },
+    annotations: { destructiveHint: false },
     mutating: true,
     run: (ctx, args) => scatter(ctx, args),
+  },
+  {
+    name: 'undo_scatter',
+    description: 'Remove unchanged additions from one scatter. Preserves every existing object and additions edited or deleted afterward. Returns removed_ids and skipped_ids; never restores a whole scene.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      undo_id: { type: 'string', description: 'Id returned by scatter. Defaults to the most recent scatter.' },
+    } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: (ctx, args) => undoScatter(ctx, args),
   },
   {
     name: 'set_ui',
@@ -630,7 +656,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout', 'set_ui', 'set_music', 'export_scene']);
+const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout', 'undo_scatter', 'set_ui', 'set_music', 'export_scene']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -644,6 +670,8 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
 
   const results: Record<string, unknown>[] = [];
   const humanRevision = ctx.store.humanRevision;
+  const humanChanges = { count: 0 };
+  const batchContext = { ...ctx, humanChanges };
   const versionBefore = ctx.store.version;
   let failed = 0;
   let interrupted = false;
@@ -667,7 +695,7 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
       const expected = input.expected_scene_version;
       const res = error ? fail(error, 'bad_request')
         : expected != null && expected !== ctx.store.version ? fail('Nested expected_scene_version is stale. Put the observed version on the batch itself.', 'stale_scene')
-        : await def.run(ctx, input);
+        : await def.run(batchContext, input);
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(res) as Record<string, unknown>;
@@ -676,7 +704,7 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
       }
       if (parsed.ok === false) failed++;
       results.push({ index: i, tool: name, ...parsed });
-      interrupted = parsed.applied === false || ctx.store.humanRevision !== humanRevision;
+      interrupted = parsed.applied === false || ctx.store.humanRevision !== humanRevision + humanChanges.count;
       if (failed || interrupted) break;
     } catch (e) {
       failed++;
@@ -687,7 +715,7 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
 
   // atomic: any failed operation rolls the whole batch back (one snapshot)
   // Human takeover must never be overwritten by a whole-scene rollback.
-  interrupted ||= ctx.store.humanRevision !== humanRevision;
+  interrupted ||= ctx.store.humanRevision !== humanRevision + humanChanges.count;
   const status = interrupted ? 'interrupted' : failed > 0 ? 'rolled_back' : 'applied';
   if (status === 'rolled_back') {
     const snapshot = transactionSnapshots.get(ctx.store);
@@ -850,7 +878,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   if (transaction) activeTransactions.set(ctx.store, def.name);
   if (snapId) transactionSnapshots.set(ctx.store, snapId);
   try {
-    result = await def.run(signal ? { ...ctx, signal } : ctx, args ?? {});
+    result = await def.run({ ...ctx, actor, ...(signal ? { signal } : {}) }, args ?? {});
   } catch (e) {
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   } finally {

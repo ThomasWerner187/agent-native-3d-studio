@@ -26,20 +26,25 @@
   </header>
   <section class="hud scene-intro" aria-label="About this scene">
     <h1>A little world.<br><em>To slow down in.</em></h1>
-    <p>A cabin. A quiet lake. Nowhere to be.<br>Let your agent bring it all to life.</p>
-    <div class="lofi-entry">
+    <p>Place a pond. Find a home for your cabin.<br>Let your agent grow the world around them.</p>
+    <div class="collaboration-entry" aria-label="Build your world">
+      <div class="build-actions"><button type="button" data-add-object="pond">Add pond</button><button type="button" data-add-object="cabin">Add cabin</button></div>
+      <div class="build-meta"><button id="scene-empty" type="button" title="Clear this scene with an undo point">Start empty</button><span id="world-count">Your world, together</span></div>
+      <p id="build-hint">Add a pond and cabin, then drag them into place.</p>
+    </div>
+    <details class="preset-worlds"><summary>Watch a lofi world</summary><div class="lofi-entry">
       <div class="world-options"><label class="sr-only" for="lofi-scene">Starting world</label><select id="lofi-scene"><option value="lakeside_cabin">Lakeside cabin</option><option value="lantern_grove">Lantern grove</option><option value="island_hideaway">Island hideaway</option></select><label class="sr-only" for="lofi-mood">Lofi atmosphere</label><select id="lofi-mood"><option value="moonlit">Moonlight</option><option value="golden_hour">Golden evening</option></select></div>
       <button id="lofi-create">Create a lofi scene <span data-icon="share" aria-hidden="true"></span></button>
       <label class="wander-option"><input id="lofi-cycle" type="checkbox" checked> Wander to a new world every 3 minutes</label>
-      <small>Watch it grow. Stay as long as you like.</small>
-    </div>
+      <small>Creates a new preset world.</small>
+    </div><div id="starter-layout" class="starter-layout"><p>Starter camp layout</p><small>Local tools to rearrange the sample grove.</small><div class="control-group"><button id="layout-try" title="Run the starter layout tool locally">Try layout</button><button id="layout-undo" disabled>Undo layout</button><button id="layout-redo" disabled>Redo</button></div></div></details>
     <div class="actor-legend"><span class="human-dot"></span> You <span class="agent-dot"></span> Your agent</div>
   </section>
   <aside id="tool-log" class="hud panel" aria-label="Tool activity">
     <div class="panel-head"><span class="panel-title">Working together</span><button id="tool-log-toggle" class="mini-btn" aria-label="Collapse tool activity" aria-expanded="true" aria-controls="tool-log-entries agent-bridge"></button></div>
-    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Your canvas is ready.<br>Move the camp, then ask your agent to build around it.</div></div>
+    <div id="tool-log-entries" class="panel-body"><div class="log-empty">Make the first move.<br>Add a pond and cabin, then ask your agent to build around your placements.</div></div>
     <details id="agent-bridge" class="agent-bridge"><summary>Connect your agent</summary>
-      <p>Open this page with a WebMCP-aware browser agent. Ask it to read the scene and rearrange the surroundings around your camp.</p>
+      <p>Open this page with a WebMCP-aware browser agent, then paste a prompt from below. Your agent can read your live placements and add to the same world.</p>
       <p>For a compatible JavaScript harness:</p>
       <pre>const mc = document.modelContext;
 const tools = await mc.getTools();
@@ -47,14 +52,24 @@ await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
       <a href="?agent=1">Open local tool inspector ↗</a>
     </details>
   </aside>
-  <div id="selection-card" class="hud selection-card" hidden><span class="human-dot"></span><span id="selection-name">Camp selected</span><span id="selection-position"></span></div>
+  <section id="selection-card" class="hud selection-card" aria-label="Selected object" hidden>
+    <div class="selection-heading"><span class="human-dot"></span><span id="selection-name">Object selected</span><span id="selection-provenance" class="provenance-badge"></span><button id="selection-clear" class="mini-btn" data-icon="close" aria-label="Deselect object"></button></div>
+    <div id="selection-position"></div>
+    <div class="selection-fields">
+      <label>X<input id="selection-x" type="number" step="any" min="-58" max="58" aria-label="Object position X"></label>
+      <label>Z<input id="selection-z" type="number" step="any" min="-58" max="58" aria-label="Object position Z"></label>
+      <label>Turn °<input id="selection-rotation" type="number" step="any" aria-label="Object rotation in degrees"></label>
+      <label>Size<input id="selection-scale" type="number" step="any" min="0.1" max="8" aria-label="Object size"></label>
+    </div>
+    <div class="selection-foot"><span id="selection-edit-note">Drag to move, or adjust a value.</span><button id="selection-delete" type="button">Delete</button></div>
+  </section>
   <section id="prompt-card" class="hud command-bar">
-    <div class="command-main"><span class="prompt-star" data-icon="spark" aria-hidden="true"></span><button class="prompt" data-copy="Create a calming lofi scene with a moonlit cabin, water, warm lanterns, slowly growing trees, an infinite cinematic camera and soft music. Use compose_lofi_scene, then describe_scene to check progress."><span>Create a calming lofi scene. Let it unfold, slowly.</span><span class="copy-hint">Copy for agent</span></button><button id="prompt-card-close" class="mini-btn" data-icon="close" aria-label="Dismiss prompts"></button></div>
-    <div class="command-caption">Copy this prompt to your WebMCP browser agent. Or try Create a lofi scene locally.</div>
+    <div class="command-main"><span class="prompt-star" data-icon="spark" aria-hidden="true"></span><div class="prompt-options"><button id="prompt-build" class="prompt" data-copy="Read describe_scene and query_scene before changing anything. Add 30 trees, rocks and lamps around my live pond and cabin placements using scatter. Preserve every existing object and human edit. Verify the result with describe_scene."><span>Build around my scene</span><span class="copy-hint">Copy for agent</span></button><button id="prompt-atmosphere" class="prompt" data-copy="Read describe_scene and query_scene to see my latest edits. Keep all objects as they are, set warm golden-hour lighting, and start an endless cinematic camera with set_camera_motion. Verify the live result."><span>Warm light & endless camera</span><span class="copy-hint">Copy for agent</span></button></div><button id="prompt-card-close" class="mini-btn" data-icon="close" aria-label="Dismiss prompts"></button></div>
+    <div id="prompt-context" class="command-caption">Copy a prompt to your WebMCP browser agent. It works on this live world.</div>
   </section>
   <nav class="hud scene-controls" aria-label="Scene controls">
     <div class="control-group"><button class="mood-btn active" data-mood="moonlit" aria-pressed="true">Moonlight</button><button class="mood-btn" data-mood="golden_hour" aria-pressed="false">Golden hour</button><button id="camera-orbit" aria-pressed="false">Orbit</button><button id="camera-home" title="Frame the whole island">Overview</button></div>
-    <div class="control-group"><button id="layout-try" title="Run the layout tool locally; no AI model">Try layout</button><button id="layout-undo" disabled>Undo layout</button><button id="layout-redo" disabled>Redo</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
+    <div class="control-group"><button id="scatter-undo" title="Undo the latest scattered additions, keeping later edits" disabled>Undo additions</button><button id="scene-reset" aria-label="Reset scene">Reset</button></div>
   </nav>
   <section id="lofi-player" class="hud lofi-player" aria-label="Lofi session" hidden>
     <div class="lofi-player-head"><div><div id="lofi-progress-label">Growing your world</div><h2 id="lofi-phase" aria-live="polite">A quiet place by the water</h2><p id="lofi-shot">Settling into the scene</p></div><button id="lofi-view" title="Hide interface; H to return">Clean view</button></div>
@@ -74,11 +89,11 @@ await mc.executeTool(tools.find(t => t.name === "help"), "{}");</pre>
     <script type="application/json" id="agent-manifest">
     {
       "page": "Agent-Native 3D Scene Studio (three.js)",
-      "tools": "document.modelContext — 26 tools: compose_lofi_scene, control_lofi, set_camera_motion, help, describe_scene, query_scene, arrange_scene, undo_layout, redo_layout, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
-      "start_here": "call the help tool for the full playbook (workflow + recipes)",
+      "tools": "document.modelContext — 27 tools: compose_lofi_scene, control_lofi, set_camera_motion, help, describe_scene, query_scene, arrange_scene, undo_layout, redo_layout, add_object, transform_object, set_material, set_lighting, frame_camera, camera_path, scatter, undo_scatter, set_ui, delete_objects, board_square, chess_move, set_music, snapshot, undo, export_scene, import_scene, batch",
+      "start_here": "Call help, then describe_scene and query_scene. Continue the current scene from the user's live placements. Use scatter with anchor and clearance for additive surroundings; do not compose a replacement preset unless asked.",
       "no_webmcp_client_recipe": "const mc = document.modelContext; const tools = await mc.getTools(); const add = tools.find(t => t.name === 'add_object'); await mc.executeTool(add, JSON.stringify({ type: 'tree', position: { x: 2, z: 1 } }));",
       "conventions": "ids are obj_N, names also work as targets; colors are #rrggbb; rotations in degrees; chess_piece takes piece: pawn|rook|knight|bishop|queen|king and side: white|black; results are compact JSON strings with ok/scene_version; most mutations reply after settling; compose_lofi_scene starts a background session and set_camera_motion starts infinite motion, both return immediately; describe_scene reports progress",
-      "human_parallel": "the user's mouse works at all times and overrides agent camera moves"
+      "human_parallel": "The user's mouse and object inspector work on this same live scene. Read selected_id, human_edits, recent_changes, created_by, last_changed_by and human_revision before continuing. Preserve human edits; undo_scatter removes only untouched additions. Camera motion pauses when the human takes over."
     }
     </script>
     <script type="module" src="/src/main.ts"></script>

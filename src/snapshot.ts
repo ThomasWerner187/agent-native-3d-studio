@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { MAX_SCENE_OBJECTS, type SceneStore } from './store';
+import { MAX_SCENE_OBJECTS, type SceneStore, type SceneActor } from './store';
 import type { Studio } from './scene';
 import { isObjectType, disposeObject } from './factory';
 import { LIGHTING_PRESETS } from './scene';
-import { cancelAllToolTweens } from './anim';
+import { cancelAllToolTweens, getCanonicalScale } from './anim';
 
 /**
  * Reversibility: every mutating tool auto-captures a snapshot beforehand,
@@ -30,6 +30,10 @@ interface SerializedObject {
   variant?: string;
   layoutRole?: 'path' | 'forest' | 'lantern';
   humanEdited?: boolean;
+  createdBy?: SceneActor;
+  lastChangedBy?: SceneActor;
+  revision?: number;
+  humanRevision?: number;
   materials?: MaterialState[];
   lights?: Array<{ color: string; intensity: number }>;
   p: [number, number, number];
@@ -89,6 +93,7 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
     },
     objects: store.all().map((e) => {
       const g = e.group;
+      const scale = getCanonicalScale(g);
       const m = e.materials[0];
       const lights: Array<{ color: string; intensity: number }> = [];
       g.traverse(o => { if (o instanceof THREE.PointLight) lights.push({ color: `#${o.color.getHexString()}`, intensity: o.intensity }); });
@@ -99,11 +104,15 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
         variant: e.variant,
         layoutRole: e.layoutRole,
         humanEdited: e.humanRevision > 0,
+        createdBy: e.createdBy,
+        lastChangedBy: e.lastChangedBy,
+        revision: e.revision,
+        humanRevision: e.humanRevision,
         materials: e.materials.map(materialState),
         lights,
         p: [g.position.x, g.position.y, g.position.z],
         r: [g.rotation.x, g.rotation.y, g.rotation.z],
-        s: [g.scale.x, g.scale.y, g.scale.z],
+        s: [scale.x, scale.y, scale.z],
         color: m ? `#${m.color.getHexString()}` : undefined,
         roughness: m?.roughness,
         metalness: m?.metalness,
@@ -134,7 +143,11 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
     });
     entry.group.position.set(o.p[0], o.p[1], o.p[2]);
     entry.layoutRole = o.layoutRole;
-    if (o.humanEdited) entry.humanRevision = ++store.humanRevision;
+    entry.createdBy = o.createdBy ?? 'unknown';
+    entry.lastChangedBy = o.lastChangedBy ?? 'unknown';
+    entry.revision = o.revision ?? 0;
+    entry.humanRevision = o.humanRevision ?? (o.humanEdited ? ++store.humanRevision : 0);
+    store.humanRevision = Math.max(store.humanRevision, entry.humanRevision);
     entry.group.rotation.set(o.r[0], o.r[1], o.r[2]);
     studio.scene.add(entry.group);
     const m = entry.materials[0];
@@ -352,6 +365,12 @@ export class SnapshotManager {
       if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${String(o.type)}"` };
       if (o.layoutRole != null && !['path', 'forest', 'lantern'].includes(o.layoutRole)) return { ok: false, error: 'invalid layoutRole' };
       if (o.humanEdited != null && typeof o.humanEdited !== 'boolean') return { ok: false, error: 'invalid humanEdited' };
+      for (const actor of [o.createdBy, o.lastChangedBy]) {
+        if (actor != null && !['human', 'agent', 'demo', 'unknown'].includes(actor)) return { ok: false, error: 'invalid object authorship' };
+      }
+      for (const revision of [o.revision, o.humanRevision]) {
+        if (revision != null && (!Number.isSafeInteger(revision) || revision < 0)) return { ok: false, error: 'invalid object revision' };
+      }
       if (o.materials != null && (!Array.isArray(o.materials) || o.materials.length > 64 || o.materials.some(m =>
         !isRecord(m) || !isHex(m.color) || !isHex(m.emissive) ||
         !['roughness', 'metalness', 'opacity'].every(k => typeof m[k] === 'number' && Number.isFinite(m[k]) && m[k] >= 0 && m[k] <= 1) ||

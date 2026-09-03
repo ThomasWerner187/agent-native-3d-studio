@@ -8,11 +8,12 @@ import type { ToolContext } from './tools';
 import { initChrome, logToolCall, logInfo, setStatus, toast, registerActivityFx } from './ui';
 import { initDevAgent } from './devagent';
 import { setMusic, isMusicOn, installAudioUnlock, musicState } from './ambience';
-import { exportScene } from './tools';
+import { exportScene, frameCamera } from './tools';
 import { GuidedTour } from './show';
 import { LayoutManager } from './layout';
 import { LofiSession } from './lofi';
 import { initLofiUI } from './lofi-ui';
+import { initCollaborationUI } from './collaboration-ui';
 import { cancelAllToolTweens } from './anim';
 import * as THREE from 'three';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
@@ -68,7 +69,7 @@ function place(
   x: number, z: number,
   opts: { scale?: number | { x: number; y: number; z: number }; rotY?: number; name?: string; role?: 'path' | 'forest' | 'lantern' } = {},
 ): void {
-  const entry = store.spawn(type, { scale: opts.scale, rotationYDeg: opts.rotY, name: opts.name });
+  const entry = store.spawn(type, { scale: opts.scale, rotationYDeg: opts.rotY, name: opts.name, actor: 'demo' });
   entry.group.position.set(x, 0, z);
   entry.layoutRole = opts.role;
   studio.scene.add(entry.group);
@@ -195,8 +196,19 @@ quality.addEventListener('click', () => {
   quality.setAttribute('aria-pressed', String(cinematic));
 });
 document.getElementById('camera-home')?.addEventListener('click', () => {
-  studio.noteActivity();
-  studio.flyTo({ position: new THREE.Vector3(16.2, 16.5, 22).multiplyScalar(Math.max(1, 1 / studio.camera.aspect)), target: new THREE.Vector3(0, 0.3, 0), fov: 42 }, 950, 'cinematic');
+  show.stop();
+  lofi.humanTakeover();
+  if (store.size) {
+    // Like a mouse orbit, Overview is a direct human camera takeover. It must
+    // still work while an agent's unrelated object transaction is settling.
+    const args = { target: 'scene', angle: 'three_quarter', select: false };
+    void frameCamera({ ...ctx, actor: 'human' }, args).then(raw => {
+      const result = JSON.parse(raw);
+      logToolCall('frame_camera', args, JSON.stringify({ ...result, actor: 'human' }));
+      if (!result.ok) toast(result.error ?? 'Could not frame the scene.');
+    });
+  }
+  else frameEmptyScene();
 });
 layout.onChange = () => {
   const state = layout.state;
@@ -242,6 +254,29 @@ const show = new GuidedTour({
   onBeat: ({ kicker, title, detail }) => setShowCue(kicker, title, detail),
 });
 initLofiUI(ctx, localCall, () => show.stop());
+initCollaborationUI(ctx, localCall, {
+  stopTour: () => show.stop(),
+  startEmpty: async () => {
+    show.stop();
+    lofi.stop();
+    const ids = store.all().map(entry => entry.id);
+    if (ids.length) {
+      // Use the same guarded, undoable operation as agents. An active mutation
+      // can refuse this action; it must never be bypassed by a direct clear().
+      const result = JSON.parse(await localCall('delete_objects', { targets: ids, expected_scene_version: store.version }));
+      if (!result.ok) throw new Error(result.error ?? 'Could not clear the scene.');
+    }
+    interaction.select(null);
+    layout.clear();
+    frameEmptyScene();
+    toast('A fresh canvas. Place a pond, then a cabin.');
+  },
+});
+
+function frameEmptyScene(): void {
+  studio.noteActivity();
+  studio.flyTo({ position: new THREE.Vector3(16.2, 16.5, 22).multiplyScalar(Math.max(1, 1 / studio.camera.aspect)), target: new THREE.Vector3(0, 0.3, 0), fov: 42 }, 950, 'cinematic');
+}
 
 document.getElementById('show-agent')?.addEventListener('click', () => {
   lofi.stop();

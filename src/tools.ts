@@ -4,8 +4,10 @@ import { decodeSceneLink, encodeSceneHash } from './share-codec';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
-import { MAX_SCENE_OBJECTS, SceneStore, round2 } from './store';
-import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, disposeObject } from './factory';
+import { MAX_SCENE_OBJECTS, SceneStore, round2, type SceneActor, type SceneEntry } from './store';
+import { OBJECT_TYPES, CHESS_PIECES, CHESS_SIDES, isObjectType, buildObject, disposeObject } from './factory';
+import { planScatter, seededRandom, type Footprint, type ScatterShape } from './scatter-planner';
+import { scatterHistory } from './scatter-history';
 import type { SnapshotManager } from './snapshot';
 import type { LayoutManager } from './layout';
 import { AGENT_PLAYBOOK } from './agent-guide';
@@ -13,6 +15,7 @@ import { setMusic, isMusicOn } from './ambience';
 import {
   spawnPop, moveObject, rotateObject, scaleObject, fadeMaterialColor, awaitGroup,
   holdCamera, despawn, tween, EASES,
+  getCanonicalScale,
 } from './anim';
 
 /**
@@ -38,24 +41,16 @@ export interface ToolContext {
   select: (id: string | null) => void;
   /** Native invocation cancellation; each call receives its own context copy. */
   signal?: AbortSignal;
+  /** Origin of the invocation, carried into semantic object mutations. */
+  actor?: SceneActor;
+  /** Batch-local accounting distinguishes its own human edits from takeover. */
+  humanChanges?: { count: number };
 }
 
 type Args = Record<string, unknown>;
 
 const MAX_OUTPUT_OBJECTS = 40;
 const MAX_SCATTER = 200;
-
-/** Deterministic PRNG (mulberry32) so seeded scatter runs are reproducible. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 export function fail(error: string, code = 'invalid_request'): string {
   return JSON.stringify({ ok: false, code, error });
@@ -85,6 +80,38 @@ function isHex(v: unknown): v is string {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+function recordMutation<T>(ctx: ToolContext, mutate: () => T): T {
+  const before = ctx.store.humanRevision;
+  const result = mutate();
+  if (ctx.humanChanges) ctx.humanChanges.count += ctx.store.humanRevision - before;
+  return result;
+}
+
+/** Synchronous bounds observation includes the intended size of a revealing object. */
+export function fullSizeBounds(group: THREE.Group): THREE.Box3 {
+  const visibleScale = group.scale.clone();
+  try {
+    group.scale.copy(getCanonicalScale(group));
+    group.updateMatrix();
+    return new THREE.Box3().setFromObject(group);
+  } finally {
+    group.scale.copy(visibleScale);
+    group.updateMatrix();
+    group.updateMatrixWorld(true);
+  }
+}
+
+/** A cabin's front steps need a usable approach beyond its visible geometry. */
+export function semanticClearances(entry: SceneEntry): Array<Zone & { object_id: string; reason: string }> {
+  if (entry.type !== 'cabin') return [];
+  const group = entry.group;
+  const matrix = new THREE.Matrix4().compose(group.position, group.quaternion, getCanonicalScale(group));
+  if (group.parent) { group.parent.updateWorldMatrix(true, false); matrix.premultiply(group.parent.matrixWorld); }
+  const box = new THREE.Box3(new THREE.Vector3(-0.4, 0, 3.8), new THREE.Vector3(1.8, 0, 7)).applyMatrix4(matrix);
+  return [{ object_id: entry.id, reason: 'cabin_entrance', x: (box.min.x + box.max.x) / 2,
+    z: (box.min.z + box.max.z) / 2, width: box.max.x - box.min.x, depth: box.max.z - box.min.z }];
 }
 
 function resolveTargets(ctx: ToolContext, raw: unknown): { ids: string[]; names: string[] } | string {
@@ -148,6 +175,10 @@ export function describeScene(ctx: ToolContext, args: Args): string {
       type: e.type,
       layout_role: e.layoutRole,
       human_edited: e.humanRevision > 0,
+      created_by: e.createdBy,
+      last_changed_by: e.lastChangedBy,
+      revision: e.revision,
+      human_revision: e.humanRevision,
       p: [round2(g.position.x), round2(g.position.y), round2(g.position.z)],
       ry: round2(THREE.MathUtils.radToDeg(g.rotation.y)),
       s: uniform,
@@ -164,7 +195,11 @@ export function describeScene(ctx: ToolContext, args: Args): string {
     human_revision: ctx.store.humanRevision,
     human_edits: ctx.store.all().filter(e => e.humanRevision > 0).map(e => ({
       id: e.id, name: e.name, position: e.group.position.toArray(), revision: e.humanRevision,
+      human_revision: e.humanRevision, created_by: e.createdBy, last_changed_by: e.lastChangedBy,
     })),
+    recent_changes: ctx.store.recentChanges,
+    scatter_history: scatterHistory(ctx.store).state,
+    keep_clear_zones: ctx.store.all().flatMap(semanticClearances),
     layout: ctx.layout.state,
     lofi: ctx.lofi.state,
     camera_motion: ctx.studio.director.state,
@@ -234,7 +269,9 @@ export function queryScene(ctx: ToolContext, args: Args): string {
   const objects = page.map((e) => {
     const g = e.group;
     const mat = e.materials[0];
-    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type, layout_role: e.layoutRole, human_edited: e.humanRevision > 0 };
+    const o: Record<string, unknown> = { id: e.id, name: e.name, type: e.type, layout_role: e.layoutRole,
+      human_edited: e.humanRevision > 0, created_by: e.createdBy, last_changed_by: e.lastChangedBy,
+      revision: e.revision, human_revision: e.humanRevision, keep_clear_zones: semanticClearances(e) };
     if (e.type === 'chess_piece' && e.variant) o.piece = e.variant;
     if (want('pose')) {
       const uniform =
@@ -330,12 +367,13 @@ export async function addObject(ctx: ToolContext, args: Args): Promise<string> {
   }
 
   const opId = newOpId();
-  const entry = ctx.store.spawn(type, {
+  const entry = recordMutation(ctx, () => ctx.store.spawn(type, {
     name: typeof args.name === 'string' ? args.name : undefined,
     scale,
     rotationYDeg: num(args.rotation_y),
     variant: piece,
-  });
+    actor: ctx.actor ?? 'agent',
+  }));
   if (side) entry.materials[0]?.color.set(CHESS_SIDES[side as 'white' | 'black']);
   entry.group.position.set(x, 0, z);
   ctx.studio.scene.add(entry.group);
@@ -394,6 +432,7 @@ export async function transformObject(ctx: ToolContext, args: Args): Promise<str
   const groups: string[] = [];
   const entries = targets.ids.map(id => ctx.store.get(id)!);
   for (const entry of entries) {
+    recordMutation(ctx, () => ctx.store.markChanged(entry.id, ctx.actor ?? 'agent', 'transform'));
     const g = entry.group;
     if (op === 'move') {
       const to = {
@@ -494,6 +533,7 @@ export async function setMaterial(ctx: ToolContext, args: Args): Promise<string>
   const groups: string[] = [];
   for (const id of targets.ids) {
     const entry = ctx.store.get(id)!;
+    recordMutation(ctx, () => ctx.store.markChanged(id, ctx.actor ?? 'agent', 'material'));
     for (const mat of entry.materials) {
       if (isHex(color)) {
         fadeMaterialColor(mat, 'color', color);
@@ -807,117 +847,140 @@ export async function scatter(ctx: ToolContext, args: Args): Promise<string> {
   if (!isObjectType(type)) {
     return fail(`Unknown type "${type}". Allowed types: ${OBJECT_TYPES.join(', ')}.`);
   }
-  const count = Math.round(num(args.count) ?? 10);
-  if (count < 1 || count > MAX_SCATTER) return fail(`count must be between 1 and ${MAX_SCATTER}.`);
+  const count = num(args.count) ?? 10;
+  if (!Number.isSafeInteger(count) || count < 1 || count > MAX_SCATTER) return fail(`count must be an integer between 1 and ${MAX_SCATTER}.`);
   if (ctx.store.size + count > MAX_SCENE_OBJECTS) return fail(`This scatter exceeds the ${MAX_SCENE_OBJECTS}-object scene limit. Delete objects or reduce count.`, 'scene_full');
-
-  const areaRaw = (args.area ?? {}) as Record<string, unknown>;
-  const centerX = clamp(num(areaRaw.center_x) ?? 0, -58, 58);
-  const centerZ = clamp(num(areaRaw.center_z) ?? 0, -58, 58);
-  const requestedWidth = clamp(num(areaRaw.width) ?? 10, 0.5, 110);
-  const requestedDepth = clamp(num(areaRaw.depth) ?? 10, 0.5, 110);
-  const minX = Math.max(-58, centerX - requestedWidth / 2), maxX = Math.min(58, centerX + requestedWidth / 2);
-  const minZ = Math.max(-58, centerZ - requestedDepth / 2), maxZ = Math.min(58, centerZ + requestedDepth / 2);
-  const width = maxX - minX, depth = maxZ - minZ;
-
+  const clearance = num(args.clearance) ?? 0.4;
+  if (clearance < 0 || clearance > 5) return fail('clearance must be between 0 and 5.');
   const jitter = clamp(num(args.jitter) ?? 0.75, 0, 1);
   const scaleVariance = clamp(num(args.scale_variance) ?? 0.2, 0, 1);
   const rotationVariance = clamp(num(args.rotation_variance) ?? 1, 0, 1);
-
+  const seed = num(args.seed) ?? Math.floor(Math.random() * 0xffffffff);
+  if (!Number.isSafeInteger(seed)) return fail('seed must be an integer.');
+  const rng = seededRandom(seed);
+  let anchor;
+  if (args.anchor != null) {
+    const resolved = ctx.store.resolve(String(args.anchor));
+    if (!resolved.ok) return fail(resolved.error, 'unknown_anchor');
+    anchor = resolved.entry;
+  }
   const zonesRaw = Array.isArray(args.exclusion_zones) ? args.exclusion_zones : [];
-  const zones: Zone[] = [];
+  const obstacles: Footprint[] = [];
   for (const raw of zonesRaw) {
     const z = parseZone(raw);
-    if (!z) {
-      return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.', 'bad_request');
-    }
-    zones.push(z);
+    if (!z) return fail('Each exclusion zone must be {x, z, width, depth} — a rectangle centered at x/z.', 'bad_request');
+    obstacles.push({ minX: z.x - z.width / 2, maxX: z.x + z.width / 2, minZ: z.z - z.depth / 2, maxZ: z.z + z.depth / 2 });
   }
-
-  // optional seeded RNG: same seed ⇒ identical layout (reproducible scenes/demos)
-  const seed = Math.round(num(args.seed) ?? Math.floor(Math.random() * 0xffffffff));
-  const rng = mulberry32(seed);
-
-  // optional object avoidance; footprint 'actual_bounds' uses the 2D projection
-  // of each object's real bounding box instead of a fixed pad around its origin
   const avoidRaw = Array.isArray(args.avoid_object_ids) ? args.avoid_object_ids.map(String) : [];
-  const actualBounds = args.footprint === 'actual_bounds';
-  const avoids: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
   for (const q of avoidRaw) {
     const r = ctx.store.resolve(q);
     if (!r.ok) return fail(`avoid_object_ids: ${r.error}`, 'unknown_target');
-    if (actualBounds) {
-      const box = new THREE.Box3().setFromObject(r.entry.group);
-      avoids.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
-    } else {
-      const p = r.entry.group.position;
-      avoids.push({ minX: p.x - 0.6, maxX: p.x + 0.6, minZ: p.z - 0.6, maxZ: p.z + 0.6 });
-    }
   }
-  const boundPad = 0.25;
+  ctx.store.syncMatrices();
+  const preserved = ctx.store.all();
+  const footprint = (box: THREE.Box3): Footprint => ({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
+  for (const entry of preserved) {
+    obstacles.push(footprint(fullSizeBounds(entry.group)));
+    for (const zone of semanticClearances(entry)) obstacles.push({ minX: zone.x - zone.width / 2,
+      maxX: zone.x + zone.width / 2, minZ: zone.z - zone.depth / 2, maxZ: zone.z + zone.depth / 2 });
+  }
+  const anchorBounds = anchor ? fullSizeBounds(anchor.group) : null;
 
-  const inZone = (x: number, z: number, posPad: number): boolean =>
-    zones.some((zo) => Math.abs(x - zo.x) < zo.width / 2 + posPad && Math.abs(z - zo.z) < zo.depth / 2 + posPad) ||
-    avoids.some((b) => x > b.minX - boundPad && x < b.maxX + boundPad && z > b.minZ - boundPad && z < b.maxZ + boundPad);
+  // Measure the exact procedural variants that spawn() will create. Temporary
+  // geometry is never registered and is always disposed, including failures.
+  const shapes: ScatterShape[] = [];
+  for (let index = 0; index < count; index++) {
+    const scale = Math.max(0.35, 1 + (rng() * 2 - 1) * scaleVariance);
+    const rotation = rng() * 360 * rotationVariance;
+    const built = buildObject(type, undefined, ctx.store.idCount + index + 1);
+    try {
+      built.group.scale.setScalar(scale);
+      built.group.rotation.y = THREE.MathUtils.degToRad(rotation);
+      shapes.push({ scale, rotation, bounds: footprint(new THREE.Box3().setFromObject(built.group)) });
+    } finally { disposeObject(built.group); }
+  }
+  const widest = Math.max(...shapes.map(shape => Math.max(shape.bounds.maxX - shape.bounds.minX, shape.bounds.maxZ - shape.bounds.minZ)));
+  const anchorSize = anchorBounds?.getSize(new THREE.Vector3());
+  const anchorCenter = anchorBounds?.getCenter(new THREE.Vector3());
+  const roomyWidth = anchorBounds
+    ? Math.max(12, Math.max(anchorSize!.x, anchorSize!.z) + Math.sqrt(count) * (widest + clearance) * 1.65)
+    : 10;
+  const expandedArea = shapes.reduce((sum, shape) => sum
+    + (shape.bounds.maxX - shape.bounds.minX + clearance) * (shape.bounds.maxZ - shape.bounds.minZ + clearance), 0);
+  const anchorArea = anchorSize ? anchorSize.x * anchorSize.z : 0;
+  // Begin with a grove, not a sparse field. The extra room handles irregular
+  // footprints; bounded retries account for the other preserved human objects.
+  const compactWidth = Math.max(12, Math.ceil(Math.sqrt(expandedArea * 2 + anchorArea)));
+  const areaRaw = (args.area ?? {}) as Record<string, unknown>;
+  const centerX = clamp(num(areaRaw.center_x) ?? anchorCenter?.x ?? 0, -58, 58);
+  const centerZ = clamp(num(areaRaw.center_z) ?? anchorCenter?.z ?? 0, -58, 58);
+  const automaticArea = anchorBounds !== null && args.area == null;
+  const requestedWidth = clamp(num(areaRaw.width) ?? roomyWidth, 0.5, 110);
+  const requestedDepth = clamp(num(areaRaw.depth) ?? roomyWidth, 0.5, 110);
+  const widths = automaticArea
+    ? [...new Set([compactWidth, compactWidth * 1.08, compactWidth * 1.18, compactWidth * 1.35, roomyWidth]
+      .map(width => clamp(Math.min(width, roomyWidth), 0.5, 110)))].sort((a, b) => a - b)
+    : [requestedWidth];
+  let area: Footprint = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  let plan: ReturnType<typeof planScatter> = null;
+  for (const width of widths) {
+    const depth = automaticArea ? width : requestedDepth;
+    area = { minX: Math.max(-58, centerX - width / 2), maxX: Math.min(58, centerX + width / 2),
+      minZ: Math.max(-58, centerZ - depth / 2), maxZ: Math.min(58, centerZ + depth / 2) };
+    plan = planScatter(shapes, area, obstacles, clearance, jitter, rng);
+    if (plan) break;
+  }
+  if (!plan) return fail(`Could not safely place all ${count} objects. Nothing changed. Enlarge area, reduce count, or reduce clearance.`, 'no_space');
+  if (ctx.signal?.aborted) return fail('Scatter cancelled before any objects were added.', 'cancelled');
 
-  const opId = newOpId();
-
-  // jittered grid keeps even coverage; exclusions fall back to random retry spots
-  const cols = Math.ceil(Math.sqrt((count * width) / Math.max(depth, 0.001)));
-  const rows = Math.ceil(count / cols);
-  const cellW = width / cols;
-  const cellD = depth / rows;
-  const posPad = actualBounds ? 0.25 : 0.5;
-
-  const ids: string[] = [];
-  const spawnGroups: string[] = [];
-  let skipped = 0;
-  let placed = 0;
-  let delayIndex = 0;
+  const opId = newOpId(), actor = ctx.actor ?? 'agent';
+  const entries = plan.map(item => {
+    const entry = recordMutation(ctx, () => ctx.store.spawn(type, { scale: item.scale, rotationYDeg: item.rotation, actor }));
+    entry.group.position.set(item.x, 0, item.z);
+    ctx.studio.scene.add(entry.group);
+    return entry;
+  });
+  const undoId = scatterHistory(ctx.store).record(entries);
+  const revisions = entries.map(entry => entry.revision);
+  const humanRevision = ctx.store.humanRevision;
   const stagger = Math.min(600 / count, 45);
-
-  for (let r = 0; r < rows && placed < count; r++) {
-    for (let c = 0; c < cols && placed < count; c++) {
-      let x = minX + cellW * (c + 0.5) + (rng() - 0.5) * cellW * jitter;
-      let z = minZ + cellD * (r + 0.5) + (rng() - 0.5) * cellD * jitter;
-      if (inZone(x, z, posPad)) {
-        let found = false;
-        for (let t = 0; t < 6; t++) {
-          x = minX + rng() * width;
-          z = minZ + rng() * depth;
-          if (!inZone(x, z, posPad)) { found = true; break; }
-        }
-        if (!found) { skipped++; continue; }
-      }
-      const s = Math.max(0.35, 1 + (rng() * 2 - 1) * scaleVariance);
-      const rot = rng() * 360 * rotationVariance;
-      const entry = ctx.store.spawn(type, { scale: s, rotationYDeg: rot });
-      entry.group.position.set(round2(x), 0, round2(z));
-      ctx.studio.scene.add(entry.group);
-      spawnPop(entry.group, delayIndex * stagger);
-      spawnGroups.push(`spawn:${entry.group.uuid}`);
-      ids.push(entry.id);
-      placed++;
-      delayIndex++;
+  const results = await Promise.all(entries.map((entry, index) => {
+    spawnPop(entry.group, index * stagger);
+    return awaitGroup(`spawn:${entry.group.uuid}`);
+  }));
+  // Cancellation hands complete, editable assets back to the human. Never
+  // overwrite an entry whose semantic revision changed during its reveal.
+  entries.forEach((entry, index) => {
+    if (ctx.store.get(entry.id) === entry && entry.revision === revisions[index]) {
+      entry.group.scale.setScalar(plan[index].scale);
     }
-  }
+  });
   ctx.store.bump();
-
-  const completed = (await Promise.all(spawnGroups.map(awaitGroup))).every(result => result.completed);
-  if (spawnGroups.length) ctx.store.bump();
-
+  const completed = results.every(result => result.completed) && ctx.store.humanRevision === humanRevision;
+  const liveEntries = entries.filter(entry => ctx.store.get(entry.id) === entry);
   return ok(ctx, {
     operation_id: opId,
-    added: placed,
-    skipped_excluded: skipped,
-    type,
-    seed,
-    footprint: actualBounds ? 'actual_bounds' : 'pad',
-    area: { center_x: (minX + maxX) / 2, center_z: (minZ + maxZ) / 2, width, depth },
-    ids: ids.slice(0, 60),
-    ...(ids.length > 60 ? { note: `Showing first 60 of ${ids.length} ids.` } : {}),
+    added: entries.length, live_added: liveEntries.length, requested_count: count,
+    exact_count: liveEntries.length === count, skipped_excluded: 0,
+    type, seed, clearance, footprint: 'actual_bounds',
+    anchor_id: anchor?.id ?? null, anchor_position: anchor?.group.position.toArray() ?? null,
+    preserved_ids: preserved.map(entry => entry.id), undo_id: undoId,
+    area: { center_x: (area.minX + area.maxX) / 2, center_z: (area.minZ + area.maxZ) / 2,
+      width: area.maxX - area.minX, depth: area.maxZ - area.minZ },
+    ids: entries.map(entry => entry.id),
+    ...(liveEntries.length < count ? { removed_ids: entries.filter(entry => !liveEntries.includes(entry)).map(entry => entry.id) } : {}),
     ...interruptedNote(completed),
   });
+}
+
+/** Remove only unchanged additions; never restore a snapshot over human work. */
+export async function undoScatter(ctx: ToolContext, args: Args): Promise<string> {
+  const edit = scatterHistory(ctx.store).take(typeof args.undo_id === 'string' ? args.undo_id : undefined);
+  if (!edit) return fail('No matching scatter addition to undo.', 'nothing_to_undo');
+  const ids = edit.removable.map(entry => entry.id);
+  if (ids.length) await deleteObjects(ctx, { targets: ids });
+  return ok(ctx, { undo_id: edit.id, removed_ids: ids, skipped_ids: edit.skipped,
+    note: 'Only unchanged additions removed. Later edits and the existing world are preserved.' });
 }
 
 /* ------------------------------------------------------------------ */
@@ -982,7 +1045,7 @@ export async function deleteObjects(ctx: ToolContext, args: Args): Promise<strin
   const ids = entries.map((e) => e.id);
   const names = entries.map((e) => e.name);
   for (const e of entries) {
-    ctx.store.remove(e.id);
+    recordMutation(ctx, () => ctx.store.remove(e.id, ctx.actor ?? 'agent'));
   }
   if (ctx.store.selectedId && ids.includes(ctx.store.selectedId)) ctx.select(null);
   ctx.store.bump();

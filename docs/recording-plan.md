@@ -1,76 +1,84 @@
 # Recording and export plan
 
-Produce the [2:15 English film](../DEMO.md) from the same revision that will be submitted. The script covers the product, an actual WebMCP invocation and human control. Recording and editing are production steps outside the app; the studio does not include a built-in video recorder.
+The current story is a **145-second, eight-shot collaboration film**. It follows one retained scene from human pond/cabin placement through agent additions, a human tree move, and the agent's lighting/camera response. [DEMO.md](../DEMO.md) contains the prompts and English script. [video-narration.json](video-narration.json) is the shared source for shot IDs, durations and narration.
 
-## Current candidate
+## Current production status
 
-The browser footage was captured against application revision `3487e00`; the reviewed application is `9bda5c3`, which adds the compact-share update. Its production build and smoke suite passed **26/26 tools and 58/58 semantic checks**; animation and lofi regressions passed on the unchanged core, including 12 bounded automatic cycles. Build and smoke also passed again in the narration-polish worktree, whose 3D application source is unchanged. Preview deploy `6a990cece684e99516a09013` matches the reviewed application build. The later share behavior still needs a native-browser round trip: browser-tool access is blocked by admin-policy verification, and the earlier film does not establish that later check.
+The eight new narration tracks were generated through ElevenLabs using **Lily — Velvety Actress** (`pFZP5JQG7iQjIQuC4Bku`), model `eleven_v3`, stability `0.5`, similarity boost `0.75` and style `0`. The original-speed MP3s use 44.1 kHz / 128 kbps and total **83.04 seconds** across the 145-second story. Character alignment and generation provenance are retained locally.
 
-The replacement narration uses **Lily — Velvety Actress** (`pFZP5JQG7iQjIQuC4Bku`), generated through ElevenLabs with model `eleven_v3`, stability `0.5`, similarity boost `0.75` and style `0`. Eight source MP3s at **44.1 kHz / 128 kbps** total **103.04 seconds** within the fixed 135-second film slots. They retain character alignment and generation provenance. The previous narration was rejected; Lily is the voice in the current exported master.
+| Shot | Slot | Source voice |
+| --- | ---: | ---: |
+| `human_pond` | 12 s | 5.36 s |
+| `human_cabin` | 18 s | 10.96 s |
+| `agent_forest` | 25 s | 11.04 s |
+| `agent_details` | 17 s | 11.44 s |
+| `human_move` | 15 s | 8.16 s |
+| `agent_readback` | 23 s | 9.76 s |
+| `atmosphere` | 20 s | 12.40 s |
+| `closing` | 15 s | 13.92 s |
 
-The revised master is **1280 × 720, 30 FPS, H.264/AAC**, with video and audio streams of exactly **135.000 seconds** and a size of **43,349,714 bytes**. Its **32 valid caption cues** use character alignment and last at least **0.8 seconds** each. The source footage retains **17 recorded native events**. The master, English SRT, poster, contact sheet and export metadata are in `scratch-submission-media`.
+The **audio rehearsal** is `scratch-submission-media/audio-rehearsal.wav`: **145.000 seconds**, 48 kHz stereo PCM, with the owner-provided Aurora Drift music and **31 character-aligned captions** in `submission-demo.srt`. Measured rehearsal levels are **−18.58 LUFS integrated**, **−3.66 dBTP true peak**, **−21.0 dBFS mean** and **−3.7 dBFS sample peak**. Its metadata explicitly records `native_capture:false`.
 
-The film pairs the narration with the owner-provided Aurora Drift music track. Narration plays at its original speed. The music bed targets **−24.5 LUFS** with sidechain ducking at **700 ms attack / 1000 ms release**. The final mix measures **−17.4 LUFS integrated**, **−2.87 dBTP true peak**, **−20.0 dBFS mean** and **−2.9 dBFS sample peak**. Format and level checks passed; a complete watch/listen and creator approval of the replacement voice remain pending.
+Narration stays at original speed. The music bed targets −24.5 LUFS and ducks gently under the voice with 700 ms attack / 1000 ms release. Only music fades at the end; the closing voice is not attenuated by a global fade. Sample-derived voice-bus timestamps prevent delayed MP3 segments from producing a shortened mix.
 
-The film is an **edited demo assembled from multiple live WebMCP sessions**; the opening and evidence cards disclose that provenance rather than presenting one uninterrupted session. Native-agent waiting-time cuts are labeled; the complete 20-second build is shown at its recorded timing. The 30 FPS export does not imply that the browser source captured every displayed frame. Public YouTube upload and the Devpost Submitted status are not complete.
+**The new native capture and final MP4 are not produced.** Browser access is still blocked by admin-policy verification. The audio rehearsal lets the creator listen to the complete presentation before capture; it does not verify native behavior. Full listening review, final film review, public YouTube and Devpost Submitted status remain open.
 
-Master SHA-256: `f7f7eadb8048e5e42d3e3e7559b2dfc6aec14435b3fb10f062d9dceb0914f692`.
+The older 135-second, multi-session gallery film remains a historical artifact in the previous voice-polish worktree. Its 32 captions, media measurements and checksum do not describe this new story. Do not reuse its scene takes as evidence for the new continuous collaboration.
 
-## Rebuild the media on macOS
+## Plan without capture or API access
 
-Prerequisites: the installed project dependencies, Swift with AppKit, and `ffmpeg`/`ffprobe` on `PATH`. Generating missing narration tracks uses paid ElevenLabs API calls and requires `ELEVENLABS_API_KEY` in the environment. Run from the repository root:
+Prerequisites for production: project dependencies, Swift/AppKit, and `ffmpeg`/`ffprobe` on PATH. Run from the repository root:
 
 ```bash
 npm run audio:elevenlabs -- --plan
-npm run audio:elevenlabs
+node scripts/encode-demo-capture.mjs --plan
+node scripts/assemble-demo.mjs --plan
 ```
 
-`--plan` reads the script and cache without credentials, API calls or file writes. Generation prepares eight MP3 tracks, character-alignment JSON and provenance JSON under `scratch-submission-media/elevenlabs`, then writes `scratch-submission-media/timeline.json` when every matching take is ready. Cached takes are checked and reused. The default is Lily with `eleven_v3`; optional `ELEVENLABS_VOICE_ID` and `ELEVENLABS_MODEL_ID` select another voice/model. Use `npm run audio:elevenlabs -- --only opening` to prepare one named segment. The helper keeps original audio speed and rejects a take that does not fit its slot; it does not retry failed API calls automatically.
+These planning commands do not make API calls. The assembler validates the script without narration files; when prepared audio exists, it additionally validates slot lengths and character alignment. Native capture is a separate gate.
 
-Browser capture is a separate step: retain genuine timestamped frame images and `frames.json` manifests in the `opening`, `composition`, `state`, `next`, `endless`, `human` and `closing` subdirectories, plus the actual native requests/results in `native-capture.json`. These raw inputs are intentionally not committed. A fresh clone cannot produce the film from the narration command alone.
+## Prepare the approved narration
 
-Once those captures are present, encode and assemble them:
+Generating missing tracks requires `ELEVENLABS_API_KEY` in the environment and makes paid ElevenLabs calls. The existing complete cache can be reused without an API key:
+
+```bash
+npm run audio:elevenlabs
+node scripts/assemble-demo.mjs --captions
+node scripts/assemble-demo.mjs --audio-only
+```
+
+The generator writes MP3, alignment JSON and provenance JSON into `scratch-submission-media/elevenlabs`, then builds `timeline.json`. `--only human_pond` prepares one named segment. Matching caches are checksum-verified and reused; the helper does not automatically retry a failed API request or change playback speed. Optional voice/model overrides are `ELEVENLABS_VOICE_ID` and `ELEVENLABS_MODEL_ID`.
+
+Timeline entries contain absolute paths. After copying a complete cache into another checkout, rerun `npm run audio:elevenlabs` there to write the current local paths; a matching complete cache needs no API call. Do not render directly from a copied timeline containing another worktree's paths.
+
+The caption-only command writes aligned SRT without images or video. The audio-only command mixes a clearly labeled WAV rehearsal and metadata; it requires no native recording. `npm run demo:audio` remains an optional macOS rehearsal helper and does not produce the approved Lily voice.
+
+## Capture the actual shared scene
+
+1. Once authorized native browser access works, open the reviewed build as a top-level page without a shared-scene hash or developer-harness parameter. Confirm the connected agent and **WebMCP live · 27 tools**.
+2. Start recording before clicking **Add pond**. Keep one page and one scene for all eight shots. Capture real pointer input, native requests, returned results and the retained object IDs.
+3. Use the native prompts in DEMO.md. Collect complete `query_scene` readbacks before and after additions, after the human move, and after lighting/camera. Leave readable time after tool results.
+4. Do not reset, import, start a gallery recipe or substitute another take after the initial placement. If a take needs restarting, record the complete story again.
+5. Keep the page visible. If agent waiting time must be removed, record those exact source intervals and label the cuts. Retained actions stay at original speed.
+6. Record actual music playback or the **Enable sound** click. A request to play is not proof of playback.
+
+Raw frame files and the native event manifest are not committed. Their required format, source-clock convention, waiting-time edits and continuity checks are specified in [CAPTURE-FORMAT.md](CAPTURE-FORMAT.md). The exporter rejects old montage evidence, harness provenance, missing readbacks and changed anchor poses. These checks support a review of the actual recording; they do not authenticate fabricated input.
+
+## Encode and export
+
+After the real source frames and complete native evidence exist:
 
 ```bash
 node scripts/encode-demo-capture.mjs
 node scripts/assemble-demo.mjs
 ```
 
-The encoder preserves source timestamps; the assembler validates the required clips and native evidence, uses the ElevenLabs character alignment for caption timing, renders title/caption overlays with AppKit, mixes narration and music, and writes `submission-demo.mp4`, `submission-demo.srt`, `submission-poster.jpg`, `submission-contact-sheet.jpg` and `export-metadata.json` under `scratch-submission-media`. Neither command records browser actions or uploads anything. Rebuilding after changing the narration or captures requires another full review.
+The encoder uses the shared eight-shot plan and removes only declared waiting-time cuts. The assembler requires valid native continuity evidence, uses character alignment for captions, renders readable overlays with AppKit and exports H.264/AAC at 1280 × 720 and 30 FPS. It checks video/audio duration, measures the final mix, and writes the MP4, SRT, poster, contact sheet and export metadata in `scratch-submission-media`.
 
-## Capture
+A 30 FPS export does not establish that every original browser frame was captured. Inspect the real recording for smooth motion, readable controls and unintended freezes. Do not extend a stale frame to imitate a live scene.
 
-1. Open the final candidate in a WebMCP-capable desktop browser at 1920 × 1080, with no private tabs or account details in view. Start from the base URL with no shared-scene hash. Confirm **WebMCP live · 26 tools**.
-2. Use **Cinematic** on hardware that renders it smoothly. Record a short sample first: water, smoke and camera motion must remain continuous in the export. Capture at 30 FPS where the recording tool supports it; do not duplicate a low-frame-rate source and describe that as a 30 FPS capture.
-3. Record a connected browser agent discovering and calling `compose_lofi_scene` with `cycle:true`, followed by `describe_scene`. Preserve the full requests, results and raw recording. A local tool inspector or the Create button is useful for rehearsal, but does not establish native WebMCP discovery.
-4. Record a native `control_lofi` call with `action:"next"`, the transition and the next procedural build. Then record human camera takeover pausing the complete sequence and an explicit resume. The starter-camp collaboration can be captured separately as supplementary material; it is not needed to interrupt the lofi story in the main film.
-5. Capture a clean moving cabin shot for the opening and closing. **H** or **Clean view** hides the HUD; **H** or **Controls** restores it. Keep some footage with the HUD visible so provenance and controls can be assessed.
+## Final viewing gate
 
-The exact prompts and narration are in [DEMO.md](../DEMO.md), with matching machine-readable shots in [video-narration.json](video-narration.json). The 20-second builds can play at their real pace underneath the explanation. Use cuts to remove model waiting time and label those cuts. Keep the browser tab visible during construction because hidden tabs pause scene work.
+Watch and listen to the complete exported film. Confirm the voice is comfortable, captions are readable, human actions and native calls are represented accurately, the same objects persist, and the actual public application reproduces the shown behavior. Check for private tabs or notifications in the footage.
 
-## Voice and edit
-
-- Keep the English delivery relaxed, with natural pauses between ideas. Use the exact feature names when the relevant tool is on screen. Keep each generated segment within its shot; shorten and regenerate an overlong take instead of speeding it up. Record the actual voice and model used for the exported film.
-- Keep narration prominent and music quiet underneath. Check actual sound playback before capture, not just a successful music request. A silent browser recording may need the separately captured audio mixed in.
-- Keep camera, water and smoke footage moving under the voice. Avoid extending a still frame to cover a long sentence.
-- Add readable English captions. Use short labels such as **Native WebMCP call**, **Human placement** and **Layout undo** only when the footage supports them.
-- Show the project title and live URL at the end. Do not spend the first seconds on a logo sequence.
-
-## Export and review
-
-Export an MP4 with H.264 video and AAC audio for upload. Retain the raw take and a separate final master. For every candidate export, check:
-
-| Check | Pass condition |
-| --- | --- |
-| Duration | Under 3:00 including title and credits; target 2:15 |
-| Narration | Audible, in English, explains both the product and WebMCP |
-| Motion | No unintended frozen frames, cursor resets or abrupt camera jumps |
-| Provenance | Native requests/results are readable; editing across multiple live sessions is disclosed; local actions are represented accurately |
-| Claims | Scene actions shown match the candidate build; no generated-mesh or generated-music claim |
-| Display | Text stays readable at ordinary YouTube player size; captions stay in frame |
-| Audio | Listen through the exported file on speakers or headphones; no clipping or missing voice |
-| Privacy | No credentials, unrelated tabs, notifications or personal account screens |
-
-Watch the whole exported film, then upload it as **Public** on YouTube. Wait for processing and verify the watch page while logged out, with sound. Copy the final public link into the submission, save it, and verify the green **Submitted** status on [Devpost My projects](https://devpost.com/submit-to/31011-the-webmcp-challenge/manage/submissions).
-
-The [official rules](https://webmcp.devpost.com/rules), checked September 3, 2026, require a public YouTube demonstration with explanatory audio and permit judges to stop watching at three minutes. Follow the [submission checklist](SUBMISSION-CHECKLIST.md) for the release freeze and judging window.
+Only then upload as **Public** on YouTube, wait for processing and verify logged-out playback. Save its link in Devpost and verify the green **Submitted** label. The [submission checklist](SUBMISSION-CHECKLIST.md) records the final revision and release freeze; the [official rules](https://webmcp.devpost.com/rules) require explanatory audio and allow judges to stop after three minutes.

@@ -1,6 +1,6 @@
 # Agent-Native 3D Scene Studio
 
-Copy-ready English fields for Devpost. Release verification and the remaining submission steps are in [the submission checklist](docs/SUBMISSION-CHECKLIST.md).
+Copy-ready English Devpost fields. Publication and proof status are tracked separately in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).
 
 ## Project name
 
@@ -8,55 +8,51 @@ Agent-Native 3D Scene Studio
 
 ## Elevator pitch
 
-An endless lofi retreat, directed by your browser agent. Watch little worlds grow, linger and change through WebMCP, while you keep the mouse and the final say.
+Build a little world with your browser agent. Place a pond and cabin yourself; let the agent grow a forest around your choices. Keep editing the same live scene together through WebMCP.
 
 ## Inspiration
 
-I wanted a little world that could keep unfolding while I work or unwind: warm lanterns, quiet water, slow camera movement and music. Asking an agent to direct it should feel like handing it the other end of the canvas. I could explore or place something by hand; it could understand that choice and work around it.
+I wanted an agent to take the other end of the canvas. I could place a pond, move a cabin or decide that one tree belongs somewhere else. The agent should understand those choices and help me build around them.
 
-A 3D scene is a useful place to try this. Its objects, positions and edit history live behind a WebGL canvas. An agent looking at the page does not automatically know which object I selected, what I just moved, or how to undo its own work without erasing mine.
-
-I built a small scene studio around that problem, with a quiet forest as the place to experiment.
+A quiet forest made that interaction tangible. Water, warm lanterns, slow camera movement and my own lofi music turn a technical experiment into a little place to spend time. The challenge is making the creative control shared: the person keeps the mouse, and the agent needs to know what changed.
 
 ## What it does
 
-Ask a connected browser agent for an endless moonlit retreat. A cabin, pond, pines and lanterns appear gradually, the local music fades in, and a cinematic camera keeps drifting. Enable cycling and the world lingers before the next scene grows into place. Three authored recipes—Lakeside Cabin, Lantern Grove and Island Hideaway—repeat through the session.
+I place a pond and cabin in a live 3D scene. Then I ask a connected browser agent to add thirty pines around them while keeping the water and entrance clear. It reads the actual objects and uses semantic tools to add the environment around my placements. Stones and lanterns can follow in another instruction.
 
-The agent can choose a scene, mood, seed, build pace and hold duration, or ask for the next scene immediately. I can grab the camera at any time to pause the whole sequence, resume when ready, stop it to edit, or undo the session.
+Every object remains editable. When I move one of the agent's trees, its identity stays the same and the scene records my change. The agent can read that new state before continuing. It can then adjust the light and start an endless cinematic camera around the world we made, without replacing the scene.
 
-There is a second, more practical interaction in the starter scene. I drag the wooden camp somewhere new, then ask the agent to arrange the surroundings. It reads the actual camp position and adapts the tagged path, grove and lanterns around it. My placement stays put. If I move a lantern afterward, layout undo restores the agent's positions while keeping my later edit.
-
-The intended audience is people making small ambient scenes and developers exploring agent support in visual editors. This is a working example of shared creative control, rather than a replacement for a full 3D modeling package.
+Scatter undo removes an agent's additions while preserving objects a person subsequently changed. An optional gallery also provides three authored lofi starting points. The central interaction is building together in the current scene.
 
 ## Why WebMCP fits
 
-WebMCP makes the page's own operations discoverable in the same browser session. The agent can read stable object ids, exact positions, selection and human-edit history; call a semantic action; and check the resulting state. That is much more direct than trying to infer scene structure and edit intent from pixels.
+The canvas displays pixels, while object identities, positions, bounds and edit history live inside the page. WebMCP makes that state and the page's own actions discoverable to a browser agent in the same session.
 
-The useful part is the handoff: “Keep what I placed; change the things around it.” The application knows how to protect those choices and exposes that behavior to the agent. A custom integration could offer similar control. WebMCP supplies a shared browser interface for discovering and using it.
+The agent can observe, act and verify. A request such as “Keep my cabin here and build around it” maps to live object-aware operations. This lets the person keep working directly instead of handing the whole task away. A custom integration could expose similar capabilities; WebMCP provides the browser-facing discovery and execution contract.
 
 ## How I built it
 
-The app uses TypeScript, three.js and Vite. It runs entirely in the browser, with no application login, server or API key. Geometry and surface textures are procedural; fonts and three music tracks are bundled locally. The browser agent supplies the model connection.
+The application uses TypeScript, three.js and Vite. It runs in the browser without an application account, backend or API key. The browser agent supplies the model connection. Geometry and surface textures are procedural, with fonts and music bundled locally.
 
-Twenty-six tools register through `document.modelContext.registerTool` with JSON input schemas, side-effect annotations and executable handlers. They cover scene queries, object editing, lighting, camera direction, composition, layout, export/import and undo.
+Twenty-seven tools register through `document.modelContext.registerTool` with JSON schemas, annotations and executable handlers. They cover queries, object editing, scatter, lighting, camera movement, undo and sharing. Objects expose their creator, last editor, revision and human revision. Scene versions let the agent reject a plan made before a human changed the page.
 
-The lofi tool returns a session id immediately. Build progress, the next scene, remaining hold time, camera motion and actual audio playback remain observable through `describe_scene`. `control_lofi` pauses, resumes, stops or advances the sequence. Finite edits report their resulting state. Operation ids, scene versions and stale-state checks help the agent detect when a human has changed something since its last observation.
+Scatter plans against actual bounds and cabin entrance space before adding anything. It either places the requested count or reports that the available area is too crowded. Its journal supports selective undo. Separate camp-layout undo preserves later changes to positions; general undo restores a whole-scene snapshot.
 
-The activity log separates WebMCP calls, local human actions and the scripted guided tour, with expandable arguments and results. Layout undo has its own position journal; ordinary undo restores a whole-scene snapshot.
+The activity log distinguishes native WebMCP calls, local human actions and scripted previews. Tool results report what actually happened, including interruption. Camera motion runs in the background and remains observable without keeping a tool call open.
 
 ## Challenges and what I learned
 
-Making objects move was the easy part. Making tool results truthful during animation, interruption and later human edits took more care. I had to treat cancellation, stale observations and undo as part of the interaction design.
+Moving objects was the easy part. Preserving the meaning of a human edit during animations, cancellation and undo needed more care. “Thirty trees” must mean thirty live additions, and an undo should not silently discard an object I chose to move myself.
 
-I also separated a long-running atmosphere from a tool call. A camera that keeps moving should not keep the agent waiting forever. The background session now exposes progress and controls instead.
+I learned to treat ownership, bounds, stale observations and truthful results as part of the product experience. A shared scene works when each participant can see what the other did and continue from there.
 
 ## Scope
 
-The lofi worlds are three authored procedural recipes configured by mood, seed and timing. They do not generate arbitrary meshes or new music. Layout adaptation works on the starter diorama's tagged objects; it can reject a blocked arrangement. Scene links preserve the objects and appearance, while session timers, audio playback and undo history stay local to the current page.
+The object library supplies procedural assets; the agent places and edits them. This is not arbitrary mesh or music generation. The ground is flat, and object bounds guide placement rather than a physics engine. The optional gallery consists of three authored recipes. Share links preserve the scene's objects and appearance, while playback, running timers and undo history remain local to the current page.
 
 ## Built with
 
-WebMCP, TypeScript, three.js, Vite, WebGL, Netlify, Playwright.
+WebMCP, TypeScript, three.js, Vite, WebGL, Netlify, Playwright. The demonstration narration uses ElevenLabs Lily; audio production is separate from the application.
 
 ## Links
 
@@ -67,22 +63,20 @@ WebMCP, TypeScript, three.js, Vite, WebGL, Netlify, Playwright.
 
 ## Testing instructions
 
-No credentials or API key are required. Open the live URL in the ChatGPT desktop app's WebMCP-capable in-app browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled and a compatible browser agent. In Chrome, relaunch after changing the flag. The app's status should show **WebMCP live · 26 tools**.
+No application credentials or API key are required. Open the live app in a WebMCP-capable browser with a connected agent. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch and connect a compatible client. Confirm **WebMCP live · 27 tools**.
 
-Ask your connected agent:
+Click **Start empty**, then **Add pond** and **Add cabin**. Drag them into position yourself. Ask the connected agent:
 
-> Read the scene tools, then create an endless moonlit lofi retreat. Use compose_lofi_scene with scene lakeside_cabin, cycle true, hold_seconds 180, build_seconds 20, seed 42, a cinematic camera and music. Read describe_scene afterward and report the real progress, next scene and whether sound needs a click.
+> Read my scene, including the pond and cabin positions, bounds and human edits. Keep them exactly where I put them. Add thirty pine trees around them, keeping the water and cabin entrance clear. Verify the added count and my unchanged placements.
 
-The call starts a background build. Leave the page visible; a cabin, pond, forest and lanterns appear. At completion, the camera keeps moving and the hold countdown begins. Ask the agent to use `control_lofi` with `action:"next"` to see a scene change without waiting three minutes. If audio needs a gesture, click **Enable sound**. Drag the empty canvas to pause the sequence, then click **Resume**.
+Add rocks and lanterns in a follow-up. Then move one of the agent-created trees by hand and ask:
 
-For the cooperation test, click **Reset**, drag the wooden camp, and ask:
+> Read my selection and recent human changes. Keep the tree's new position. Give our scene soft moonlit lighting and start a slow continuous cinematic camera. Keep all object placements unchanged, and verify actual music playback.
 
-> Read my selection and human edits. Keep the camp where I placed it. Use arrange_scene around that camp with the current expected_scene_version, then read the scene again to verify its position.
+Click **Enable sound** if the browser requires a gesture. Inspect actual requests and responses in Tool activity. For the optional undo test, use `undo_scatter` on the tree operation: untouched additions disappear while the tree you moved remains. The [judge guide](docs/JUDGE-GUIDE.md) provides the detailed checks.
 
-After arrangement, move a lantern yourself and click **Undo layout**. The layout positions revert while the camp and your later lantern edit remain. Full instructions and expected results: [Judge guide](docs/JUDGE-GUIDE.md).
-
-**Create a lofi scene**, **Try layout** and **Guided tour** also provide local previews. They do not invoke an AI model. A browser that reports WebMCP unavailable can preview the scene, but it cannot demonstrate native agent tool discovery there.
+Local controls and the developer harness exercise the page handlers but do not invoke an AI model. A browser reporting WebMCP unavailable cannot demonstrate native discovery there. The [review record](docs/FINAL-REVIEW.md) identifies verification still required for the final release.
 
 ## Development during the challenge
 
-The repository's application history begins on **September 1, 2026**, within the August 25–September 3 submission period. Dated commits record the initial WebMCP studio (`6ea0c7c`), the operation contract and transactional tools (`00cc089`), cooperative diorama layouts (`4729a8c`) and lofi sessions with continuous camera direction (`0ed6909`). The final reviewed revision is recorded in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).
+Application history begins on September 1, 2026, within the submission period. Dated commits record the original studio (`6ea0c7c`), operation contract (`00cc089`), cooperative layouts (`4729a8c`), and lofi/camera work (`0ed6909`). The final collaboration revision and release evidence belong in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).

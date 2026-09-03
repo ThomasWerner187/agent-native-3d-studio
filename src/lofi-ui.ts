@@ -19,15 +19,6 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
     });
   });
   el('lofi-next').addEventListener('click', () => void run('control_lofi', { action: 'next' }));
-  const syncPrompt = () => {
-    const scene = (el('lofi-scene') as HTMLSelectElement).value;
-    const mood = (el('lofi-mood') as HTMLSelectElement).value;
-    const cycle = (el('lofi-cycle') as HTMLInputElement).checked;
-    const prompt = document.querySelector<HTMLButtonElement>('.prompt');
-    if (prompt) prompt.dataset.copy = `Create a cozy, endless lofi animation. Use compose_lofi_scene with scene: "${scene}", mood: "${mood}", cycle: ${cycle}, hold_seconds: 180, build_seconds: 32, seed: 42, camera: "cinematic", music: true. Let the world build itself, then read describe_scene to verify its progress. Keep everything controllable through WebMCP and pause when I take over.`;
-  };
-  ['lofi-scene', 'lofi-mood', 'lofi-cycle'].forEach(id => el(id).addEventListener('change', syncPrompt));
-  syncPrompt();
   el('lofi-pause').addEventListener('click', () => {
     const state = ctx.lofi.state;
     if (state.status === 'paused') void run('control_lofi', { action: 'resume' });
@@ -81,6 +72,7 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
     el('music-toggle').title = music.note;
     el('camera-orbit').textContent = camera.status === 'running' ? 'Pause camera' : camera.status === 'paused' ? 'Resume camera' : 'Orbit';
     el('camera-orbit').setAttribute('aria-pressed', String(camera.status === 'running'));
+    document.body.dataset.lighting = ctx.studio.currentPreset;
     document.querySelectorAll<HTMLElement>('[data-mood]').forEach(button => {
       const selected = button.dataset.mood === ctx.studio.currentPreset;
       button.classList.toggle('active', selected);
@@ -88,9 +80,13 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
     });
     (el('lofi-create') as HTMLButtonElement).disabled = ctx.layout.busy;
     const hasCamp = ctx.store.all().some(entry => entry.type === 'camp');
+    el('starter-layout').hidden = !hasCamp;
     const layoutButton = el('layout-try') as HTMLButtonElement;
     layoutButton.disabled = ctx.layout.busy || !hasCamp;
     layoutButton.title = hasCamp ? 'Adapt the surroundings to your camp' : 'Reset the scene to try the camp layout';
+    layoutButton.hidden = !hasCamp;
+    el('layout-undo').hidden = !hasCamp;
+    el('layout-redo').hidden = !hasCamp;
     const tourButton = el('show-agent') as HTMLButtonElement;
     tourButton.disabled = !hasCamp;
     tourButton.title = hasCamp ? 'A local walkthrough of shared scene editing' : 'Reset the scene to start the guided tour';

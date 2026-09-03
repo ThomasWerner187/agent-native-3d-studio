@@ -1,91 +1,83 @@
 # Agent-Native 3D Scene Studio
 
-**A little world. To slow down in.** Ask your browser agent for an endless lofi retreat. A cabin, pond, pines and lanterns appear gradually; music fades in and a cinematic camera keeps drifting. Three authored scenes can linger and change in a continuous sequence. Everything stays editable in the shared three.js scene.
+**Build a little world together.** Place a pond and cabin yourself, then ask your browser agent to grow a forest around them. Move a tree by hand. The agent reads that change, keeps your placement, and gives the same world its lighting, music and a slow cinematic camera.
 
-[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:15 film script](DEMO.md) · [MIT license](LICENSE)
+[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:25 film plan](DEMO.md) · [MIT license](LICENSE)
 
-![The live lofi cabin, pond and cinematic director](docs/lofi-retreat.jpg)
+No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The current collaboration release and its new native demonstration are tracked in the [review record](docs/FINAL-REVIEW.md); a completed earlier film does not verify this new flow.
 
-No application login, API key or backend is required. A connected browser agent supplies the model; the page supplies the scene and tools. The local preview works without an agent. For the native experience, use a WebMCP-capable browser and follow the [judge walkthrough](docs/JUDGE-GUIDE.md).
+![The collaborative scene editor during local handler QA](docs/collaborative-world-qa.png)
 
-## Create a lofi scene
+Local handler QA of the current editor. The new native recording remains pending.
 
-Click **Create a lofi scene** for the local experience, or give a WebMCP browser agent this prompt:
+## Build with an agent
 
-> Create an endless moonlit lofi retreat. Use compose_lofi_scene with scene lakeside_cabin, cycle true, hold_seconds 180, a cinematic camera and music. Let each world unfold gradually, then use describe_scene to check progress, the next scene and sound status.
+1. Click **Start empty**, then **Add pond** and **Add cabin**. Drag them where you want them.
+2. Connect a WebMCP-capable browser agent and send the prompt below. Its native calls appear as **AGENT · WEBMCP**, with the actual arguments and results in Tool activity.
+3. Move one of its trees yourself. Ask it to read the new selection and human edits before making the next change.
 
-`compose_lofi_scene` accepts `scene` (`lakeside_cabin`, `lantern_grove` or `island_hideaway`), `cycle` (default false), `hold_seconds` (120–1800, default 180), `mood` (moonlit or golden_hour), `seed`, `build_seconds` (12–90, default 32), `camera` (cinematic or orbit), and `music`. It starts a background session and returns a `session_id` immediately. The agent configures authored procedural recipes through a semantic tool; it does not generate arbitrary meshes.
+> Read the scene I have built. Identify my pond and cabin, their current positions, bounds and human edits. Keep both exactly where I placed them. Add thirty pine trees around them, keeping the water, shoreline and cabin entrance clear. Verify the added count and my unchanged placements.
 
-- **The scene unfolds:** water, a cedar A-frame cabin, forest, paths and lanterns build gradually. Each recipe has its own arrangement. The progress and actual playback state are visible and available through `describe_scene`.
-- **Worlds keep changing:** with `cycle:true`, each completed scene holds for the chosen duration, then a gentle dark dip leads into the next procedural build. The three recipes repeat. `control_lofi{action:"next"}` advances on request; `describe_scene` exposes the current scene, next scene and remaining hold time.
-- **An endless camera:** `set_camera_motion` starts continuous orbit or a smooth periodic route with changing height, distance and focus. No endpoint cut; no maximum loop count. A circuit defaults to four minutes. Observation tools do not interrupt it.
-- **Human control:** grabbing the canvas pauses the complete lofi session, including construction, camera and automatic scene changes. `control_lofi` resumes it or stops it while retaining its objects. The `undo` tool restores the pre-composition scene across the sequence.
-- **Sound:** the local three-track playlist fades in softly. The UI and tools distinguish requested playback from actual playback. If the browser blocks audio, click **Enable sound**. Volume and mute remain available.
-- **Clean view:** hides the interface for enjoying the scene. H or the unobtrusive **Controls** button brings it back. Scene export is available as a share link; video recording and upload are external production steps.
+Then:
 
-The local Create button calls the same handler with `actor: human`; it does not contact an AI model. A connected browser agent calls the registered WebMCP tool with `actor: agent`. **Tool activity** exposes the original arguments and response. The background session state is observable in both cases.
+> Add six shoreline rocks and four warm lanterns around our existing scene. Keep its objects in place and leave a clear approach to the cabin. Read back what changed.
 
-## Try the collaboration
+After moving a tree:
 
-1. Drag the wooden camp to another spot. Its blue outline and the **YOU** activity entry identify the human edit.
-2. Give a connected browser agent the prompt below. It discovers the page tools, reads the actual selection and human edits, then adjusts the environment.
-3. Click **Undo layout**. Only the layout's positions revert. The camp, later edits and material changes remain.
+> I moved one tree. Read the current selection and human edits, identify its new position, and keep it there. Give our scene soft moonlit lighting and start a slow continuous cinematic camera. Keep every object's placement unchanged. Verify the camera and actual music playback state.
 
-> Read the live scene, including my selection and human edits. Keep my camp exactly where I placed it. Use arrange_scene to adapt the path, trees and lanterns around it, keeping access clear. Then frame a beautiful shot.
+The agent can use `describe_scene` and `query_scene` to inspect the current objects, then `scatter`, `add_object`, `set_lighting` and `set_camera_motion` to act. These tools work on the scene you have made. No recipe replacement is needed for this interaction.
 
-**Try layout** calls the same handler locally, with `actor: human`. **Guided tour** is an explicitly labeled local script, with `actor: demo`. Neither button invokes an AI model. A connected agent's WebMCP calls appear as **AGENT · WEBMCP**, with the full request and result available in the activity log.
+## What the shared state provides
 
-## Why WebMCP matters here
+Objects have stable IDs, poses and visible ownership information: `created_by`, `last_changed_by`, `revision` and `human_revision`. `describe_scene` also exposes selection, human edits and `recent_changes`. The actor identifies the input route, not an authenticated model or account.
 
-The WebGL canvas doesn't expose the scene graph through the DOM. A screenshot contains visible objects, but not their stable ids, exact positions, human-edit history or undo semantics. WebMCP lets this page publish those capabilities as discoverable, structured tools in the same live browser session. The agent can observe, act and verify while the person keeps the mouse.
+`scatter` adds an exact requested number around an optional live `anchor`. It plans against actual object bounds and cabin entrance space, with a default clearance of 0.4. A crowded request returns `no_space` without partial additions. Results report requested and live counts, added IDs, preserved IDs and an `undo_id`. A human interruption can change the live count; the response reports that outcome.
 
-The immediate use is making small ambient scenes together. The wider development question is how visual editors can expose intent, ownership and reversible edits to browser agents. The camp interaction makes that question concrete: a person chooses a placement, and the agent adapts the surroundings without taking that choice away.
+`undo_scatter` removes that scatter's additions while keeping objects a person changed afterward. Cooperative camp layouts have their own `undo_layout` position journal. General `undo` restores a whole-scene snapshot and has broader effects.
 
-A custom API or other automation integration could provide similar capabilities. The contribution here is the **standard browser-facing contract**, shared live state and reversible collaboration—not a claim that 3D automation is otherwise impossible. See the [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp).
+Mutations accept `expected_scene_version`. If a person changes the scene after the agent reads it, a stale request is rejected so the agent can inspect the new state. Read-only observations leave continuous camera motion running. Grabbing the camera pauses it; explicit resume returns control to the director.
 
-## What is implemented
+## Atmosphere and the gallery
 
-- Procedural A-frame cabin with a furnished interior, glazed front, reading porch and softly dissipating GPU chimney smoke. A stone-lined pond reflects the actual scene, with layered wave normals, Fresnel reflection and a shallow shoreline.
-- Procedural forest diorama: fine evergreen needle silhouettes, wood grain, beveled terrace furniture, glass lanterns, layered rock, instanced grass, reflection lighting, ambient occlusion and restrained bloom. No external model or texture downloads.
-- `describe_scene` exposes `selected_id`, `human_edits`, scene version and layout history. `query_scene` adds pagination and real world-space bounds.
-- `arrange_scene` plans around the live camp and fixed objects before changing anything. Existing human edits and untagged objects stay fixed. Blocked arrangements fail without partial placement.
-- `undo_layout` and `redo_layout` use a position journal. Objects moved later or rebuilt by import/reset are skipped. Human takeover during a layout interrupts affected movement; grabbing its camp stops the arrangement.
-- Real provenance: WebMCP, local buttons and the guided tour are labeled separately. The actor label identifies the invocation path; it is not authentication of a remote model.
-- Human camera takeover, reduced-motion handling, optional performance mode, five lighting moods, scene share links, general building tools and chess geometry.
+Lighting blends between five moods. `set_camera_motion` starts a continuous orbit or cinematic route around the current scene or a chosen object. Sound controls distinguish requested playback from actual playback; click **Enable sound** if the browser needs a gesture. The bundled three-track playlist has volume and mute controls.
 
-## Rendering work and CPU use
+The optional gallery supplies three authored procedural recipes: **Lakeside Cabin**, **Lantern Grove** and **Island Hideaway**. `compose_lofi_scene` can build one, or cycle through them with an adjustable hold. This is a separate starting-point experience: composition replaces the existing scene. Keep the gallery outside a continuous co-creation session unless replacement is intentional. [Gallery image](docs/lofi-retreat.jpg).
 
-The full cinematic image retains its resolution, ambient occlusion, bloom and shadow detail. A 60 FPS ceiling avoids unnecessary rendering on high-refresh displays. Static geometry is batched by material without removing triangles; only changed object transforms are recomputed. Sun shadows are cached until an object or light changes. Smoke is evaluated in one GPU particle draw, and lighting updates sky uniforms instead of uploading a repainted texture. Hidden tabs skip rendering.
+Local buttons call the same handlers with human provenance. A guided tour is labeled as a local script. Neither connects to an AI model. The `?agent=1` developer harness verifies handlers; it is not evidence of native WebMCP discovery.
 
-`describe_scene.rendering` exposes actual frame rate, CPU submission time, draw calls, triangles and shadow updates. CPU submission time covers application work and graphics submission; it is not whole-machine CPU usage or GPU time. Real water reflection adds one view of the scene per visible pond; multiple ponds and large shared scenes can still be expensive.
+## Why WebMCP fits
 
-## Tools (26)
+A WebGL canvas shows pixels while object IDs, precise positions, bounds and edit history live inside the application. WebMCP publishes those capabilities to a browser agent in the same live page. The agent can read what the person built, use the page's actions, and verify the result.
+
+The useful handoff is concrete: “Keep what I placed; build around it.” The page provides object-aware placement and undo semantics, while the agent translates the request into tool calls. The person continues to work with the mouse. A custom integration could expose similar capabilities; WebMCP provides the browser-facing discovery and execution contract.
+
+## Tools (27)
 
 | Purpose | Tools |
 | --- | --- |
-| Lofi session | `compose_lofi_scene`, `control_lofi`, `set_camera_motion` |
 | Discover and inspect | `help`, `describe_scene`, `query_scene` |
-| Cooperate around human placement | `arrange_scene`, `undo_layout`, `redo_layout` |
-| Build and edit | `add_object`, `transform_object`, `set_material`, `scatter`, `delete_objects` |
-| Direct the scene | `set_lighting`, `frame_camera`, `camera_path`, `set_ui`, `set_music` |
+| Add an environment | `scatter`, `undo_scatter` |
+| Build and edit | `add_object`, `transform_object`, `set_material`, `delete_objects` |
+| Direct the scene | `set_lighting`, `frame_camera`, `camera_path`, `set_camera_motion`, `set_ui`, `set_music` |
+| Cooperative camp layout | `arrange_scene`, `undo_layout`, `redo_layout` |
 | Save and restore | `snapshot`, `undo`, `export_scene`, `import_scene` |
 | Group operations | `batch` |
+| Authored gallery | `compose_lofi_scene`, `control_lofi` |
 | Chess geometry | `board_square`, `chess_move` |
 
-Registration in [src/webmcp.ts](src/webmcp.ts) uses `document.modelContext.registerTool({ name, description, inputSchema, annotations, execute }, { signal })`. Tools return an operation envelope containing `ok`, `operation_id`, `actor`, before/after scene versions, `applied`, `duration_ms` and a `result` or error. Mutating tools can reject stale observations through `expected_scene_version`. Animations settle before the call reports live values, except explicit bulk `add_object{animate:false}` and the background lofi/camera tools, which report acceptance immediately and expose ongoing state.
-
-General edits use whole-scene snapshots. Cooperative arrangements have their own position journal; use **layout undo** to preserve later human work. Layout tools and background lofi/camera controls cannot be nested inside `batch`. Stop a lofi sequence before making ordinary scene edits; observation, undo and session controls remain available during construction. A running layout rejects competing tool mutations while still allowing mouse interaction and read-only queries.
+Registration in [src/webmcp.ts](src/webmcp.ts) uses `document.modelContext.registerTool`. JSON schemas describe inputs and side-effect annotations. Results include `ok`, `operation_id`, `actor`, scene versions, `applied`, `duration_ms` and a result or error. Finite animations settle before reporting live values; background camera and gallery sessions acknowledge acceptance and expose ongoing state separately.
 
 ## Run and verify
 
-Use Node.js 22, as in CI. No environment variables or secrets are needed.
+Use Node.js 22, as in CI. The application needs no environment variables.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. To check the production build and tool behavior:
+For local release checks:
 
 ```bash
 npm run build
@@ -94,53 +86,34 @@ npm run test:lofi
 npm run smoke
 ```
 
-The smoke suite uses system Chrome if available, otherwise Playwright's Chromium. If neither is installed, run `npx playwright-core install chromium` first. CI installs Chromium and its system dependencies explicitly.
+The smoke suite starts a fresh preview port and uses system Chrome or Playwright's Chromium. If neither is installed, run `npx playwright-core install chromium`. CI installs Chromium and its dependencies. The suite exercises the labeled developer harness and checks scene semantics; native discovery and cinematic appearance need the separate [judge walkthrough](docs/JUDGE-GUIDE.md). Current results and open gates are recorded in [FINAL-REVIEW.md](docs/FINAL-REVIEW.md).
 
-The suite starts its own free preview port and exercises every listed tool, including pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`. It tests handlers through the labeled developer harness in Performance mode with software OpenGL. Native browser discovery and the cinematic view require the separate live checks in the [judge guide](docs/JUDGE-GUIDE.md).
+Native WebMCP needs a supporting browser and client. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch, and connect a compatible agent. The status chip reports actual API availability; a flag alone does not connect a model.
 
-The September 3 reviewed application revision `9bda5c3` passed the production build and **26/26 tool invocations and 58/58 semantic checks**, including compact-share navigation and import protections. Animation regressions and the deterministic lofi suite passed on the unchanged animation/sequence core, including 12 automatic cycles with bounded object disposal. Earlier native in-app-browser checks confirmed composition, state readback, next-scene control, human pause/resume and actual sound playback. The final native share round trip remains unverified because browser-tool access is blocked by admin-policy verification. These are separate evidence sources; see [the final review](docs/FINAL-REVIEW.md) for deployment, film and submission gates.
+## Demo production
 
-Native WebMCP requires a supporting browser/client. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch Chrome and connect a compatible agent. The status chip reports actual API availability. The scene and local controls also work without WebMCP. `?agent=1` exposes a clearly labeled developer harness for handler tests; it does not add a model connection.
+[video-narration.json](docs/video-narration.json) defines the eight shots, their narration and the **145-second** timeline. The new film follows one retained scene from human placement through agent additions, a human edit and the agent's response. It requires a new native capture; the previous 135-second gallery film is historical material.
 
-## Demo production on macOS
-
-The optional media helpers use ElevenLabs for narration, plus Swift/AppKit, `ffmpeg` and `ffprobe` for local production. After capturing real native-browser footage and its tool evidence as described in the [recording plan](docs/recording-plan.md), run these from the repository root:
+Local planning does not need recordings, credentials or API calls:
 
 ```bash
 npm run audio:elevenlabs -- --plan
-npm run audio:elevenlabs
-node scripts/encode-demo-capture.mjs
-node scripts/assemble-demo.mjs
+node scripts/encode-demo-capture.mjs --plan
+node scripts/assemble-demo.mjs --plan
 ```
 
-The narration uses **Lily — Velvety Actress** with ElevenLabs `eleven_v3`. `--plan` checks the script and cache without API calls or credentials. Generating missing tracks requires `ELEVENLABS_API_KEY` in the environment and makes paid API calls; matching cached takes are reused. The eight MP3 tracks retain character alignment and generation provenance for caption timing. The remaining commands encode existing timestamped frames and assemble a 135-second MP4 with captions and a poster in `scratch-submission-media`. Raw browser captures and `native-capture.json` are required inputs, kept outside the repository. These helpers do not automate browser capture, YouTube upload or Devpost submission. The exported candidate still needs the creator's complete watch-through and voice approval before publication.
+Approved narration uses ElevenLabs **Lily — Velvety Actress**, model `eleven_v3`. Generating missing tracks requires `ELEVENLABS_API_KEY` and makes paid API calls. Cached MP3s retain character alignment and generation provenance. Swift/AppKit, `ffmpeg` and `ffprobe` handle local captions and assembly on macOS. See the [recording plan](docs/recording-plan.md) for production commands and the required continuity evidence. The helpers do not record a browser or upload a submission.
 
-## Code map
+## Implementation and limits
 
-| Area | Source |
-| --- | --- |
-| Native registration, schemas and invocation contract | [src/webmcp.ts](src/webmcp.ts) |
-| Scene queries and editing handlers | [src/tools.ts](src/tools.ts) |
-| Human-preserving layouts and position journal | [src/layout.ts](src/layout.ts) |
-| Background composition, scene recipes and camera direction | [src/lofi.ts](src/lofi.ts), [src/lofi-scenes.ts](src/lofi-scenes.ts), [src/camera-director.ts](src/camera-director.ts) |
-| Pointer interaction and edit ownership | [src/interaction.ts](src/interaction.ts), [src/store.ts](src/store.ts) |
-| Snapshots, import and share state | [src/snapshot.ts](src/snapshot.ts) |
-| Procedural assets and rendering | [src/factory.ts](src/factory.ts), [src/lofi-assets.ts](src/lofi-assets.ts), [src/scene.ts](src/scene.ts) |
-| Semantic smoke checks, timing regressions and CI | [scripts/smoke.mjs](scripts/smoke.mjs), [scripts/animation-regression.mjs](scripts/animation-regression.mjs), [scripts/lofi-regression.mjs](scripts/lofi-regression.mjs), [.github/workflows/ci.yml](.github/workflows/ci.yml) |
+- Procedural geometry supplies cabins, reflective ponds, forests, rocks and lanterns. The agent arranges these editable assets; it does not generate arbitrary meshes or new music.
+- The editable surface is flat at y=0. Object bounds and reserved entrance space guide placement; this is not physics or terrain simulation.
+- Cinematic rendering uses reflection, ambient occlusion, bloom and shadows. Performance mode reduces effects. Frame rate depends on hardware and scene size; additional ponds require additional reflection views.
+- Reduced-motion preference limits automatic camera and reveal animation. Continuous camera motion can still be explicitly requested.
+- Share links preserve objects, materials, lighting and camera pose, but not playback, running timers or undo history. Keep the copied/returned link: export leaves the current URL unchanged, and opening a share clears its hash after restoration. Reloading the resulting clean base URL does not retain that restored scene.
+- There is no account-based cloud save or multi-user room. Person and agent share the current page.
+- Chess tools provide geometry and movement, not a chess rules engine.
 
-For changes, keep the local and WebMCP invocation paths consistent, preserve human edits during cooperative layouts, and update the tool table and judge instructions when behavior changes. Build and run the smoke suite before reviewing a release. The [submission checklist](docs/SUBMISSION-CHECKLIST.md) tracks the final revision, external video and release freeze.
+Core source: [tool registration](src/webmcp.ts), [editing handlers](src/tools.ts), [object state](src/store.ts), [pointer interaction](src/interaction.ts), [layouts](src/layout.ts), [snapshots](src/snapshot.ts), [rendering](src/scene.ts), [gallery recipes](src/lofi-scenes.ts), [media plan](scripts/demo-plan.mjs).
 
-## Limits
-
-- The editable surface is flat at y=0; the layered island is art direction, without physics or terrain simulation.
-- Layout adaptation applies to the starter scene's tagged paths, grove and lanterns around a camp. It is not a general-purpose layout solver. Fixed obstacles can make a request infeasible.
-- A one-second scene operation does not imply a one-second model response. Agent discovery and reasoning time depend on the client; the film script distinguishes scene timing from edited agent waiting time.
-- General snapshot undo replaces the whole scene. Only layout undo preserves unrelated later edits.
-- Reduced-motion preference keeps the lofi camera still, removes growing-object animation and skips the scene-transition fade. Continuous motion can still be explicitly requested.
-- Share links preserve cabin/pond geometry and materials, but not session timers, camera routes or audio playback.
-- Materials are edited per object. Share links carry scene state, not the live undo journal or accounts, and can become long.
-- Scene state lives in the current page. Keep the link copied by **Share** or returned by `export_scene`; exporting does not change the current URL. Opening that link restores the scene and then cleans the address bar before native tool registration. Bookmarking or reloading the resulting clean base URL does not retain the restored scene. There is no account-based cloud save or multi-user room.
-- Chess tools provide geometry and animation, not a chess rules engine.
-- Cinematic rendering costs more than performance mode; frame rate depends on hardware, viewport and scene size.
-
-MIT licensed. Bundled DM Sans and Manrope fonts use their respective SIL Open Font Licenses in [public/fonts](public/fonts). The three music tracks were supplied by their creator, Thomas Werner; see [music credits](public/music/README.md). Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).
+MIT licensed. Bundled DM Sans and Manrope include SIL Open Font Licenses in [public/fonts](public/fonts). Thomas Werner supplied the three music tracks; [music credits](public/music/README.md) record their provenance. Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).

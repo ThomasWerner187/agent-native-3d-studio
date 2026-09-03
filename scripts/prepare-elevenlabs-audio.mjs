@@ -5,14 +5,15 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadDemoPlan, voiceLeadInSeconds } from './demo-plan.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'scratch-submission-media');
 const assets = join(output, 'elevenlabs'); // Ignored production assets, never committed.
-const scriptPath = join(root, 'docs/video-narration.json');
+const script = loadDemoPlan();
 const ffprobe = process.env.DEMO_FFPROBE || 'ffprobe';
-const expectedIds = ['opening', 'native_composition', 'build', 'observable_state', 'scene_transition', 'endless', 'human_control', 'closing'];
-const defaultVoiceId = 'pFZP5JQG7iQjIQuC4Bku';
+const expectedIds = script.segments.map(segment => segment.id);
+const defaultVoiceId = script.voice.voice_id;
 const outputFormat = 'mp3_44100_128';
 const voiceSettings = { stability: 0.5, similarity_boost: 0.75, style: 0 };
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -45,8 +46,8 @@ function durationOf(audio) {
 }
 
 function requireFit(item, duration) {
-  if (duration > item.segment.duration_seconds - 0.5) {
-    throw new Error(`${item.segment.id}: ${duration.toFixed(3)}s audio exceeds its ${(item.segment.duration_seconds - 0.5).toFixed(3)}s limit by ${(duration - item.segment.duration_seconds + 0.5).toFixed(3)}s. Cached audio is retained. Shorten tts_narration/narration and run --only ${item.segment.id}; no retry or speed change was applied.`);
+  if (duration > item.segment.duration_seconds - voiceLeadInSeconds) {
+    throw new Error(`${item.segment.id}: ${duration.toFixed(3)}s audio exceeds its ${(item.segment.duration_seconds - voiceLeadInSeconds).toFixed(3)}s limit by ${(duration - item.segment.duration_seconds + voiceLeadInSeconds).toFixed(3)}s. Cached audio is retained. Shorten tts_narration/narration and run --only ${item.segment.id}; no retry or speed change was applied.`);
   }
 }
 
@@ -119,15 +120,13 @@ async function main() {
     console.log('Usage: npm run audio:elevenlabs -- [--plan] [--only SEGMENT_ID]\n\n--plan reads the script/cache only; no credentials, API calls or file writes.\n--only generates one segment, then writes timeline.json if all eight matching takes exist.\n\nGeneration requires ELEVENLABS_API_KEY. Optional ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID and DEMO_FFPROBE overrides.\nAssets: scratch-submission-media/elevenlabs/; complete timeline: scratch-submission-media/timeline.json.\nNo automatic API retries or audio speed changes.');
     return;
   }
-  const script = JSON.parse(readFileSync(scriptPath, 'utf8'));
-  if (script.target_duration_seconds !== 135 || script.segments?.length !== expectedIds.length) throw new Error('Expected eight narration segments and a fixed 135-second timeline.');
   const voiceId = process.env.ELEVENLABS_VOICE_ID || defaultVoiceId;
-  const model = process.env.ELEVENLABS_MODEL_ID || 'eleven_v3';
+  const model = process.env.ELEVENLABS_MODEL_ID || script.voice.model_id;
   if (!/^[A-Za-z0-9_-]+$/.test(voiceId) || !/^[A-Za-z0-9_-]+$/.test(model)) throw new Error('Invalid ElevenLabs voice/model identifier.');
-  const voice = voiceId === defaultVoiceId ? 'Lily — Velvety Actress' : voiceId;
+  const voice = voiceId === defaultVoiceId ? script.voice.name : voiceId;
   let cursor = 0;
   const items = script.segments.map((segment, i) => {
-    if (segment.id !== expectedIds[i] || !Number.isFinite(segment.duration_seconds) || segment.duration_seconds <= 0.5 || typeof segment.narration !== 'string' || !segment.narration.trim() ||
+    if (segment.id !== expectedIds[i] || !Number.isFinite(segment.duration_seconds) || segment.duration_seconds <= voiceLeadInSeconds || typeof segment.narration !== 'string' || !segment.narration.trim() ||
       (segment.tts_narration !== undefined && (typeof segment.tts_narration !== 'string' || !segment.tts_narration.trim()))) throw new Error(`Invalid narration segment ${i + 1}.`);
     const request = { text: segment.tts_narration ?? segment.narration, model_id: model, voice_settings: voiceSettings };
     const fingerprint = hash(JSON.stringify({ format: 1, provider: 'ElevenLabs', voice_id: voiceId, output_format: outputFormat, request }));
@@ -136,13 +135,13 @@ async function main() {
     cursor += segment.duration_seconds;
     return item;
   });
-  if (cursor !== 135) throw new Error(`Narration slots total ${cursor}s; expected exactly 135s.`);
+  if (cursor !== script.duration) throw new Error(`Narration slots total ${cursor}s; expected ${script.duration}s.`);
   const selected = items.filter(item => !options.only || item.segment.id === options.only);
   if (options.plan) {
     console.log(json({ plan_only: true, provider: 'ElevenLabs', voice, voice_id: voiceId, model_id: model, voice_settings: voiceSettings, output_format: outputFormat, duration: cursor, output: assets,
       segments: selected.map(item => {
         const cached = readCache(item);
-        return { id: item.segment.id, start: item.start, duration: item.segment.duration_seconds, max_audio_duration: item.segment.duration_seconds - 0.5, words: item.request.text.trim().split(/\s+/).length, spoken_text: item.request.text, fingerprint: item.fingerprint, cached: Boolean(cached), cached_audio_duration: cached?.audio_duration ?? null };
+        return { id: item.segment.id, start: item.start, duration: item.segment.duration_seconds, max_audio_duration: item.segment.duration_seconds - voiceLeadInSeconds, words: item.request.text.trim().split(/\s+/).length, spoken_text: item.request.text, fingerprint: item.fingerprint, cached: Boolean(cached), cached_audio_duration: cached?.audio_duration ?? null };
       }),
     }));
     return;
@@ -160,7 +159,7 @@ async function main() {
     const duration = durationOf(item.audio);
     atomicWrite(item.provenance, json({ ...metadata, audio_duration: duration }));
     requireFit(item, duration);
-    console.log(`${item.segment.id}: ${duration.toFixed(3)}s / ${(item.segment.duration_seconds - 0.5).toFixed(3)}s allowed${caches.get(item.fingerprint) ? ' (cached; no API call)' : ''}.`);
+    console.log(`${item.segment.id}: ${duration.toFixed(3)}s / ${(item.segment.duration_seconds - voiceLeadInSeconds).toFixed(3)}s allowed${caches.get(item.fingerprint) ? ' (cached; no API call)' : ''}.`);
   }
   const missing = items.filter(item => !readCache(item));
   if (missing.length) {
@@ -173,7 +172,7 @@ async function main() {
     requireFit(item, duration);
     return { ...item.segment, start: item.start, duration: item.segment.duration_seconds, audio_duration: duration, spoken_text: item.request.text, audio: item.audio, alignment: item.alignment, provenance: item.provenance, fingerprint: item.fingerprint };
   });
-  atomicWrite(join(output, 'timeline.json'), json({ duration: cursor, voice, narration: { provider: 'ElevenLabs', voice, voiceId, model }, segments }));
+  atomicWrite(join(output, 'timeline.json'), json({ story_id: script.story_id, script_fingerprint: script.script_fingerprint, duration: cursor, voice, narration: { provider: 'ElevenLabs', voice, voiceId, model }, segments }));
   console.log(`Prepared eight ElevenLabs narration tracks, original speed, fixed ${cursor}s timeline: ${join(output, 'timeline.json')}`);
 }
 

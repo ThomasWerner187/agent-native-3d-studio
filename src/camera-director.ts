@@ -14,6 +14,7 @@ export class CameraDirector {
   private radius = 26;
   private height = 16;
   private focus = new THREE.Vector3();
+  private sceneRadius: number | null = null;
   private fromPosition = new THREE.Vector3();
   private fromTarget = new THREE.Vector3();
   private fromFov = 42;
@@ -26,6 +27,7 @@ export class CameraDirector {
     return { status: this.status, mode: this.mode, loop_seconds: this.period,
       elapsed_seconds: Math.round(this.elapsed * 10) / 10, loops: Math.floor(this.elapsed / this.period),
       shot: this.mode === 'orbit' ? 'Endless orbit' : this.shot,
+      focus: this.focus.toArray(), scene_radius: this.sceneRadius ?? this.studio.terrain.radius,
       infinite: this.status !== 'stopped', reason: this.reason };
   }
 
@@ -34,16 +36,17 @@ export class CameraDirector {
     return ['Lakeside approach', 'Through the treetops', 'Moonlit panorama', 'Homeward drift'][Math.floor(part)];
   }
 
-  start(mode: MotionMode, period = 240, focus?: THREE.Vector3): void {
+  start(mode: MotionMode, period = 240, focus?: THREE.Vector3, boundsRadius?: number): void {
     cancelCameraTween();
     this.studio.noteActivity();
     this.mode = mode; this.period = period; this.elapsed = 0;
     this.focus.copy(focus ?? this.studio.controls.target);
+    this.sceneRadius = boundsRadius != null && Number.isFinite(boundsRadius) ? Math.max(1, boundsRadius) : null;
     const offset = this.studio.camera.position.clone().sub(this.focus);
     this.phase = Math.atan2(offset.x, offset.z);
     const framing = Math.max(1, 1 / this.studio.camera.aspect);
-    this.radius = Math.max(9, Math.hypot(offset.x, offset.z) / framing);
-    this.height = Math.max(5, offset.y / framing);
+    this.radius = Math.max(9, Math.hypot(offset.x, offset.z) / framing, (this.sceneRadius ?? 0) * 2.15);
+    this.height = Math.max(5, offset.y / framing, (this.sceneRadius ?? 0) * 1.35);
     this.status = 'running'; this.reason = '';
     this.captureBlend();
   }
@@ -78,10 +81,10 @@ export class CameraDirector {
     const a = this.phase + t;
     const cinematic = this.mode === 'cinematic';
     const scale = Math.max(1, 1 / this.studio.camera.aspect);
-    const island = this.studio.terrain.radius;
+    const island = this.sceneRadius ?? this.studio.terrain.radius;
     // A periodic, continuous path: no cuts, endpoint snaps or camera through trees.
-    const r = cinematic ? Math.max(20, island * 1.95) * (1 - 0.16 * Math.sin(t)) : this.radius;
-    const h = cinematic ? Math.max(11, island * 1.1) + 4 * (1 - Math.cos(t)) : this.height;
+    const r = cinematic ? Math.max(20, island * 2.15) * (1 - 0.16 * Math.sin(t)) : this.radius;
+    const h = cinematic ? Math.max(11, island * 1.35) + 4 * (1 - Math.cos(t)) : this.height;
     const target = this.focus.clone();
     if (cinematic) target.add(new THREE.Vector3(Math.sin(t) * 0.65, 0.5 + Math.sin(t * 2) * 0.3, Math.sin(t * 2) * 0.4));
     const position = new THREE.Vector3(Math.sin(a) * r * scale, h * scale, Math.cos(a) * r * scale).add(this.focus);

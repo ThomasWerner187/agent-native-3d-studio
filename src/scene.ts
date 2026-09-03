@@ -110,6 +110,7 @@ export class Studio {
   private skyMaterial: THREE.ShaderMaterial;
   private lastSkyTop = new THREE.Color('#8fa8c4');
   private lastSkyHorizon = new THREE.Color('#eec48f');
+  private fogDistances = new THREE.Vector2(24, 48);
   private clock = new THREE.Clock();
   private frameCallbacks: Array<(dt: number) => void> = [];
 
@@ -342,6 +343,14 @@ export class Studio {
     this.director.update(dt);
     this.updateFireflies(dt);
     this.controls.update();
+    if (this.scene.fog instanceof THREE.Fog) {
+      // Keep a larger user-built world readable when Overview or the director
+      // pulls back. Preset haze still fades the far side of the composition.
+      const framing = Math.max(1, 1 / this.camera.aspect,
+        this.camera.position.distanceTo(this.controls.target) / 32);
+      this.scene.fog.near = this.fogDistances.x * framing;
+      this.scene.fog.far = this.fogDistances.y * framing;
+    }
     if (this.renderer.shadowMap.needsUpdate) this.shadowUpdates++;
     this.composer.render();
     this.submitTime += performance.now() - frameStart;
@@ -394,9 +403,6 @@ export class Studio {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     const factor = Math.max(1, 1 / this.camera.aspect) / previousScale;
     this.camera.position.sub(this.controls.target).multiplyScalar(factor).add(this.controls.target);
-    if (this.scene.fog instanceof THREE.Fog) {
-      this.scene.fog.near *= factor; this.scene.fog.far *= factor;
-    }
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setSize(window.innerWidth, window.innerHeight);
@@ -436,8 +442,8 @@ export class Studio {
     const toSkyHorizon = new THREE.Color(p.fog[0]);
     const fromFogColor = (this.scene.fog as THREE.Fog | null)?.color.clone() ?? toSkyHorizon.clone();
     const toFogColor = new THREE.Color(p.fog[0]);
-    const fromFogNear = (this.scene.fog as THREE.Fog | null)?.near ?? p.fog[1];
-    const fromFogFar = (this.scene.fog as THREE.Fog | null)?.far ?? p.fog[2];
+    const fromFogNear = this.fogDistances.x;
+    const fromFogFar = this.fogDistances.y;
 
     const fromSunColor = this.sun.color.clone();
     const toSunColor = new THREE.Color(p.sun.color);
@@ -471,9 +477,8 @@ export class Studio {
           fromSkyHorizon.clone().lerp(toSkyHorizon, t),
         );
         fog.color.copy(fromFogColor).lerp(toFogColor, t);
-        const framingScale = Math.max(1, 1 / this.camera.aspect);
-        fog.near = THREE.MathUtils.lerp(fromFogNear, p.fog[1] * framingScale, t);
-        fog.far = THREE.MathUtils.lerp(fromFogFar, p.fog[2] * framingScale, t);
+        this.fogDistances.set(THREE.MathUtils.lerp(fromFogNear, p.fog[1], t),
+          THREE.MathUtils.lerp(fromFogFar, p.fog[2], t));
         this.sun.color.copy(fromSunColor).lerp(toSunColor, t);
         this.sun.intensity = THREE.MathUtils.lerp(fromSunInt, toSunInt, t);
         this.sun.position.lerpVectors(fromSunPos, toSunPos, t);

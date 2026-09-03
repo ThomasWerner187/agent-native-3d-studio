@@ -2,28 +2,30 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { loadDemoPlan, timelineMatchesPlan, voiceLeadInSeconds } from './demo-plan.mjs';
+import { validateNativeCapture } from './demo-evidence.mjs';
 
 const argv = process.argv.slice(2);
 const output = resolve(argv.find(arg => !arg.startsWith('--')) || 'scratch-submission-media');
 const checking = argv.includes('--check');
 const planning = argv.includes('--plan');
+const captionsOnly = argv.includes('--captions');
+const audioOnly = argv.includes('--audio-only');
 const ffmpeg = process.env.DEMO_FFMPEG || 'ffmpeg';
 const ffprobe = process.env.DEMO_FFPROBE || 'ffprobe';
 const width = 1280, height = 720;
 const assets = join(output, 'assembly-assets');
-const timeline = JSON.parse(readFileSync(join(output, 'timeline.json'), 'utf8'));
-const shots = [
-  { id: 'opening', start: 0, duration: 12 },
-  { id: 'composition', start: 12, duration: 36 },
-  { id: 'state', start: 48, duration: 16 },
-  { id: 'next', start: 64, duration: 24 },
-  { id: 'endless', start: 88, duration: 14 },
-  { id: 'human', start: 102, duration: 14 },
-  { id: 'closing', start: 116, duration: 19 },
-];
-const expectedSegments = ['opening', 'native_composition', 'build', 'observable_state', 'scene_transition', 'endless', 'human_control', 'closing'];
+const plan = loadDemoPlan();
+const shots = plan.shots;
+const timelinePath = join(output, 'timeline.json');
+if (!existsSync(timelinePath)) {
+  if (!planning) throw new Error('Missing current narration timeline. Run npm run audio:elevenlabs after production authorization.');
+  console.log(JSON.stringify({ plan_only: true, script_valid: true, story_id: plan.story_id, duration: plan.duration, shots, narration_ready: false, native_capture_ready: false, next: 'Generate the approved narration, then capture the native shared-scene session.' }, null, 2));
+  process.exit(0);
+}
+const timeline = JSON.parse(readFileSync(timelinePath, 'utf8'));
 const music = resolve(process.env.DEMO_MUSIC_PATH || 'public/music/aurora-drift.mp3');
-const voiceOffset = 0.5;
+const voiceOffset = voiceLeadInSeconds;
 const musicLoudness = -24.5;
 const ducking = { threshold: 0.04, ratio: 3, attack_ms: 700, release_ms: 1000, knee: 4, detection: 'rms' };
 const duckingFilter = `sidechaincompress=threshold=${ducking.threshold}:ratio=${ducking.ratio}:attack=${ducking.attack_ms}:release=${ducking.release_ms}:knee=${ducking.knee}:detection=${ducking.detection}:link=average:makeup=1`;
@@ -78,12 +80,12 @@ function measureAudio(file) {
 }
 
 function validateTimeline() {
-  if (timeline.duration !== 135 || timeline.segments?.length !== 8) throw new Error('Expected the prepared eight-segment, 135-second narration timeline.');
+  if (!timelineMatchesPlan(timeline, plan)) throw new Error('Narration timeline belongs to an earlier script. Prepare the current aligned takes before exporting.');
   let cursor = 0;
   for (let i = 0; i < timeline.segments.length; i++) {
     const segment = timeline.segments[i];
-    if (segment.id !== expectedSegments[i] || segment.start !== cursor || !(segment.duration > 0) || !segment.narration || !segment.audio) {
-      throw new Error(`Invalid narration segment ${i}; regenerate it with prepare-demo-audio.mjs.`);
+    if (segment.id !== plan.segments[i].id || segment.start !== cursor || !(segment.duration > 0) || !segment.narration || !segment.audio) {
+      throw new Error(`Invalid narration segment ${i}; regenerate it with npm run audio:elevenlabs.`);
     }
     if (!existsSync(segment.audio)) throw new Error(`Missing narration: ${segment.audio}`);
     const actual = Number(probe(segment.audio).format.duration);
@@ -96,13 +98,13 @@ function validateTimeline() {
     segment.caption_timing = captionData.timing;
     cursor += segment.duration;
   }
-  if (cursor !== 135) throw new Error(`Narration timeline totals ${cursor} seconds, expected 135.`);
+  if (cursor !== plan.duration) throw new Error(`Narration timeline totals ${cursor} seconds, expected ${plan.duration}.`);
   if (!existsSync(music)) throw new Error(`Missing music: ${music}`);
 }
 
 validateTimeline();
 if (planning) {
-  console.log(JSON.stringify({ output, duration: timeline.duration, shots, music, narration, segments: timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, audio_duration: segment.audio_duration, remaining_seconds: Number((segment.duration - voiceOffset - segment.audio_duration).toFixed(3)), captions: segment.caption_cues.length, caption_timing: segment.caption_timing })), transcript: join(output, 'native-capture.json') }, null, 2));
+  console.log(JSON.stringify({ plan_only: true, script_valid: true, narration_ready: true, output, duration: timeline.duration, shots, music, narration, native_capture_ready: false, capture_note: 'Final rendering independently validates native continuity and the recorded source clips.', segments: timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, audio_duration: segment.audio_duration, remaining_seconds: Number((segment.duration - voiceOffset - segment.audio_duration).toFixed(3)), captions: segment.caption_cues.length, caption_timing: segment.caption_timing })), transcript: join(output, 'native-capture.json') }, null, 2));
   process.exit(0);
 }
 mkdirSync(assets, { recursive: true });
@@ -278,10 +280,10 @@ for (const segment of timeline.segments) {
   const shot = shots.find(item => segment.start >= item.start && segment.start < item.start + item.duration);
   const relative = segment.start - shot.start;
   addAsset(`title-${segment.id}`, {
-    kind: 'title', width: segment.id === 'opening' ? 760 : 460, height: 77,
-    title: segment.id === 'opening' ? 'Edited demo · multiple live WebMCP sessions' : segment.title,
-    label: segment.id === 'opening' || segment.id === 'closing' ? 'SCENE STUDIO  /  AGENT-NATIVE · WEBMCP' : 'A LITTLE WORLD, BUILT TOGETHER',
-  }, shot.id, relative + 0.15, relative + (segment.id === 'closing' ? 18.3 : 5.5), 34, 525);
+    kind: 'title', width: segment.id === shots[0].id ? 760 : 460, height: 77,
+    title: segment.id === shots[0].id ? 'One scene · human + agent' : segment.title,
+    label: segment.id === shots[0].id || segment.id === 'closing' ? 'SCENE STUDIO  /  AGENT-NATIVE · WEBMCP' : 'A LITTLE WORLD, BUILT TOGETHER',
+  }, shot.id, relative + 0.15, relative + Math.min(segment.duration - 0.2, segment.id === 'closing' ? 14 : 5.5), 34, 525);
   segment.caption_cues.forEach((chunk, index) => {
     const start = segment.start + voiceOffset + chunk.start;
     const end = segment.start + voiceOffset + chunk.end;
@@ -295,6 +297,19 @@ const stamp = seconds => {
   return `${String(Math.floor(ms / 3_600_000)).padStart(2, '0')}:${String(Math.floor(ms / 60_000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
 };
 writeFileSync(join(output, 'submission-demo.srt'), cues.map((cue, i) => `${i + 1}\n${stamp(cue.start)} --> ${stamp(cue.end)}\n${cue.text}\n`).join('\n'));
+if (captionsOnly) {
+  console.log('Prepared ' + cues.length + ' aligned captions for ' + plan.duration + 's; no native film was assembled.');
+  process.exit(0);
+}
+if (audioOnly) {
+  const audioFile = join(output, 'audio-rehearsal.wav');
+  renderMix(null, audioFile);
+  const metadata = { kind: 'audio_rehearsal', native_capture: false, story_id: plan.story_id, duration: plan.duration, narration, narration_speed: 1, voice_seconds: timeline.segments.reduce((sum, segment) => sum + segment.audio_duration, 0), captions: cues.length, music, format: probe(audioFile), audio_metrics: measureAudio(audioFile) };
+  writeFileSync(join(output, 'audio-rehearsal.json'), JSON.stringify(metadata, null, 2) + '\n');
+  console.log(JSON.stringify({ file: audioFile, ...metadata }, null, 2));
+  process.exit(0);
+}
+
 
 async function waitForCaptures() {
   const seconds = Number(process.env.DEMO_WAIT_SECONDS || 900);
@@ -314,7 +329,7 @@ async function waitForCaptures() {
     let events;
     try {
       events = JSON.parse(readFileSync(join(output, 'native-capture.json'), 'utf8'));
-      if (!Array.isArray(events)) throw new Error('Expected array');
+      if (!events || Array.isArray(events)) throw new Error('Expected a versioned native capture manifest.');
     } catch { missing.push('native-capture.json'); }
     if (!missing.length) return events;
     if (Date.now() >= deadline) throw new Error(`Capture wait expired: ${missing.join(', ')}. No final video was exported.`);
@@ -326,88 +341,62 @@ async function waitForCaptures() {
   }
 }
 
-function decode(value) {
-  for (let i = 0; i < 7; i++) {
-    if (typeof value === 'string') { try { value = JSON.parse(value); continue; } catch { return { text: value }; } }
-    if (value?.content?.some(item => item.type === 'text')) { value = value.content.find(item => item.type === 'text').text; continue; }
-    if (value && typeof value === 'object' && value.ok === undefined && value.result) { value = value.result; continue; }
-    return value || {};
-  }
-  throw new Error('Tool result nesting could not be decoded.');
-}
-
 function excerpt(event) {
-  const envelope = decode(event.result), result = envelope.result || envelope;
-  const lofi = result.lofi || result;
-  const rows = [];
-  const field = (label, value) => { if (value !== undefined) rows.push(`${label}: ${JSON.stringify(value)}`); };
-  field('ok', envelope.ok);
-  field('actor', envelope.actor);
-  if (event.tool === 'help') {
-    if (typeof result.guide === 'string') rows.push(`guide: ${result.guide.slice(0, 270)}…`);
-  } else if (event.tool === 'compose_lofi_scene') {
-    // This request is visible for four seconds. Keep the selected excerpt short;
-    // the complete recorded request remains available in native-capture.json.
-    rows.length = 0;
-    field('args.scene', event.args?.scene);
-    field('args.cycle', event.args?.cycle);
-    field('args.build_seconds', event.args?.build_seconds);
-    field('result.session_id', result.session_id);
-    field('result.accepted', result.accepted);
-  } else {
-    if (event.tool === 'control_lofi') field('args.action', event.args?.action);
-    for (const key of event.clip === 'human' ? ['status'] : ['scene', 'status', 'progress']) field(`lofi.${key}`, lofi[key]);
-    if (event.clip !== 'human') {
-      field('sequence.next_scene', lofi.sequence?.next_scene);
-      field('sequence.remaining_seconds', lofi.sequence?.remaining_seconds);
+  const envelope = event.envelope, result = event.value;
+  const rows = ['actor: ' + envelope.actor, 'ok: ' + envelope.ok];
+  const field = (label, value) => { if (value !== undefined) rows.push(label + ': ' + JSON.stringify(value)); };
+  if (event.tool === 'scatter') {
+    field('type', event.args.type); field('added', result.added); field('exact_count', result.exact_count);
+    field('preserved_ids', result.preserved_ids?.slice(0, 2));
+  } else if (event.tool === 'query_scene') {
+    for (const id of event.focus_ids || []) {
+      const object = result.objects.find(item => item.id === id);
+      if (!object) throw new Error('Missing focused object in native evidence: ' + id);
+      field(object.type + '.id', object.id);
+      field('position', object.pose?.p || object.p);
+      if (event.clip === 'agent_readback') {
+        field('last_changed_by', object.last_changed_by); field('human_revision', object.human_revision);
+      }
     }
-    field('camera.status', (result.camera_motion || lofi.camera)?.status);
-    field('music.playing', (result.music || lofi.music)?.playing);
+  } else if (event.tool === 'describe_scene') {
+    field('camera.status', result.camera_motion?.status); field('music.playing', result.music?.playing);
+    field('selected_id', result.selected_id);
   }
-  if (rows.length < 2) throw new Error(`No readable result excerpt for ${event.tool}; inspect native-capture.json.`);
+  if (rows.length < 3) throw new Error('Missing readable native result: ' + event.tool);
   return rows.map(row => wrap(row, 46)).join('\n');
 }
 
 function card(event, shotId, start, end, suffix = '') {
-  if (end - start < 0.5) throw new Error(`No readable evidence window for ${shotId}/${event.tool}.`);
+  if (end - start < 1) throw new Error('Leave at least one second after the native result for ' + shotId + '/' + event.tool + '.');
   const body = excerpt(event);
   const lines = body.split('\n').length;
-  addAsset(`native-${shotId}-${event.tool}${suffix}`, {
+  addAsset('native-' + shotId + '-' + event.tool + suffix, {
     kind: 'evidence', width: 625, height: Math.min(445, 110 + lines * 24),
-    label: 'EDITED DEMO · MULTIPLE LIVE WEBMCP SESSIONS', title: `${event.tool} · recorded excerpt`, body, fontSize: 18,
+    label: 'SAME SCENE · NATIVE WEBMCP', title: event.tool + ' · recorded excerpt', body, fontSize: 18,
   }, shotId, start, end, 34, 40);
 }
 
-function addEvidence(events) {
-  const records = events.map(event => ({ ...event, clip: basename(String(event.clip), '.mp4'), t: Number(event.t) }));
-  if (records.some(event => !Number.isFinite(event.t) || event.t < 0)) throw new Error('Native capture timestamps must be non-negative clip-local seconds.');
-  const find = (clip, tool, predicate = () => true) => records.find(event => event.clip === clip && event.tool === tool && predicate(event));
-  const compose = find('composition', 'compose_lofi_scene');
-  const help = find('composition', 'help');
-  const state = find('state', 'describe_scene');
-  const next = find('next', 'control_lofi', event => event.args?.action === 'next');
-  const human = records.filter(event => event.clip === 'human' && ['describe_scene', 'control_lofi'].includes(event.tool)).sort((a, b) => a.t - b.t);
-  if (!compose || !help || !state || !next || !human.length) throw new Error('Missing genuine help/compose/state/next/human transcript evidence; refusing to fabricate cards.');
-  card(help, 'composition', Math.max(0.2, help.t), Math.min(compose.t, 18));
-  card(compose, 'composition', Math.max(compose.t, 0.2), 18);
-  addAsset('composition-edit-disclosure', {
-    kind: 'title', width: 510, height: 77,
-    title: 'Agent waiting time removed', label: 'BUILD AT REAL SPEED',
-  }, 'composition', 14, 18, 34, 525);
-  card(state, 'state', Math.max(0.2, state.t), 15.8);
-  card(next, 'next', Math.max(0.2, next.t), 4);
-  // A control request's timestamp can precede its result by several seconds.
-  // Only the observed readbacks establish when each human-control state is shown.
-  const hasStatus = (event, status) => {
-    if (event.tool !== 'describe_scene') return false;
-    const envelope = decode(event.result);
-    return (envelope.result || envelope).lofi?.status === status;
-  };
-  const paused = human.find(event => hasStatus(event, 'paused'));
-  const playing = human.findLast(event => hasStatus(event, 'playing'));
-  if (!paused || !playing || playing.t <= paused.t) throw new Error('Human evidence needs a paused readback followed by a final playing readback.');
-  card(paused, 'human', paused.t, playing.t, '-paused');
-  card(playing, 'human', playing.t, 13.7, '-playing');
+function addEvidence(capture) {
+  const { proof } = capture;
+  const selected = [
+    { ...proof.initial, focus_ids: [capture.anchors.pond, capture.anchors.cabin] },
+    proof.scatter,
+    { ...proof.forest, focus_ids: [capture.anchors.pond, capture.anchors.cabin] },
+    { ...proof.details, focus_ids: [capture.moved_object_id] },
+    { ...proof.changed, focus_ids: [capture.moved_object_id] },
+    proof.atmosphere,
+  ];
+  selected.forEach((event, i) => {
+    const shot = shots.find(item => item.id === event.clip);
+    const following = selected.slice(i + 1).find(item => item.clip === event.clip);
+    card(event, event.clip, event.t, Math.min(event.t + 6, following?.t ?? Infinity, shot.duration - 0.15), '-' + i);
+  });
+  for (const clip of capture.clips.filter(item => item.cuts.length)) {
+    addAsset('waiting-cut-' + clip.id, {
+      kind: 'title', width: 560, height: 77,
+      title: 'Agent waiting time removed', label: 'SAME SCENE · ACTIONS AT REAL SPEED',
+    }, clip.id, 0.2, 4, 34, 440);
+  }
   const source = readFileSync('src/webmcp.ts', 'utf8');
   const at = source.indexOf('await mc.registerTool(');
   if (at < 0) throw new Error('Could not find the real WebMCP registration source.');
@@ -440,11 +429,7 @@ function overlayGraph(base, items) {
 }
 
 if (checking) {
-  let sample;
-  if (existsSync(join(output, 'native-capture.json'))) {
-    try { sample = JSON.parse(readFileSync(join(output, 'native-capture.json'), 'utf8')).find(event => event.tool === 'help'); } catch { /* A real capture may still be writing. */ }
-  }
-  if (sample) card(sample, 'composition', 0, 1, '-check');
+  // A local compositing check has no native evidence cards.
   renderAssets();
   const caption = jobs.find(job => job.kind === 'caption').path;
   const title = jobs.find(job => job.kind === 'title').path;
@@ -452,7 +437,6 @@ if (checking) {
     { file: title, start: 0, end: 1, x: 34, y: 525 },
     { file: caption, start: 0, end: 1, x: 60, y: 620 },
   ];
-  if (sample) items.push({ file: jobs.find(job => job.kind === 'evidence').path, start: 0, end: 1, x: 34, y: 40 });
   const graph = overlayGraph('[0:v]setsar=1[base]', items);
   const voiceIndex = items.length + 1, musicIndex = items.length + 2;
   const mix = `[${voiceIndex}:a]loudnorm=I=-16:TP=-1.5:LRA=9,aresample=48000,aformat=channel_layouts=stereo,asplit=2[voice][sidechain];[${musicIndex}:a]loudnorm=I=${musicLoudness}:TP=-4:LRA=11,aresample=48000,aformat=channel_layouts=stereo[music];[music][sidechain]${duckingFilter}[ducked];[voice][ducked]amix=inputs=2:normalize=0,alimiter=limit=0.96:level=false[mix]`;
@@ -463,8 +447,9 @@ if (checking) {
   process.exit(0);
 }
 
-const events = await waitForCaptures();
-addEvidence(events);
+const capture = validateNativeCapture(await waitForCaptures(), plan);
+const events = capture.events;
+addEvidence(capture);
 renderAssets();
 const rendered = [];
 for (const shot of shots) {
@@ -479,42 +464,51 @@ for (const shot of shots) {
   rendered.push(file);
 }
 
-// Concat syntax is its own format (not a shell). Quote only at this boundary.
+function renderMix(videoList, outputFile) {
+  const args = ['-hide_banner', '-loglevel', 'error', '-y'];
+  if (videoList) args.push('-f', 'concat', '-safe', '0', '-i', videoList);
+  for (const segment of timeline.segments) args.push('-i', segment.audio);
+  args.push('-stream_loop', '-1', '-i', music);
+  const offset = videoList ? 1 : 0;
+  const audio = timeline.segments.map((segment, i) => '[' + (i + offset) + ':a]loudnorm=I=-16:TP=-1.5:LRA=9,aresample=48000,aformat=channel_layouts=stereo,adelay=' + Math.round((segment.start + voiceOffset) * 1000) + ':all=1[voice' + i + ']');
+  // Keep continuous sample-derived PTS through delayed MP3s and the music tail.
+  // Narration is never time-stretched or faded across the final spoken line.
+  audio.push(timeline.segments.map((_, i) => '[voice' + i + ']').join('') + 'amix=inputs=' + timeline.segments.length + ':normalize=0:duration=longest,asetpts=N/SR/TB,apad=pad_dur=' + plan.duration + ',atrim=duration=' + plan.duration + ',asplit=2[voices][sidechain]');
+  audio.push('[' + (timeline.segments.length + offset) + ':a]atrim=duration=' + plan.duration + ',asetpts=PTS-STARTPTS,loudnorm=I=' + musicLoudness + ':TP=-4:LRA=11,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:st=0:d=2,afade=t=out:st=' + (plan.duration - 4) + ':d=4[music]');
+  audio.push('[music][sidechain]' + duckingFilter + '[ducked]');
+  audio.push('[voices][ducked]amix=inputs=2:normalize=0:duration=longest,alimiter=limit=0.96:level=false,atrim=duration=' + plan.duration + '[mix]');
+  args.push('-filter_complex_threads', '1', '-filter_complex', audio.join(';'));
+  if (videoList) args.push('-map', '0:v:0', '-c:v', 'copy');
+  args.push('-map', '[mix]', '-c:a', videoList ? 'aac' : 'pcm_s16le');
+  if (videoList) args.push('-b:a', '192k', '-movflags', '+faststart');
+  args.push('-ar', '48000', '-t', String(plan.duration), '-metadata', 'title=' + (videoList ? plan.title : 'Audio rehearsal — ' + plan.title), outputFile);
+  run(ffmpeg, args);
+}
+
+// Concat syntax is its own format, not a shell command.
 const list = join(assets, 'shots.txt');
-writeFileSync(list, rendered.map(file => `file '${file.replaceAll("'", "'\\''")}'`).join('\n') + '\n');
-const args = ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list];
-for (const segment of timeline.segments) args.push('-i', segment.audio);
-args.push('-stream_loop', '-1', '-i', music);
-const audio = timeline.segments.map((segment, i) => `[${i + 1}:a]loudnorm=I=-16:TP=-1.5:LRA=9,aresample=48000,aformat=channel_layouts=stereo,adelay=${Math.round((segment.start + voiceOffset) * 1000)}:all=1[voice${i}]`);
-// Derive continuous timestamps from unchanged samples before trimming: amix can
-// carry discontinuous PTS from delayed MP3s. Pad the bus through the music tail.
-// The slow RMS envelope lets short breaths pass without pumping the bed.
-audio.push(`${timeline.segments.map((_, i) => `[voice${i}]`).join('')}amix=inputs=8:normalize=0:duration=longest,asetpts=N/SR/TB,apad=pad_dur=135,atrim=duration=135,asplit=2[voices][sidechain]`);
-audio.push(`[9:a]atrim=duration=135,asetpts=PTS-STARTPTS,loudnorm=I=${musicLoudness}:TP=-4:LRA=11,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:st=0:d=2,afade=t=out:st=131:d=4[music]`);
-audio.push(`[music][sidechain]${duckingFilter}[ducked]`);
-audio.push('[voices][ducked]amix=inputs=2:normalize=0:duration=longest,alimiter=limit=0.96:level=false,atrim=duration=135,afade=t=out:st=134:d=1[mix]');
+writeFileSync(list, rendered.map(file => "file '" + file.replaceAll("'", "'\\''") + "'").join('\n') + '\n');
 const master = join(output, 'submission-demo.mp4');
 const temporaryMaster = join(output, '_submission-demo-rendering.mp4');
-args.push('-filter_complex_threads', '1', '-filter_complex', audio.join(';'), '-map', '0:v:0', '-map', '[mix]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-t', '135', '-movflags', '+faststart', '-metadata', 'title=Agent-Native 3D Scene Studio — A Little World, Built Together', temporaryMaster);
-console.log('Mixing normalized English narration and a lofi bed with gentle voice-driven ducking.');
-run(ffmpeg, args);
+console.log('Mixing original-speed narration and a lofi bed; only the music fades at the end.');
+renderMix(list, temporaryMaster);
 
 const final = probe(temporaryMaster);
 const video = final.streams.find(stream => stream.codec_type === 'video');
 const sound = final.streams.find(stream => stream.codec_type === 'audio');
-if (Math.abs(Number(final.format.duration) - 135) > 0.1 || video?.width !== width || video?.height !== height || video?.codec_name !== 'h264' || sound?.codec_name !== 'aac' || !Number.isFinite(Number(sound?.duration)) || Math.abs(Number(sound.duration) - 135) > 0.1) {
+if (Math.abs(Number(final.format.duration) - plan.duration) > 0.1 || video?.width !== width || video?.height !== height || video?.codec_name !== 'h264' || sound?.codec_name !== 'aac' || !Number.isFinite(Number(sound?.duration)) || Math.abs(Number(sound.duration) - plan.duration) > 0.1) {
   throw new Error(`Unexpected final media format: ${JSON.stringify(final)}`);
 }
 const audioMetrics = measureAudio(temporaryMaster);
 console.log(`Final mix measurements: ${JSON.stringify(audioMetrics)}`);
 renameSync(temporaryMaster, master);
 run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', master, '-vf', 'fps=1/15,scale=320:180,tile=3x3', '-frames:v', '1', '-q:v', '2', join(output, 'submission-contact-sheet.jpg')]);
-run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', '125', '-i', master, '-frames:v', '1', '-q:v', '2', join(output, 'submission-poster.jpg')]);
+run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(plan.duration - 8), '-i', master, '-frames:v', '1', '-q:v', '2', join(output, 'submission-poster.jpg')]);
 const captionSources = [...new Set(timeline.segments.map(segment => segment.caption_timing))];
 const segmentMetadata = timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, voice_offset: voiceOffset, audio: segment.audio, audio_duration: segment.audio_duration, alignment: segment.alignment || null, provenance: segment.provenance || null, caption_timing: segment.caption_timing, captions: segment.caption_cues.length }));
-writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_at: new Date().toISOString(), master, format: final, shots, voice: narration.voice, provider: narration.provider, model: narration.model, narration, segments: segmentMetadata, captions: cues.length, native_events: events.length, music, source: 'native-capture.json', caption_timing: captionSources.join(' '), audio_processing: { narration_speed: 1, narration_time_stretch: false, voice_lead_in_seconds: voiceOffset, narration_loudness_target_lufs: -16, music_loudness_target_lufs: musicLoudness, music_ducking: { ...ducking, sidechain: 'normalized narration bus' } }, audio_metrics: audioMetrics }, null, 2));
+writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_at: new Date().toISOString(), story_id: plan.story_id, capture_id: capture.capture_id, app_revision: capture.app_revision, capture_continuity: capture.continuity, master, format: final, shots, voice: narration.voice, provider: narration.provider, model: narration.model, narration, segments: segmentMetadata, captions: cues.length, native_events: events.length, music, source: 'native-capture.json', caption_timing: captionSources.join(' '), audio_processing: { narration_speed: 1, narration_time_stretch: false, voice_lead_in_seconds: voiceOffset, narration_loudness_target_lufs: -16, music_loudness_target_lufs: musicLoudness, music_ducking: { ...ducking, sidechain: 'normalized narration bus' } }, audio_metrics: audioMetrics }, null, 2));
 const narrationCredit = narration.provider === 'ElevenLabs'
   ? `English narration: ElevenLabs ${narration.voice}, model ${narration.model}, voice ID ${narration.voice_id}. Eight source MP3 tracks, character alignments and generation provenance are retained with [timeline.json](timeline.json).`
   : `English narration is synthesized locally using the macOS ${narration.voice} voice. Eight source AIFF tracks are retained with [timeline.json](timeline.json).`;
-writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), 135 seconds, 1280 × 720, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). Cards show selected recorded arguments and results; they are editorial excerpts, not recreated chat.\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage combines multiple real live WebMCP sessions, disclosed at the opening and on evidence cards. Cuts that remove agent waiting time retain their labels; the build runs at real speed. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
+writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), ${plan.duration} seconds, 1280 × 720, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). Cards show selected recorded arguments and results; they are editorial excerpts, not recreated chat.\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage retains one scene in one native browser session, from human placement through agent additions and later human edits. Declared cuts remove agent waiting time; retained actions run at real speed. Original source ranges and object continuity evidence are retained in native-capture.json. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
 console.log(`Ready for full playback review: ${master}`);
