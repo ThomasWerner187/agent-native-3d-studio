@@ -117,7 +117,7 @@ function validateAlignment(item) {
 async function main() {
   const options = argumentsFromCli();
   if (options.help) {
-    console.log('Usage: npm run audio:elevenlabs -- [--plan] [--only SEGMENT_ID]\n\n--plan reads the script/cache only; no credentials, API calls or file writes.\n--only generates one segment, then writes timeline.json if all eight matching takes exist.\n\nGeneration requires ELEVENLABS_API_KEY. Optional ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID and DEMO_FFPROBE overrides.\nAssets: scratch-submission-media/elevenlabs/; complete timeline: scratch-submission-media/timeline.json.\nNo automatic API retries or audio speed changes.');
+    console.log('Usage: npm run audio:elevenlabs -- [--plan] [--only SEGMENT_ID]\n\n--plan reads the script/cache only; no credentials, API calls or file writes.\n--only generates one segment, then writes timeline.json if all matching takes exist.\n\nGeneration requires ELEVENLABS_API_KEY. Optional ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID and DEMO_FFPROBE overrides.\nAssets: scratch-submission-media/elevenlabs/; complete timeline: scratch-submission-media/timeline.json.\nNo automatic API retries or audio speed changes.');
     return;
   }
   const voiceId = process.env.ELEVENLABS_VOICE_ID || defaultVoiceId;
@@ -173,7 +173,7 @@ async function main() {
     return { ...item.segment, start: item.start, duration: item.segment.duration_seconds, audio_duration: duration, spoken_text: item.request.text, audio: item.audio, alignment: item.alignment, provenance: item.provenance, fingerprint: item.fingerprint };
   });
   atomicWrite(join(output, 'timeline.json'), json({ story_id: script.story_id, script_fingerprint: script.script_fingerprint, duration: cursor, voice, narration: { provider: 'ElevenLabs', voice, voiceId, model }, segments }));
-  console.log(`Prepared eight ElevenLabs narration tracks, original speed, fixed ${cursor}s timeline: ${join(output, 'timeline.json')}`);
+  console.log(`Prepared ${segments.length} ElevenLabs narration tracks, original speed, fixed ${cursor}s timeline: ${join(output, 'timeline.json')}`);
 }
 
 main().catch(error => {

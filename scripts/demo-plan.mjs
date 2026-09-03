@@ -10,8 +10,8 @@ export const voiceLeadInSeconds = 0.5;
 
 export function loadDemoPlan() {
   const source = JSON.parse(readFileSync(join(projectRoot, 'docs/video-narration.json'), 'utf8'));
-  if (source.story_id !== 'collaborative-world-v1' || !Array.isArray(source.segments) || source.segments.length !== 8) {
-    throw new Error('Expected the eight-shot collaborative-world-v1 story.');
+  if (source.story_id !== 'zen-co-creation-v2' || !Array.isArray(source.segments) || source.segments.length !== 8) {
+    throw new Error('Expected the eight-shot zen-co-creation-v2 story.');
   }
   if (!Number.isFinite(source.target_duration_seconds) || source.target_duration_seconds < 135 || source.target_duration_seconds >= 180) {
     throw new Error('The collaborative film must last at least 135 seconds and stay under three minutes.');

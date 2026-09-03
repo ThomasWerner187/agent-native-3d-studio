@@ -1,52 +1,61 @@
-# Native recording evidence format
+# Native recording contract — Zen co-creation
 
-This contract is for the new 161-second collaboration film. It stores facts observed during the actual browser recording. Do not generate a manifest from a local harness, substitute old gallery events, or fill absent evidence with expected results.
+This contract describes the **new 157-second `zen-co-creation-v2` film**. The 161-second v1 film is a separate historical take. Record actual native browser footage, requests and responses; never fill absent evidence with a local harness or expected values.
 
-The file `scratch-submission-media/native-capture.json` is a JSON object with these fields:
+The manifest is `scratch-submission-media/native-capture.json`:
 
-| Field | Required contents |
+| Field | Actual recorded value |
 | --- | --- |
 | `schema_version` | `1` |
-| `story_id` | `collaborative-world-v1` |
-| `capture_id` | A nonempty identifier for the one source recording/session |
-| `app_revision` | The 7–40 hexadecimal character revision actually loaded |
-| `page_url` | The clean native page URL; no `agent` harness parameter or shared-scene hash |
-| `transport` | `native-webmcp`, backed by the retained original requests/responses and footage |
-| `continuity` | `{ "single_page": true, "scene_replacements": 0 }`, confirmed from the source recording |
-| `anchors` | `{ "pond": "actual pond ID", "cabin": "actual cabin ID" }` |
-| `moved_object_id` | The actual agent-created tree dragged by the person |
-| `clips` | The eight chronological source ranges described below |
-| `events` | Actual native calls with original `args` and `result`, in source order |
-| `human_actions` | Observed pointer-action markers, described below |
+| `story_id` | `zen-co-creation-v2` |
+| `capture_id` | Identifier for this one retained scene and its original recording segments |
+| `app_revision` | The loaded application's 7–40 character hexadecimal Git revision |
+| `page_url` | Actual clean native page URL, without an `agent` query or scene hash |
+| `transport` | `native-webmcp` |
+| `continuity` | `{ "single_page": true, "scene_replacements": 0 }` |
+| `anchors` | `{ "pond": "actual ID", "cabin": "actual ID" }` |
+| `path_object_ids` | Every ID returned by the successful `add_path`, in returned order |
+| `moved_object_ids` | Two distinct path-stone IDs subsequently moved through the UI |
+| `clips` | The eight chronological source ranges below |
+| `events` | Original native calls, arguments, complete responses and observation times |
+| `human_actions` | Real placements, typed requests, stone movements and any playback click |
 
-These labels are provenance records, not cryptographic authentication. The source footage must still be reviewed.
+## Timing and source footage
 
-## Source time and cuts
+Use one elapsed-seconds source clock throughout. Clip IDs/order/durations come from [video-narration.json](video-narration.json): `human_pond` 14s, `human_cabin` 16s, `agent_forest` 26s, `agent_details` 21s, `human_move` 16s, `agent_readback` 19s, `atmosphere` 26s, `closing` 19s.
 
-Use one elapsed-seconds clock for the entire source recording. Each `clips` entry contains `id`, `source_start_seconds`, `source_end_seconds` and `cuts`. IDs and order come from [video-narration.json](video-narration.json): `human_pond`, `human_cabin`, `agent_forest`, `agent_details`, `human_move`, `agent_readback`, `atmosphere`, `closing`.
+Each clip has `id`, `source_start_seconds`, `source_end_seconds`, and `cuts`. Its end equals the next clip's start. Source duration minus cuts must equal the planned duration. A cut is `{ "start": number, "end": number, "reason": "agent_wait" }`, on the original source clock. This records omitted idle time, including pauses between recording segments when capture was stopped. It does not imply that frames exist for those gaps. Retain actual typing, pointer movement and scene reveals at original speed. Required actions or results must not fall inside cuts. No scene reset, import, composition or replacement take is allowed during the story.
 
-A clip's end equals the next clip's start. Its source duration minus declared cuts must equal its planned duration. A cut is `{ "start": number, "end": number, "reason": "agent_wait" }`; times use the same original source clock. Cuts must not overlap. Only waiting intervals can be removed. Record the complete retained scene and its actual actions at original speed.
+Keep every original recording segment unchanged. The capture runs segment by segment on one native browser page, with the same editable scene throughout; it is not an uninterrupted video stream. Each shot's folder contains actual screencast images and `frames.json` entries `{ "file": "frame.jpg", "time": number }` using the shared elapsed-time clock. Document all waiting and recording gaps in the manifest. Frames must cover the retained shot at a minimum average of ten genuine frames per second, first frame within 0.12s and last within 0.2s of the shot boundaries. No missing action may be invented, reconstructed or sped up; duplicating old frames does not count as new capture.
 
-Put each shot's raw frame images and `frames.json` in its named subdirectory. A frame entry contains `file` and `time`; `time` uses the same original source clock, not an independently reset clip clock. The encoder removes declared waiting intervals and preserves the timing of everything retained. It rejects incomplete frame coverage. Keep the original unedited source recording too.
+## Events and human actions
 
-## Native events and human actions
+A native event has `clip`, `source_seconds`, `tool`, `args`, `result`. The timestamp is when the result became observable. Retain the complete `actor:"agent"` response envelope and original argument values.
 
-A native event contains `clip`, `source_seconds`, `tool`, `args` and `result`. `source_seconds` is when the result became observable, not merely when the request was sent. Keep the complete original tool response, including its `actor:"agent"` envelope. Nested JSON/MCP text wrappers are supported. Required results cannot be hidden inside waiting-time cuts.
+A human action has `clip`, `source_seconds`, `kind`, and `id` for object actions. Kinds: `place`, `move`, `camera`, `sound`, `request`. A `request` also includes `intent` (`forest`, `path`, or `atmosphere`) and `text`, copied from the actual page input. Editorial intent labels describe the recorded action; they do not stand in for footage of the request.
 
-A human action contains `clip`, `source_seconds`, `kind` and, for object actions, `id`. Supported kinds are `place`, `move`, `camera` and `sound`. Required markers are pond placement in `human_pond`, cabin placement in `human_cabin`, and the same agent-created tree's drag in `human_move`. Record what the pointer actually did.
+Required action markers:
 
-## Required readbacks
+- Pond placement in `human_pond`; cabin placement and forest request in `human_cabin`.
+- Path request in `agent_details`.
+- Two distinct path-stone movements in `human_move`.
+- Cozy evening/music/camera request in `atmosphere`.
 
-Record successful, unfiltered `query_scene` results with every object's full pose and provenance in `human_cabin`, `agent_forest`, `agent_details`, `agent_readback` and `atmosphere`. Use a limit of 200 for this small scene, no filters and offset zero. All objects must fit in that result; `total` equals the returned count and `next_offset` is null. Include bounds for placement planning.
+## Native proof
 
-The native event sequence must also include:
+Keep complete unfiltered `query_scene` results in `human_cabin`, `agent_forest`, `agent_details`, `agent_readback`, and `atmosphere`. Use `limit:200`, `include_bounds:true`, no type/name/ID filter and offset zero. Every object needs its full pose, actor provenance and human revision. Returned length must equal `total`; `next_offset` must be null.
 
-- `help` in `human_cabin`;
-- `scatter` for 30 trees in `agent_forest`, returning 30 unique IDs, `exact_count:true` and both anchors in `preserved_ids`;
-- actual rock and lantern additions in `agent_details` (at least two of each);
-- fresh `describe_scene` in `agent_readback`, reporting the selected tree, its human edit and matching `recent_changes`;
-- moonlit `set_lighting`, starting `set_camera_motion`, and `describe_scene` with a running camera and `music.playing:true` in `atmosphere`.
+The native sequence also includes:
 
-The validator compares the same anchor IDs and poses across the readbacks, verifies that the moved tree was agent-created and then changed by a person, and checks that the atmosphere stage retained every object pose. Successful scene replacement, import, general undo or gallery-next calls invalidate this story's continuity.
+1. `help` during either opening shot.
+2. `add_grove` with `count:40`. Its result includes forty unique tree IDs, exact live count, at least four actual light IDs, at least twenty-four trees behind the cabin, and both anchors preserved. The intended arrangement uses thirty-two rear trees, eight side trees and eight lights.
+3. `add_path`: at least three individually editable stone IDs, `exact_count:true`, and matching live count. Existing objects retain their poses.
+4. `describe_scene` after both human moves: one moved stone remains selected, and both IDs occur in `human_edits` and human `recent_changes`.
+5. `set_lighting` using the warm `golden_hour` preset; `set_camera_motion` starts `mode:"drift"`, focuses both anchor IDs, uses distance at most 30m, height at most 12m and a circuit of at least 120s.
+6. `set_ui` with `visible:false`, returning `ui_visible:false`; subsequent `describe_scene` verifies running camera and `music.playing:true`. A final query verifies every pose remains unchanged.
 
-Leave readable time after results: the assembler never displays a response before its recorded result timestamp, and each selected evidence card needs at least one second. The native forest operation and following readback have separate cards. No final film is produced if required evidence is missing.
+The actual framing is chosen from the rendered scene. Recommended starting point: distance 18–22m, height 7–8m, azimuth 18 degrees, sweep 50 degrees, 240-second loop and five-second blend. The validator rejects an obviously distant camera; visual review must still judge the composition.
+
+Three compact editorial notices derive from real forest/path/changed readbacks. Leave at least 1.15 seconds after each of those results. The closing has no code cards or title overlays: after Lily's final line, approximately ten seconds of music accompany the same slowly moving scene.
+
+These records are provenance, not cryptographic authentication. Review the source footage and finished video; automated validation cannot establish that an attractive scene actually appeared on screen.

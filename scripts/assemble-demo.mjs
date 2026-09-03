@@ -26,7 +26,7 @@ if (!existsSync(timelinePath)) {
 const timeline = JSON.parse(readFileSync(timelinePath, 'utf8'));
 const music = resolve(process.env.DEMO_MUSIC_PATH || 'public/music/aurora-drift.mp3');
 const voiceOffset = voiceLeadInSeconds;
-const musicLoudness = -24.5;
+const musicLoudness = -23;
 const ducking = { threshold: 0.04, ratio: 3, attack_ms: 700, release_ms: 1000, knee: 4, detection: 'rms' };
 const duckingFilter = `sidechaincompress=threshold=${ducking.threshold}:ratio=${ducking.ratio}:attack=${ducking.attack_ms}:release=${ducking.release_ms}:knee=${ducking.knee}:detection=${ducking.detection}:link=average:makeup=1`;
 const narration = narrationMetadata();
@@ -254,13 +254,26 @@ function segmentCaptions(segment) {
       failures.push(`${source}: incomplete character arrays`); continue;
     }
     const mapped = [];
+    // v3 returns alignment entries for non-spoken direction tags too. Keep
+    // the provider's real word timestamps and exclude only bracketed tags
+    // present in the submitted TTS text; visible subtitles use plain narration.
+    const directionTags = new Set((segment.spoken_text || '').match(/\[[^\]]+\]/g) || []);
+    const rawText = characters.join('');
+    const omittedIndexes = new Set();
+    for (const match of rawText.matchAll(/\[[^\]]+\]/g)) {
+      if (!directionTags.has(match[0])) continue;
+      for (let at = match.index; at < match.index + match[0].length; at++) omittedIndexes.add(at);
+    }
+    let characterOffset = 0;
     let previousStart = 0, previousEnd = 0, invalid = false;
     for (let i = 0; i < characters.length; i++) {
       if (typeof characters[i] !== 'string' || !Number.isFinite(starts[i]) || !Number.isFinite(ends[i]) || starts[i] < previousStart || ends[i] < previousEnd || ends[i] < starts[i] || ends[i] > segment.audio_duration + 0.1) {
         invalid = true; break;
       }
       previousStart = starts[i]; previousEnd = ends[i];
-      for (const character of canonicalCharacters(characters[i])) mapped.push({ character, start: starts[i], end: ends[i] });
+      const visible = Array.from(characters[i]).filter((_, j) => !omittedIndexes.has(characterOffset + j)).join('');
+      characterOffset += characters[i].length;
+      for (const character of canonicalCharacters(visible)) mapped.push({ character, start: starts[i], end: ends[i] });
     }
     if (invalid) { failures.push(`${source}: invalid or out-of-range character times`); continue; }
     if (mapped.map(item => item.character).join('') !== expected) {
@@ -284,16 +297,16 @@ const cues = [];
 for (const segment of timeline.segments) {
   const shot = shots.find(item => segment.start >= item.start && segment.start < item.start + item.duration);
   const relative = segment.start - shot.start;
-  addAsset(`title-${segment.id}`, {
-    kind: 'title', width: segment.id === shots[0].id ? 760 : 460, height: 77,
-    title: segment.id === shots[0].id ? 'One scene · human + agent' : segment.title,
-    label: segment.id === shots[0].id || segment.id === 'closing' ? 'SCENE STUDIO  /  AGENT-NATIVE · WEBMCP' : 'A LITTLE WORLD, BUILT TOGETHER',
-  }, shot.id, relative + 0.15, relative + Math.min(segment.duration - 0.2, segment.id === 'closing' ? 14 : 5.5), 34, 525);
+  if (segment.id === shots[0].id) addAsset(`title-${segment.id}`, {
+    kind: 'title', width: 550, height: 77,
+    title: 'A moment, built together',
+    label: 'AGENT-NATIVE 3D SCENE STUDIO · WEBMCP',
+  }, shot.id, relative + 0.15, relative + 3.2, 34, 525);
   segment.caption_cues.forEach((chunk, index) => {
     const start = segment.start + voiceOffset + chunk.start;
     const end = segment.start + voiceOffset + chunk.end;
     cues.push({ start, end, text: chunk.text });
-    addAsset(`caption-${segment.id}-${index}`, { kind: 'caption', width: 1160, height: 77, body: chunk.text }, shot.id, start - shot.start, end - shot.start, 60, 620);
+    addAsset(`caption-${segment.id}-${index}`, { kind: 'caption', width: 1040, height: 77, body: chunk.text }, shot.id, start - shot.start, end - shot.start, 120, 620);
   });
 }
 
@@ -346,70 +359,31 @@ async function waitForCaptures() {
   }
 }
 
-function excerpt(event) {
-  const envelope = event.envelope, result = event.value;
-  const rows = ['actor: ' + envelope.actor, 'ok: ' + envelope.ok];
-  const field = (label, value) => { if (value !== undefined) rows.push(label + ': ' + JSON.stringify(value)); };
-  if (event.tool === 'scatter') {
-    field('type', event.args.type); field('added', result.added); field('exact_count', result.exact_count);
-    field('preserved_ids', result.preserved_ids?.slice(0, 2));
-  } else if (event.tool === 'query_scene') {
-    for (const id of event.focus_ids || []) {
-      const object = result.objects.find(item => item.id === id);
-      if (!object) throw new Error('Missing focused object in native evidence: ' + id);
-      field(object.type + '.id', object.id);
-      field('position', object.pose?.p || object.p);
-      if (event.clip === 'agent_readback') {
-        field('last_changed_by', object.last_changed_by); field('human_revision', object.human_revision);
-      }
-    }
-  } else if (event.tool === 'describe_scene') {
-    field('camera.status', result.camera_motion?.status); field('music.playing', result.music?.playing);
-    field('selected_id', result.selected_id);
-  }
-  if (rows.length < 3) throw new Error('Missing readable native result: ' + event.tool);
-  return rows.map(row => wrap(row, 46)).join('\n');
-}
-
-function card(event, shotId, start, end, suffix = '') {
-  if (end - start < 1) throw new Error('Leave at least one second after the native result for ' + shotId + '/' + event.tool + '.');
-  const body = excerpt(event);
-  const lines = body.split('\n').length;
-  addAsset('native-' + shotId + '-' + event.tool + suffix, {
-    kind: 'evidence', width: 625, height: Math.min(445, 110 + lines * 24),
-    label: 'SAME SCENE · NATIVE WEBMCP', title: event.tool + ' · recorded excerpt', body, fontSize: 18,
-  }, shotId, start, end, 34, 40);
-}
-
 function addEvidence(capture) {
   const { proof } = capture;
-  const selected = [
-    { ...proof.initial, focus_ids: [capture.anchors.pond, capture.anchors.cabin] },
-    proof.scatter,
-    { ...proof.forest, focus_ids: [capture.anchors.pond, capture.anchors.cabin] },
-    { ...proof.details, focus_ids: [capture.moved_object_id] },
-    { ...proof.changed, focus_ids: [capture.moved_object_id] },
-    proof.atmosphere,
+  // Requests are visible in the real page. Keep protocol excerpts compact so
+  // that evidence supplements the scene rather than covering half the image.
+  const evidence = [
+    { event: proof.forest, title: '40 trees · our starting point preserved', label: 'RECORDED NATIVE WEBMCP RESULT' },
+    { event: proof.details, title: `${capture.path_object_ids.length} individually editable path stones`, label: 'RECORDED NATIVE WEBMCP RESULT' },
+    { event: proof.changed, title: 'Both of my stone edits are still here', label: 'LIVE STATE READ BACK BY THE AGENT' },
   ];
-  selected.forEach((event, i) => {
+  for (const { event, title, label } of evidence) {
     const shot = shots.find(item => item.id === event.clip);
-    const following = selected.slice(i + 1).find(item => item.clip === event.clip);
-    card(event, event.clip, event.t, Math.min(event.t + 6, following?.t ?? Infinity, shot.duration - 0.15), '-' + i);
-  });
-  for (const clip of capture.clips.filter(item => item.cuts.length)) {
-    addAsset('waiting-cut-' + clip.id, {
-      kind: 'notice', width: 380, height: 52,
-      title: 'Agent waiting time removed', label: 'SAME SCENE · ACTIONS AT REAL SPEED',
-    }, clip.id, 0.2, 4, 450, 16);
+    const end = Math.min(event.t + 3.5, shot.duration - 0.15);
+    if (end - event.t < 1) throw new Error(`Leave one second after ${event.clip}'s native readback.`);
+    addAsset('native-' + event.clip, { kind: 'notice', width: 390, height: 52, title, label }, event.clip, event.t, end, 850, 22);
   }
-  const source = readFileSync('src/webmcp.ts', 'utf8');
-  const at = source.indexOf('await mc.registerTool(');
-  if (at < 0) throw new Error('Could not find the real WebMCP registration source.');
-  const code = source.slice(at).split('\n').slice(0, 12).map((line, index) => index ? line.replace(/^ {6}/, '') : line).join('\n');
-  addAsset('registration-source', {
-    kind: 'evidence', width: 690, height: 428,
-    label: 'PROJECT SOURCE · src/webmcp.ts', title: 'The page publishes its real actions', body: code, fontSize: 16,
-  }, 'closing', 0.15, 6, 34, 40);
+  // Sub-second capture handoffs remain documented in the manifest. Only longer
+  // recording pauses need an on-screen note; this also keeps early readbacks clear.
+  for (const clip of capture.clips.filter(item => item.cuts.reduce((seconds, cut) => seconds + cut.end - cut.start, 0) > 1 && item.id !== 'closing')) {
+    addAsset('waiting-cut-' + clip.id, {
+      kind: 'notice', width: 285, height: 52,
+      title: 'Recording pause omitted', label: 'SAME SCENE · ACTIONS AT REAL SPEED',
+    }, clip.id, 0.2, 2.2, 960, 22);
+  }
+  // The closing is deliberately free of code cards and branding overlays.
+  // Its remaining music-only seconds show the actual moving native scene.
 }
 
 function renderAssets() {
@@ -507,7 +481,7 @@ if (Math.abs(Number(final.format.duration) - plan.duration) > 0.1 || video?.widt
 const audioMetrics = measureAudio(temporaryMaster);
 console.log(`Final mix measurements: ${JSON.stringify(audioMetrics)}`);
 renameSync(temporaryMaster, master);
-run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', master, '-vf', 'fps=1/15,scale=320:180,tile=3x3', '-frames:v', '1', '-q:v', '2', join(output, 'submission-contact-sheet.jpg')]);
+run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', master, '-vf', `fps=12/${plan.duration},scale=320:180,tile=4x3`, '-frames:v', '1', '-q:v', '2', join(output, 'submission-contact-sheet.jpg')]);
 run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(plan.duration - 8), '-i', master, '-frames:v', '1', '-q:v', '2', join(output, 'submission-poster.jpg')]);
 const captionSources = [...new Set(timeline.segments.map(segment => segment.caption_timing))];
 const segmentMetadata = timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, voice_offset: voiceOffset, audio: segment.audio, audio_duration: segment.audio_duration, alignment: segment.alignment || null, provenance: segment.provenance || null, caption_timing: segment.caption_timing, captions: segment.caption_cues.length }));
@@ -515,5 +489,5 @@ writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_a
 const narrationCredit = narration.provider === 'ElevenLabs'
   ? `English narration: ElevenLabs ${narration.voice}, model ${narration.model}, voice ID ${narration.voice_id}. Eight source MP3 tracks, character alignments and generation provenance are retained with [timeline.json](timeline.json).`
   : `English narration is synthesized locally using the macOS ${narration.voice} voice. Eight source AIFF tracks are retained with [timeline.json](timeline.json).`;
-writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), ${plan.duration} seconds, 1280 × 720, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). Cards show selected recorded arguments and results; they are editorial excerpts, not recreated chat.\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage retains one scene in one native browser session, from human placement through agent additions and later human edits. Declared cuts remove agent waiting time; retained actions run at real speed. Original source ranges and object continuity evidence are retained in native-capture.json. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
+writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), ${plan.duration} seconds, 1280 × 720, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). Compact notices summarize actual recorded results; they are editorial annotations, not recreated chat.\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage retains one scene on one native browser page, from human placement through agent additions and later human edits. Capture runs in original segments, not as an uninterrupted video stream. Original frames and timestamp manifests are retained unchanged in each shot folder. Declared cuts document idle waiting and recording gaps; retained actions run at their original speed. No action is invented, reconstructed or accelerated. Source ranges and object continuity evidence are retained in native-capture.json. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
 console.log(`Ready for full playback review: ${master}`);

@@ -1,158 +1,291 @@
 {
-  "capture_id": "native-final-2026-09-03T13:38:52.609Z",
-  "application_revision": "194e932c8daec5857952b5a33169229507b193dd",
-  "page_url": "https://collaborative-review--agent-native-3d-studio.netlify.app/",
-  "recording_operator": "Codex browser agent; human-side actions demonstrated through the real UI and pointer controls",
-  "transport": "native-webmcp",
+  "reviewed_at": "2026-09-03T16:07:41.671Z",
+  "application_revision": "1958012fdc2aaca38234007dff882684876fb96b",
+  "page_url": "https://zen-review--agent-native-3d-studio.netlify.app/",
+  "deploy_id": "6a99995f9f3491ed71522711",
+  "bundle": "index-89i9O1hO.js",
+  "story_id": "zen-co-creation-v2",
+  "capture_id": "native-zen-2026-09-03T16:00:17.432Z",
+  "native_transport": "native-webmcp",
+  "registered_tools": 29,
+  "native_calls": 18,
+  "all_native_calls_succeeded": true,
   "continuity": {
     "single_page": true,
-    "scene_replacements": 0
+    "scene_replacements": 0,
+    "recording": "Original segments in the same page session. Recorded waiting and preparation gaps are declared as cuts; retained actions are not sped up."
   },
-  "registered_tools": 27,
-  "successful_native_events": 15,
-  "failed_native_events": 0,
-  "genuine_source_frames": 4378,
-  "retained_video_seconds": 161,
-  "capture_manifest_sha256": "0c65daf8aef4dd83c7c35f68321e072104862b9b8c7686ed728a4f31c603a9e3",
-  "anchors": {
-    "pond": {
+  "source_frames": 4448,
+  "retained_video_seconds": 157,
+  "anchors": [
+    {
       "id": "obj_47",
-      "pose_before": {
+      "type": "pond",
+      "pose": {
         "p": [
+          -5,
           0,
-          0,
-          0
+          6
         ],
         "ry": 0,
         "s": 1
       },
-      "pose_after": {
-        "p": [
-          0,
-          0,
-          0
-        ],
-        "ry": 0,
-        "s": 1
-      }
+      "created_by": "human"
     },
-    "cabin": {
+    {
       "id": "obj_48",
-      "pose_before": {
+      "type": "cabin",
+      "pose": {
         "p": [
-          5.35,
+          3,
           0,
-          4.51
+          -3
         ],
         "ry": 0,
         "s": 1
       },
-      "pose_after": {
-        "p": [
-          5.35,
+      "created_by": "human"
+    }
+  ],
+  "forest": {
+    "trees": 40,
+    "lights": 8,
+    "rear": 32,
+    "sides": 8
+  },
+  "path": {
+    "stone_ids": [
+      "obj_97",
+      "obj_98",
+      "obj_99",
+      "obj_100",
+      "obj_101",
+      "obj_102"
+    ],
+    "editable": true
+  },
+  "human_edits": [
+    {
+      "id": "obj_99",
+      "before": {
+        "id": "obj_99",
+        "name": "Stepping stone 3",
+        "type": "rock",
+        "layout_role": "path",
+        "human_edited": false,
+        "created_by": "agent",
+        "last_changed_by": "agent",
+        "revision": 1,
+        "human_revision": 0,
+        "keep_clear_zones": [],
+        "pose": {
+          "p": [
+            2.34,
+            0,
+            3.98
+          ],
+          "ry": 42.1,
+          "s": [
+            0.46,
+            0.17,
+            0.38
+          ]
+        },
+        "material": {
+          "color": "#879793",
+          "roughness": 0.85,
+          "metalness": 0
+        },
+        "bounds": [
+          1.98,
           0,
-          4.51
-        ],
-        "ry": 0,
-        "s": 1
+          3.63,
+          2.69,
+          0.12,
+          4.33
+        ]
+      },
+      "after": {
+        "id": "obj_99",
+        "name": "Stepping stone 3",
+        "type": "rock",
+        "layout_role": "path",
+        "human_edited": true,
+        "created_by": "agent",
+        "last_changed_by": "human",
+        "revision": 2,
+        "human_revision": 53,
+        "keep_clear_zones": [],
+        "pose": {
+          "p": [
+            1.96,
+            0,
+            3.71
+          ],
+          "ry": 42.1,
+          "s": [
+            0.46,
+            0.17,
+            0.38
+          ]
+        },
+        "material": {
+          "color": "#879793",
+          "roughness": 0.85,
+          "metalness": 0
+        },
+        "bounds": [
+          1.61,
+          0,
+          3.36,
+          2.32,
+          0.12,
+          4.06
+        ]
+      }
+    },
+    {
+      "id": "obj_100",
+      "before": {
+        "id": "obj_100",
+        "name": "Stepping stone 4",
+        "type": "rock",
+        "layout_role": "path",
+        "human_edited": false,
+        "created_by": "agent",
+        "last_changed_by": "agent",
+        "revision": 1,
+        "human_revision": 0,
+        "keep_clear_zones": [],
+        "pose": {
+          "p": [
+            1.37,
+            0,
+            4.38
+          ],
+          "ry": 165.4,
+          "s": [
+            0.44,
+            0.17,
+            0.36
+          ]
+        },
+        "material": {
+          "color": "#80908c",
+          "roughness": 0.85,
+          "metalness": 0
+        },
+        "bounds": [
+          1.07,
+          0,
+          4.13,
+          1.71,
+          0.12,
+          4.65
+        ]
+      },
+      "after": {
+        "id": "obj_100",
+        "name": "Stepping stone 4",
+        "type": "rock",
+        "layout_role": "path",
+        "human_edited": true,
+        "created_by": "agent",
+        "last_changed_by": "human",
+        "revision": 2,
+        "human_revision": 54,
+        "keep_clear_zones": [],
+        "pose": {
+          "p": [
+            1.03,
+            0,
+            4.65
+          ],
+          "ry": 165.4,
+          "s": [
+            0.44,
+            0.17,
+            0.36
+          ]
+        },
+        "material": {
+          "color": "#80908c",
+          "roughness": 0.85,
+          "metalness": 0
+        },
+        "bounds": [
+          0.73,
+          0,
+          4.4,
+          1.37,
+          0.12,
+          4.92
+        ]
       }
     }
+  ],
+  "final_objects": 56,
+  "lighting": {
+    "preset": "golden_hour",
+    "intensity": 0.65,
+    "expected_scene_version": 178
   },
-  "moved_object": {
-    "id": "obj_69",
-    "before": {
-      "id": "obj_69",
-      "name": "tree 49",
-      "type": "tree",
-      "human_edited": false,
-      "created_by": "agent",
-      "last_changed_by": "agent",
-      "revision": 1,
-      "human_revision": 0,
-      "keep_clear_zones": [],
-      "pose": {
-        "p": [
-          11.52,
-          0,
-          17.01
-        ],
-        "ry": 232.45,
-        "s": 0.9
-      },
-      "material": {
-        "color": "#766352",
-        "roughness": 0.85,
-        "metalness": 0
-      },
-      "bounds": [
-        9.5,
-        0,
-        15.09,
-        13.49,
-        4.08,
-        19.06
-      ]
-    },
-    "after": {
-      "id": "obj_69",
-      "name": "tree 49",
-      "type": "tree",
-      "human_edited": true,
-      "created_by": "agent",
-      "last_changed_by": "human",
-      "revision": 2,
-      "human_revision": 49,
-      "keep_clear_zones": [],
-      "pose": {
-        "p": [
-          16.25,
-          0,
-          18.84
-        ],
-        "ry": 232.45,
-        "s": 0.9
-      },
-      "material": {
-        "color": "#766352",
-        "roughness": 0.85,
-        "metalness": 0
-      },
-      "bounds": [
-        14.23,
-        0,
-        16.93,
-        18.22,
-        4.08,
-        20.89
-      ]
-    }
+  "camera": {
+    "status": "running",
+    "mode": "drift",
+    "loop_seconds": 260,
+    "elapsed_seconds": 4.2,
+    "loops": 0,
+    "shot": "Quiet garden drift",
+    "distance": 17.5,
+    "height": 4.8,
+    "sweep_degrees": 36,
+    "focus": [
+      -1.4213193655014038,
+      1.6,
+      1.627488374710083
+    ],
+    "scene_radius": 10.217599757547728,
+    "infinite": true,
+    "reason": ""
   },
-  "final_counts": {
-    "cabin": 1,
-    "lamp": 4,
-    "pond": 1,
-    "rock": 6,
-    "tree": 30
+  "music": {
+    "requested": true,
+    "playing": true,
+    "volume": 0.38,
+    "track": "Aurora Drift",
+    "status": "playing",
+    "note": "Playing: Aurora Drift."
   },
+  "ui_visible": false,
   "share_roundtrip": {
-    "tested_at": "2026-09-03T13:45:52.959Z",
-    "url_length": 3518,
-    "native_query_ok": true,
-    "source_count": 42,
-    "restored_count": 42,
-    "all_poses_and_materials_match": true
+    "app_revision": "1958012fdc2aaca38234007dff882684876fb96b",
+    "url_length": 4617,
+    "original": 56,
+    "restored": 56,
+    "exact_poses_and_materials": 56,
+    "fresh_tab": true,
+    "native_query": true
   },
-  "publication": {
-    "youtube_public_url_verified": false,
-    "devpost_submitted_verified": false
-  },
+  "capture_manifest_sha256": "190e3ea4794e1dec8502f3f8fd5feaff3b7d5f384f7868595e15a90df5af6666",
   "film": {
-    "filename": "submission-demo.mp4",
-    "duration_seconds": 161,
-    "bytes": 20382325,
-    "sha256": "55cdccccc5ba8ee784322a84a34ba70c2861cf0976dc119bf4034f1d602227cc",
-    "captions": 31,
-    "audio_integrated_lufs": -18.83,
-    "audio_true_peak_dbtp": -3.58
-  }
+    "file": "scratch-submission-media/submission-demo.mp4",
+    "bytes": 28748779,
+    "sha256": "dc0b69903d9f0b646e2a890695cb91ec6be6496da2bf874ba56348c1c40c44ff",
+    "duration_seconds": 157,
+    "captions": 44,
+    "voice": "Lily — Velvety Actress",
+    "model": "eleven_v3",
+    "narration_seconds": 131.68,
+    "audio_metrics": {
+      "mean_volume_dbfs": -19.7,
+      "peak_volume_dbfs": -3.2,
+      "integrated_lufs": -17.43,
+      "true_peak_dbtp": -3.12,
+      "loudness_range_lu": 4.2
+    },
+    "full_audio_video_decode": "passed",
+    "review": "Representative frames and transitions inspected. Creator listening approval remains open."
+  },
+  "method": "Codex operated the actual UI/pointer route for human actions and the native WebMCP route for agent actions. One scene persists; capture pauses are declared as cuts. No application model or fake agent execution was inserted."
 }

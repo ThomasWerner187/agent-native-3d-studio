@@ -1,64 +1,60 @@
-# A little world, built together
+# A moment, built together
 
-**Target film: 2 minutes 41 seconds.** This production plan follows one retained scene: the person places a pond and cabin, the agent adds the environment, the person moves a tree, and the agent reads that edit before changing the atmosphere. The complete native take and H.264/AAC export are produced; final media details are tracked in the review record.
+A person and their browser agent take a short break by building a quiet place together. The scene remains editable, and each person's choice becomes the agent's starting point.
 
-The eight shots and narration come from [video-narration.json](docs/video-narration.json). Production uses ElevenLabs **Lily — Velvety Actress**, model `eleven_v3`, at original speed with character-aligned captions. The old 135-second gallery film is a separate historical artifact.
+**New v2 film:** 157 seconds, fresh Lily v3 narration and 44 aligned English captions. Native capture, final export and full audio/video decode are complete. Public upload and creator playback approval remain open.
 
-## Narration and picture
+## Story and narration
 
-| Time | Picture | English narration |
+| Time | Visual beat | English voice-over |
 | --- | --- | --- |
-| 0:00–0:12 | Begin with the human choosing Pond and placing it in the scene. Keep the pointer action and selected pond visible. No earlier beauty-shot insert. | “I start with a pond, right here. A little world I can build in together with my browser agent.” |
-| 0:12–0:30 | Place the cabin by hand. Record native help and describe_scene, then query_scene with the pond and cabin poses, bounds and ownership. Preserve their actual IDs. | “I place a cabin beside the water. Now I ask the agent to read what I made. WebMCP gives it the objects, their positions, and my edits.” |
-| 0:30–0:59 | Show the natural-language request and actual native scatter call. Keep the real tree reveal at original speed. Read back the added count and both unchanged anchor poses. | “Add thirty pines around my pond and cabin. Keep the water and the entrance clear. The agent builds around my choices, keeping both exactly where I placed them.” |
-| 0:59–1:22 | Record native additions of shoreline rocks and lanterns around the existing world. Show the actual results and a query of the decorated scene, including tree ownership. | “A few stones shape the shoreline. Warm lanterns lead back to the cabin. Every object stays selectable and editable as the little world grows.” |
-| 1:22–1:37 | Drag a visible agent-created tree to a distinct new position. Keep the selection and human activity entry visible; capture the real pointer movement. | “This tree feels too close. I move it myself. My edit becomes part of the shared state the agent sees.” |
-| 1:37–2:00 | Record fresh native describe_scene and query_scene calls. Show the same tree ID, changed position, human edit and revision. Pond and cabin remain unchanged. | “I ask it to read the scene again and keep my new placement. It can see which tree moved, where it is now, and who made that change.” |
-| 2:00–2:26 | Use native set_lighting and set_camera_motion on the same scene. Enable sound through an actual click if required. Read back running camera motion and real playback, then query unchanged object poses. | “The light settles into moonlit blue, the lanterns glow, and the camera begins a slow, endless journey. My own lofi music gives everything room to breathe.” |
-| 2:26–2:41 | End on a moving view of the same retained scene. Briefly show the actual registration source, then the project title and live URL. No replacement scene or earlier take. | “One person. One browser agent. The same living scene. WebMCP connects real objects and actions with shared creative control. A little world, built together.” |
+| 0:00–0:14 | A place to breathe | What if you and your agent took a little break... and built somewhere to breathe? I start with a pond. Just a quiet patch of water, and a little room to imagine. |
+| 0:14–0:30 | Our starting point | A cabin goes beside it. That's our starting point. I ask for forty trees, mostly behind the house, with a few around the water, and soft lights to make it feel welcoming. |
+| 0:30–0:56 | A forest around our choices | The agent reads the scene I actually made. It keeps my cabin and pond in place, then builds a layered forest behind them. Taller trees at the back, little openings around the water. Warm lights settle between the trees, reflections catch the pond, and the whole place begins to feel alive. |
+| 0:56–1:17 | A path home | Now, a stone path to the front door. The agent follows the space between the cabin and the pond, laying a gentle curve of stepping stones. It's a small detail, but suddenly there's a way into this world. You can imagine walking home. |
+| 1:17–1:33 | A little more us | I move a couple of stones myself. A little more space here, a softer curve there. We can keep taking turns, making small choices until the scene feels like somewhere we'd want to stay. |
+| 1:33–1:52 | The agent sees my changes | WebMCP is what lets us work together. The agent can read the real objects, their positions, and my latest changes. It sees both stones where I left them, so our next step starts from our scene, as it is now. |
+| 1:52–2:18 | Let the evening in | One last request: a cozy evening, my lofi music, and a slow, endless camera. We move in close enough to feel the warm windows and glowing water. The controls fade away. The work is done, and for a moment... we can simply be here. |
+| 2:18–2:37 | A moment, built together | A small world. A shared little escape. Built with an agent... and made for a moment of calm. |
 
-## Native prompts
+## Actual requests
 
-After clicking **Start empty**, **Add pond** and **Add cabin**, arrange the two objects yourself. Then ask:
+Place the pond and cabin through the normal UI, then type into the visible request control:
 
-> Read the scene I have built. Identify my pond and cabin, their current positions, bounds and human edits. Keep both exactly where I placed them. Add thirty pine trees around them, keeping the water, shoreline and cabin entrance clear. Verify the added count and my unchanged placements.
+> Please add forty trees, mostly as a layered forest behind my cabin, with a few around the sides. Add warm garden lights near the pond and among the trees. Keep my house and pond exactly where I placed them, with an open view and a clear entrance.
 
-Follow with:
+After the forest and lights appear:
 
-> Add six shoreline rocks and four warm lanterns around our existing scene. Keep its objects in place and leave a clear approach to the cabin. Read back what changed.
+> Add a gently curving stone path from the cabin's front door toward the pond. Make the stones individually editable, keep small gaps between them, and preserve everything we already built.
 
-Move one of the new trees by hand, then ask:
+Move two path stones by hand. Ask the agent to read their changed positions, then type:
 
-> I moved one tree. Read the current selection and human edits, identify its new position, and keep it there. Give our scene soft moonlit lighting and start a slow continuous cinematic camera. Keep every object's placement unchanged. Verify the camera and actual music playback state.
+> Keep my stone edits. Give us a cozy evening, my lofi music, and a slow endless camera, much closer to the cabin and pond. Hide the controls so we can relax and enjoy our little world.
 
-The agent must inspect live state and choose valid inputs. Record its actual requests and results. Use unfiltered `query_scene` readbacks with full poses and ownership before/after the additions and after the human edit; a page size of 200 covers this small scene. Leave time for readable results in the recorded shots.
+The agent inspects live state and uses native `add_grove`, `add_path`, scene queries, lighting, music, camera and presentation tools. The film records those actual calls and the visible human requests. The app's request area does not pretend to contain a separate built-in model.
 
-## Continuity and pacing
+## Continuity and visual direction
 
-Keep the same page and scene from the first placement through the closing shot. Preserve the pond, cabin and moved tree IDs across all readbacks. No reset, import, gallery composition or substitute take belongs inside that sequence. Capture an entire successful take; if it must be restarted, record the entire story again.
+One clean page, one retained scene. The forty-tree grove is designed around the human cabin, dense behind it and lightly framing its sides. A warm, curved path leads the eye between house and pond. Two hand-adjusted stones remain in place after the agent's next actions. The final camera stays close enough to appreciate windows, lanterns and water while moving slowly through a coherent view.
 
-Agent waiting time may be removed while preserving chronology. Declare each removed interval in the capture manifest and show **Agent waiting time removed · same scene**. Retained human input and scene actions run at their original speed. The closing view comes from this same world, not an earlier beauty shot. A source-code overlay may show the actual registration while the current scene continues behind it.
-
-After a full app restart, native browser access worked. The completed take uses real pointer controls and native WebMCP calls. Local harness footage is not used as its evidence. See the [recording plan](docs/recording-plan.md).
+Retain all scene action at original speed. The original footage is captured in segments on one native browser page; the same editable scene persists throughout. Document idle waiting and gaps between recordings. No action may be invented, reconstructed or accelerated. The narration follows the real stages, with brief natural pauses; the final approximately ten seconds are deliberately music-only. No code overlay or giant evidence card covers the ending. See [recording-plan.md](docs/recording-plan.md) and [CAPTURE-FORMAT.md](docs/CAPTURE-FORMAT.md).
 
 ## YouTube title
 
-Agent-Native 3D Scene Studio — A Little World, Built Together | WebMCP Challenge
+A Moment, Built Together — Agent-Native 3D Scene Studio | WebMCP Challenge
 
-## YouTube description
+## YouTube description draft
 
-The following copy describes the completed 161-second film. Verify final public links before publishing.
+Publish only after the new footage and finished film have been reviewed. Replace any link that does not serve the same submitted application build.
 
 ```text
-A person and a browser agent build inside the same living 3D scene.
+What if you and your agent took a little break — and built somewhere to breathe?
 
-I place a pond and cabin. The agent reads my choices and adds a forest, stones and lanterns around them. I move one of its trees; it reads the change before setting the light and a slow continuous camera. The same scene remains editable throughout.
+I place a pond and cabin. My browser agent reads the real scene and adds forty trees and warm garden lights around my choices. I ask for a curved stone path, then adjust two stones myself. The agent reads my changes before creating a cozy evening with my lofi music and a close, endless camera. The controls disappear, and we take a moment to enjoy what we made.
 
-WebMCP exposes the page's real objects, positions, edit history and actions. Native agent calls and local human actions are labeled separately. The optional lofi gallery offers authored starting points; this demonstration builds around human placements.
+WebMCP gives the connected browser agent access to real object identities, positions, human edits and scene actions. The human and agent work in the same editable world. This film keeps one native browser page and one scene throughout. Its original recording segments retain real actions at their original speed, with idle waiting and recording gaps documented in the manifest. Small result notices summarize recorded native tool responses. No scene action is invented or reconstructed for the edit.
 
-The film retains one browser scene. Any cuts remove agent waiting time and are labeled; retained scene actions run at real speed. On-screen tool excerpts come from the recorded native calls.
-
-English narration synthesized with ElevenLabs: Lily — Velvety Actress, model eleven_v3. Music: Aurora Drift, created and supplied by Thomas Werner.
+English narration: ElevenLabs Lily — Velvety Actress, eleven_v3. Music: Aurora Drift, created and supplied by Thomas Werner. English subtitles use actual speech alignment.
 
 Try it: https://agent-native-3d-studio.netlify.app
 Source and MIT license: https://github.com/ThomasWerner187/agent-native-3d-studio
@@ -67,4 +63,4 @@ Testing guide: https://github.com/ThomasWerner187/agent-native-3d-studio/blob/ma
 Built by Thomas Werner with TypeScript, three.js, Vite and WebMCP for The WebMCP Challenge.
 ```
 
-Watch and listen to the complete final export before publication. Verify the public YouTube watch page and save the link in Devpost; only the green Submitted status completes submission.
+After publication, verify the public YouTube watch page and add its link to Devpost. The green Submitted status is the final submission gate.

@@ -1,36 +1,38 @@
 # Agent-Native 3D Scene Studio
 
-**Build a little world together.** Place a pond and cabin yourself, then ask your browser agent to grow a forest around them. Move a tree by hand. The agent reads that change, keeps your placement, and gives the same world its lighting, music and a slow cinematic camera.
+**Build a little world together.** Place a pond and cabin yourself, then ask your browser agent to grow a forest around them. Ask for a stone path, then move two stones by hand. The agent reads that change, keeps your placement, and gives the same world its lighting, music and a slow cinematic camera.
 
-[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:41 film plan](DEMO.md) · [MIT license](LICENSE)
+[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:37 film plan](DEMO.md) · [MIT license](LICENSE)
 
 No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The current collaboration release and its new native demonstration are tracked in the [review record](docs/FINAL-REVIEW.md); the current native recording verifies this flow independently of the earlier gallery film.
 
-![The collaborative scene editor during local handler QA](docs/collaborative-world-qa.png)
+![The shared forest, cabin, pond and path from the final native film](docs/zen-co-creation.jpg)
 
-Local handler QA of the current editor. The complete native collaboration was subsequently recorded in the Codex browser; see the review record.
+Actual frame from the new co-creation film. [Try the recorded review build](https://zen-review--agent-native-3d-studio.netlify.app/).
 
 ## Build with an agent
 
-1. Click **Start empty**, then **Add pond** and **Add cabin**. Drag them where you want them.
-2. Connect a WebMCP-capable browser agent and send the prompt below. Its native calls appear as **AGENT · WEBMCP**, with the actual arguments and results in Tool activity.
-3. Move one of its trees yourself. Ask it to read the new selection and human edits before making the next change.
+1. Click **Start empty**, then **Add cabin** and **Add pond**. Drag them where you want them, or use the position fields.
+2. Type an idea in **Your next idea** and share it. Ask your connected browser agent to read the latest request and continue. Its actual native calls appear as **AGENT · WEBMCP** in Tool activity.
+3. Keep shaping the same world yourself. Each object retains its identity and edit history.
 
-> Read the scene I have built. Identify my pond and cabin, their current positions, bounds and human edits. Keep both exactly where I placed them. Add thirty pine trees around them, keeping the water, shoreline and cabin entrance clear. Verify the added count and my unchanged placements.
+> Add 40 trees, mostly as a forest behind my cabin, and beautiful warm lights around the clearing. Keep my pond and cabin where I placed them.
 
 Then:
 
-> Add six shoreline rocks and four warm lanterns around our existing scene. Keep its objects in place and leave a clear approach to the cabin. Read back what changed.
+> Please add a curved stepping-stone path from the cabin porch to the pond.
 
-After moving a tree:
+After moving two stones:
 
-> I moved one tree. Read the current selection and human edits, identify its new position, and keep it there. Give our scene soft moonlit lighting and start a slow continuous cinematic camera. Keep every object's placement unchanged. Verify the camera and actual music playback state.
+> Keep my stone edits. Make it cozy evening, add music, and bring the camera closer for a slow endless drift. Hide the controls so we can relax.
 
-The agent can use `describe_scene` and `query_scene` to inspect the current objects, then `scatter`, `add_object`, `set_lighting` and `set_camera_motion` to act. These tools work on the scene you have made. No recipe replacement is needed for this interaction.
+The browser agent reads `describe_scene` and `query_scene`, then uses `add_grove` and `add_path`. These tools plan additions against the live anchors and preserve existing objects. The forest has a dense backdrop and sparse side framing; the path follows the actual porch and pond bank. `set_camera_motion` can frame the cabin and pond together with an explicit distance, height and gentle endless sweep.
+
+The idea field shares text with the connected browser agent. It does not run a model inside the application. The agent must read the request and call the tools; every displayed agent result comes from those calls.
 
 ## What the shared state provides
 
-Objects have stable IDs, poses and visible ownership information: `created_by`, `last_changed_by`, `revision` and `human_revision`. `describe_scene` also exposes selection, human edits and `recent_changes`. The actor identifies the input route, not an authenticated model or account.
+Objects have stable IDs, poses and visible ownership information: `created_by`, `last_changed_by`, `revision` and `human_revision`. `describe_scene` also exposes selection, human edits, `recent_changes` and the latest `creative_requests` brief. The actor identifies the input route, not an authenticated model or account.
 
 `scatter` adds an exact requested number around an optional live `anchor`. It plans against actual object bounds and cabin entrance space, with a default clearance of 0.4. A crowded request returns `no_space` without partial additions. Results report requested and live counts, added IDs, preserved IDs and an `undo_id`. A human interruption can change the live count; the response reports that outcome.
 
@@ -40,7 +42,7 @@ Mutations accept `expected_scene_version`. If a person changes the scene after t
 
 ## Atmosphere and the gallery
 
-Lighting blends between five moods. `set_camera_motion` starts a continuous orbit or cinematic route around the current scene or a chosen object. Sound controls distinguish requested playback from actual playback; click **Enable sound** if the browser needs a gesture. The bundled three-track playlist has volume and mute controls.
+Lighting blends between five moods. `set_camera_motion` starts a continuous orbit, cinematic route or intimate front-facing drift around chosen live objects. Distance, height and sweep are adjustable; a short entry flight eases into the view. Sound controls distinguish requested playback from actual playback; click **Enable sound** if the browser needs a gesture. The bundled three-track playlist has volume and mute controls.
 
 The optional gallery supplies three authored procedural recipes: **Lakeside Cabin**, **Lantern Grove** and **Island Hideaway**. `compose_lofi_scene` can build one, or cycle through them with an adjustable hold. This is a separate starting-point experience: composition replaces the existing scene. Keep the gallery outside a continuous co-creation session unless replacement is intentional. [Gallery image](docs/lofi-retreat.jpg).
 
@@ -52,12 +54,12 @@ A WebGL canvas shows pixels while object IDs, precise positions, bounds and edit
 
 The useful handoff is concrete: “Keep what I placed; build around it.” The page provides object-aware placement and undo semantics, while the agent translates the request into tool calls. The person continues to work with the mouse. A custom integration could expose similar capabilities; WebMCP provides the browser-facing discovery and execution contract.
 
-## Tools (27)
+## Tools (29)
 
 | Purpose | Tools |
 | --- | --- |
 | Discover and inspect | `help`, `describe_scene`, `query_scene` |
-| Add an environment | `scatter`, `undo_scatter` |
+| Add an environment | `add_grove`, `add_path`, `scatter`, `undo_scatter` |
 | Build and edit | `add_object`, `transform_object`, `set_material`, `delete_objects` |
 | Direct the scene | `set_lighting`, `frame_camera`, `camera_path`, `set_camera_motion`, `set_ui`, `set_music` |
 | Cooperative camp layout | `arrange_scene`, `undo_layout`, `redo_layout` |
@@ -92,7 +94,7 @@ Native WebMCP needs a supporting browser and client. In Chrome 149+, enable `chr
 
 ## Demo production
 
-[video-narration.json](docs/video-narration.json) defines the eight shots, their narration and the **161-second** timeline. The new film follows one retained scene from human placement through agent additions, a human edit and the agent's response. The native capture now verifies that flow on one retained scene; the previous 135-second gallery film is historical material.
+[video-narration.json](docs/video-narration.json) defines the eight shots, their narration and the **157-second** timeline. The new film follows one retained scene: human anchors, an agent-grown forest, an editable stone path, two human stone edits and an intimate evening retreat. The review record distinguishes the current capture from the earlier 161-second collaboration film and 135-second gallery film.
 
 Local planning does not need recordings, credentials or API calls:
 

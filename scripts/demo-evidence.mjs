@@ -106,36 +106,54 @@ export function validateNativeCapture(capture, plan) {
     check(original?.type === type && original.created_by === 'human', `${type} must be the human-created anchor`);
     check(maps.every(map => samePose(original, map.get(id))), `${type} must retain its exact pose and ID throughout the film`);
   }
-  const help = find('human_cabin', 'help');
-  const scatter = find('agent_forest', 'scatter', event => event.args?.type === 'tree' && event.args?.count === 30 && event.value.added === 30 && event.value.live_added === 30 && event.value.exact_count === true);
-  check(help && scatter && scatter.value.ids?.length === 30 && new Set(scatter.value.ids).size === 30, 'record discovery and a successful exact 30-tree scatter');
-  check([pond, cabin].every(id => scatter.value.preserved_ids?.includes(id)), 'scatter must report both anchors as preserved');
-  check(scatter.value.ids.every(id => maps[1].get(id)?.type === 'tree' && maps[1].get(id)?.created_by === 'agent'), 'all 30 reported trees must exist in the native readback');
-  for (const type of ['rock', 'lamp']) {
-    const additions = successful.filter(event => event.clip === 'agent_details' && event.args?.type === type)
-      .reduce((sum, event) => sum + (event.tool === 'scatter' ? event.value.added || 0 : event.tool === 'add_object' && event.value.id ? 1 : 0), 0);
-    check(additions >= 2, `record the actual ${type} additions`);
-  }
-  check(Array.isArray(capture.human_actions), 'record the visible human placement and drag markers');
+  const help = find('human_pond', 'help') || find('human_cabin', 'help');
+  const grove = find('agent_forest', 'add_grove', event => event.args?.count === 40 && event.value.added === 40 && event.value.live_added === 40 && event.value.exact_count === true);
+  check(help && grove && grove.value.ids?.length === 40 && new Set(grove.value.ids).size === 40, 'record discovery and a successful exact 40-tree grove');
+  check([pond, cabin].every(id => grove.value.preserved_ids?.includes(id)), 'grove must report both anchors as preserved');
+  check(grove.value.rear_count >= 24 && grove.value.rear_count + grove.value.side_count === 40, 'the majority of the forty trees must form the forest behind the cabin');
+  check(grove.value.ids.every(id => maps[1].get(id)?.type === 'tree' && maps[1].get(id)?.created_by === 'agent'), 'all 40 reported trees must exist in the native readback');
+  const lightIds = grove.value.light_ids;
+  check(Array.isArray(lightIds) && new Set(lightIds).size === lightIds.length && lightIds.length >= 4 &&
+    lightIds.every(id => maps[1].get(id)?.type === 'lamp' && maps[1].get(id)?.created_by === 'agent'), 'record at least four actual warm lights in the grove');
+  check(maps[1].size === maps[0].size + 40 + lightIds.length, 'forest readback must contain exactly the anchors and recorded grove additions');
+  const path = find('agent_details', 'add_path', event => event.value.editable === true && event.value.exact_count === true && event.value.added >= 3 && event.value.added === event.value.live_added);
+  const pathIds = capture.path_object_ids;
+  check(path && Array.isArray(pathIds) && pathIds.length === path.value.added && new Set(pathIds).size === pathIds.length &&
+    JSON.stringify(pathIds) === JSON.stringify(path.value.ids), 'retain every actual path stone ID from add_path');
+  check(pathIds.every(id => maps[2].get(id)?.type === 'rock' && maps[2].get(id)?.created_by === 'agent'), 'the path must consist of individually editable agent-created stones');
+  check(maps[2].size === maps[1].size + pathIds.length && [...maps[1]].every(([id, object]) => samePose(object, maps[2].get(id))), 'adding the path must preserve every previous object');
+  check(Array.isArray(capture.human_actions), 'record visible placements, requests and stone edits');
   const humanActions = capture.human_actions.map(inClip);
-  check(humanActions.every(action => ['place', 'move', 'camera', 'sound'].includes(action.kind)), 'human actions cannot reset or replace the scene');
+  check(humanActions.every(action => ['place', 'move', 'camera', 'sound', 'request'].includes(action.kind)), 'human actions cannot reset or replace the scene');
   check(humanActions.some(action => action.kind === 'place' && action.id === pond && action.clip === 'human_pond') &&
     humanActions.some(action => action.kind === 'place' && action.id === cabin && action.clip === 'human_cabin'), 'both placements need their actual pointer-action markers');
-  const movedId = capture.moved_object_id;
-  const beforeMove = maps[2].get(movedId), afterMove = maps[3].get(movedId);
-  check(scatter.value.ids.includes(movedId) && beforeMove?.created_by === 'agent' && afterMove?.last_changed_by === 'human' &&
-    Number.isInteger(afterMove.human_revision) && afterMove.human_revision > beforeMove.human_revision && !samePose(beforeMove, afterMove), 'the human must move one of the agent-created trees');
-  check(humanActions.some(action => action.kind === 'move' && action.id === movedId && action.clip === 'human_move'), 'the moved tree needs a visible drag marker');
-  const editReadback = find('agent_readback', 'describe_scene', event => event.value.selected_id === movedId &&
-    event.value.human_edits?.some(edit => edit.id === movedId) && event.value.recent_changes?.some(edit => edit.id === movedId && edit.actor === 'human'));
-  check(editReadback, 'a fresh native description must identify the selected tree and human edit');
+  for (const [intent, clip] of [['forest', 'human_cabin'], ['path', 'agent_details'], ['atmosphere', 'atmosphere']]) {
+    check(humanActions.some(action => action.kind === 'request' && action.intent === intent && action.clip === clip &&
+      typeof action.text === 'string' && action.text.trim().length >= 15), `record the actual typed ${intent} request from the page`);
+  }
+  const movedIds = capture.moved_object_ids;
+  check(Array.isArray(movedIds) && movedIds.length === 2 && new Set(movedIds).size === 2, 'record two distinct human-edited stone IDs');
+  for (const movedId of movedIds) {
+    const beforeMove = maps[2].get(movedId), afterMove = maps[3].get(movedId);
+    check(pathIds.includes(movedId) && beforeMove?.created_by === 'agent' && afterMove?.last_changed_by === 'human' &&
+      Number.isInteger(afterMove.human_revision) && afterMove.human_revision > beforeMove.human_revision && !samePose(beforeMove, afterMove), 'both edited stones must come from the agent-created path');
+    check(humanActions.some(action => action.kind === 'move' && action.id === movedId && action.clip === 'human_move'), 'each stone needs its actual pointer-action marker');
+  }
+  check(maps[2].size === maps[3].size && [...maps[2]].every(([id, object]) => movedIds.includes(id) || samePose(object, maps[3].get(id))), 'the person must retain the rest of the world while editing the two stones');
+  const editReadback = find('agent_readback', 'describe_scene', event => movedIds.includes(event.value.selected_id) &&
+    movedIds.every(id => event.value.human_edits?.some(edit => edit.id === id) && event.value.recent_changes?.some(edit => edit.id === id && edit.actor === 'human')));
+  check(editReadback, 'a fresh native description must identify both human stone edits');
   check(maps[3].size === maps[4].size && [...maps[3]].every(([id, object]) => samePose(object, maps[4].get(id))), 'lighting and camera must preserve every existing object pose');
-  const lighting = find('atmosphere', 'set_lighting', event => event.args?.preset === 'moonlit');
-  const camera = find('atmosphere', 'set_camera_motion', event => event.args?.action === 'start');
+  const lighting = find('atmosphere', 'set_lighting', event => ['golden_hour', 'cozy_evening'].includes(event.args?.preset));
+  const camera = find('atmosphere', 'set_camera_motion', event => event.args?.action === 'start' && event.args?.mode === 'drift' &&
+    event.args.distance > 0 && event.args.distance <= 30 && event.args.height > 0 && event.args.height <= 12 && event.args.loop_seconds >= 120 &&
+    [pond, cabin].every(id => event.args.targets?.includes(id)));
   const atmosphere = find('atmosphere', 'describe_scene', event => event.value.camera_motion?.status === 'running' && event.value.music?.playing === true);
-  check(lighting && camera && atmosphere, 'record moonlit lighting, continuous camera and actual audio playback');
-  check(initial.source_seconds < scatter.source_seconds && scatter.source_seconds < forest.source_seconds && details.source_seconds < changed.source_seconds &&
-    changed.source_seconds < lighting.source_seconds && lighting.source_seconds < final.source_seconds && camera.source_seconds < atmosphere.source_seconds,
+  const presentation = find('atmosphere', 'set_ui', event => event.args?.visible === false && event.value.ui_visible === false);
+  check(lighting && camera && atmosphere && presentation, 'record warm evening lighting, a continuous camera, actual playback and the hidden interface');
+  check(initial.source_seconds < grove.source_seconds && grove.source_seconds < forest.source_seconds && path.source_seconds < details.source_seconds &&
+    details.source_seconds < changed.source_seconds && changed.source_seconds < lighting.source_seconds && lighting.source_seconds < final.source_seconds &&
+    camera.source_seconds < atmosphere.source_seconds && presentation.source_seconds < final.source_seconds,
   'readbacks must follow the actions they verify');
-  return { ...capture, clips, events: records, human_actions: humanActions, proof: { help, initial, scatter, forest, details, editReadback, changed, lighting, camera, atmosphere, final } };
+  return { ...capture, clips, events: records, human_actions: humanActions, proof: { help, initial, grove, forest, path, details, editReadback, changed, lighting, camera, atmosphere, presentation, final } };
 }
