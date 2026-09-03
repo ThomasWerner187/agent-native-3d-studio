@@ -6,7 +6,7 @@ The film begins with a small emotional invitation: a person and their agent take
 
 ## Capture
 
-Follow [DEMO.md](../DEMO.md) and the exact [capture contract](CAPTURE-FORMAT.md). Start recording before the first visible human placement. Keep the same loaded native browser page and object identities through the closing. Capture original segments on a shared elapsed-time clock and retain them unchanged. Document omitted idle time and gaps when recording was stopped; do not describe the source as an uninterrupted video stream. Let actual actions finish; if native latency exceeds a shot's slot, retain all action and trim only declared idle waiting or revise the slot within the three-minute limit. No action may be invented, reconstructed or accelerated.
+The final take follows [DEMO.md](../DEMO.md) and the exact [capture contract](CAPTURE-FORMAT.md). Recording starts before the first visible human placement and keeps the same loaded native browser page and object identities through the closing. Eight shot folders cover exact contiguous ranges on one shared elapsed-time clock, with no cuts or omitted gaps. Every actual action finishes inside its slot at original speed; no action is invented, reconstructed or accelerated.
 
 Real requests must be typed into the app's visible request control. They must be read and acted on through the connected native WebMCP agent. Never render a fictitious conversation or relabel local demo calls as agent interaction.
 

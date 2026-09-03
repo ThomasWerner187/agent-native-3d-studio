@@ -4,11 +4,11 @@
 
 [Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:37 film plan](DEMO.md) · [MIT license](LICENSE)
 
-No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The current collaboration release and its new native demonstration are tracked in the [review record](docs/FINAL-REVIEW.md); the current native recording verifies this flow independently of the earlier gallery film.
+No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The final 157-second collaboration film and its native evidence are tracked in the [review record](docs/FINAL-REVIEW.md).
 
 ![The shared forest, cabin, pond and path from the final native film](docs/zen-co-creation.jpg)
 
-Actual frame from the new co-creation film. [Try the recorded review build](https://zen-review--agent-native-3d-studio.netlify.app/).
+Actual frame from the final co-creation film. [Try the recorded Demo browser build](https://zen-review--agent-native-3d-studio.netlify.app/?demo=1).
 
 ## Build with an agent
 

@@ -3,8 +3,8 @@
   "title": "Agent-Native 3D Scene Studio — A Moment, Built Together",
   "language": "en",
   "target_duration_seconds": 157,
-  "status": "Original v2 film preserved. A new take in the functional, labelled Demo browser is being prepared with the existing Lily narration and 44 captions.",
-  "capture_note": "One real scene in the functional Demo browser interface, actual human pointer actions and sidebar requests, native WebMCP calls. The interface is visibly labelled Demo browser and is not represented as Chrome or ChatGPT. Only declared waiting intervals may be cut. Retained actions stay at their original speed. Recorded presentation states keep captions inside the scene while the sidebar is open; this take adds no editorial title or result cards.",
+  "status": "Final 157-second film complete and verified from capture native-demo-browser-2026-09-03T17:37:25.728Z: one continuous functional Demo browser session, Lily v3 narration, Aurora Drift and 44 English captions.",
+  "capture_note": "One real scene in the functional Demo browser interface, actual human pointer actions and sidebar requests, and native WebMCP calls. The interface is visibly labelled Demo browser and is not represented as Chrome or ChatGPT. There are no cuts or scene replacements; every action remains at its original speed. Recorded presentation states keep captions inside the scene while the sidebar is open, and the film adds no editorial title or result cards.",
   "segments": [
     {
       "id": "human_pond",

@@ -1,21 +1,50 @@
 {
-  "reviewed_at": "2026-09-03T16:07:41.671Z",
-  "application_revision": "1958012fdc2aaca38234007dff882684876fb96b",
-  "page_url": "https://zen-review--agent-native-3d-studio.netlify.app/",
-  "deploy_id": "6a99995f9f3491ed71522711",
-  "bundle": "index-89i9O1hO.js",
+  "reviewed_at": "2026-09-03T17:41:24.729Z",
+  "application_revision": "419e5554fc7f3b77e4ba2f75ebcd0a6255c2c5a1",
+  "page_url": "https://zen-review--agent-native-3d-studio.netlify.app/?demo=1",
+  "deploy_id": "6a99a8cac0c3582112f75f73",
+  "bundle": "index-DMV7pxmZ.js",
   "story_id": "zen-co-creation-v2",
-  "capture_id": "native-zen-2026-09-03T16:00:17.432Z",
+  "capture_id": "native-demo-browser-2026-09-03T17:37:25.728Z",
   "native_transport": "native-webmcp",
   "registered_tools": 29,
-  "native_calls": 18,
+  "native_calls": 24,
   "all_native_calls_succeeded": true,
   "continuity": {
     "single_page": true,
     "scene_replacements": 0,
-    "recording": "Original segments in the same page session. Recorded waiting and preparation gaps are declared as cuts; retained actions are not sped up."
+    "recording": "One continuous functional Demo browser page session. Every retained action remains at original speed; no cuts."
   },
-  "source_frames": 4448,
+  "layout": {
+    "mode": "demo-browser",
+    "width": 1280,
+    "height": 720,
+    "sidebar_width": 320,
+    "bar_height": 42
+  },
+  "presentation": [
+    {
+      "source_seconds": 0,
+      "sidebar_open": false
+    },
+    {
+      "source_seconds": 17.045118249999998,
+      "sidebar_open": true
+    },
+    {
+      "source_seconds": 77.76397712499998,
+      "sidebar_open": false
+    },
+    {
+      "source_seconds": 93.92470579199994,
+      "sidebar_open": true
+    },
+    {
+      "source_seconds": 126.38535683299997,
+      "sidebar_open": false
+    }
+  ],
+  "source_frames": 4710,
   "retained_video_seconds": 157,
   "anchors": [
     {
@@ -95,15 +124,7 @@
           "color": "#879793",
           "roughness": 0.85,
           "metalness": 0
-        },
-        "bounds": [
-          1.98,
-          0,
-          3.63,
-          2.69,
-          0.12,
-          4.33
-        ]
+        }
       },
       "after": {
         "id": "obj_99",
@@ -114,13 +135,13 @@
         "created_by": "agent",
         "last_changed_by": "human",
         "revision": 2,
-        "human_revision": 53,
+        "human_revision": 49,
         "keep_clear_zones": [],
         "pose": {
           "p": [
-            1.96,
+            3.03,
             0,
-            3.71
+            3.69
           ],
           "ry": 42.1,
           "s": [
@@ -133,22 +154,14 @@
           "color": "#879793",
           "roughness": 0.85,
           "metalness": 0
-        },
-        "bounds": [
-          1.61,
-          0,
-          3.36,
-          2.32,
-          0.12,
-          4.06
-        ]
+        }
       }
     },
     {
-      "id": "obj_100",
+      "id": "obj_101",
       "before": {
-        "id": "obj_100",
-        "name": "Stepping stone 4",
+        "id": "obj_101",
+        "name": "Stepping stone 5",
         "type": "rock",
         "layout_role": "path",
         "human_edited": false,
@@ -159,87 +172,72 @@
         "keep_clear_zones": [],
         "pose": {
           "p": [
-            1.37,
+            0.32,
             0,
-            4.38
+            4.43
           ],
-          "ry": 165.4,
+          "ry": 281.93,
           "s": [
-            0.44,
-            0.17,
-            0.36
+            0.48,
+            0.18,
+            0.39
           ]
         },
         "material": {
-          "color": "#80908c",
+          "color": "#6e7c78",
           "roughness": 0.85,
           "metalness": 0
-        },
-        "bounds": [
-          1.07,
-          0,
-          4.13,
-          1.71,
-          0.12,
-          4.65
-        ]
+        }
       },
       "after": {
-        "id": "obj_100",
-        "name": "Stepping stone 4",
+        "id": "obj_101",
+        "name": "Stepping stone 5",
         "type": "rock",
         "layout_role": "path",
         "human_edited": true,
         "created_by": "agent",
         "last_changed_by": "human",
         "revision": 2,
-        "human_revision": 54,
+        "human_revision": 50,
         "keep_clear_zones": [],
         "pose": {
           "p": [
-            1.03,
+            -0.3,
             0,
-            4.65
+            4.7
           ],
-          "ry": 165.4,
+          "ry": 281.93,
           "s": [
-            0.44,
-            0.17,
-            0.36
+            0.48,
+            0.18,
+            0.39
           ]
         },
         "material": {
-          "color": "#80908c",
+          "color": "#6e7c78",
           "roughness": 0.85,
           "metalness": 0
-        },
-        "bounds": [
-          0.73,
-          0,
-          4.4,
-          1.37,
-          0.12,
-          4.92
-        ]
+        }
       }
     }
   ],
   "final_objects": 56,
   "lighting": {
     "preset": "golden_hour",
-    "intensity": 0.65,
-    "expected_scene_version": 178
+    "intensity": 1.08,
+    "azimuth": -25
   },
   "camera": {
     "status": "running",
     "mode": "drift",
-    "loop_seconds": 260,
-    "elapsed_seconds": 4.2,
+    "loop_seconds": 240,
+    "elapsed_seconds": 6.1,
     "loops": 0,
     "shot": "Quiet garden drift",
     "distance": 17.5,
     "height": 4.8,
-    "sweep_degrees": 36,
+    "sweep_degrees": 50,
+    "from_current_view": false,
     "focus": [
       -1.4213193655014038,
       1.6,
@@ -252,26 +250,17 @@
   "music": {
     "requested": true,
     "playing": true,
-    "volume": 0.38,
+    "volume": 0.35,
     "track": "Aurora Drift",
     "status": "playing",
     "note": "Playing: Aurora Drift."
   },
   "ui_visible": false,
-  "share_roundtrip": {
-    "app_revision": "1958012fdc2aaca38234007dff882684876fb96b",
-    "url_length": 4617,
-    "original": 56,
-    "restored": 56,
-    "exact_poses_and_materials": 56,
-    "fresh_tab": true,
-    "native_query": true
-  },
-  "capture_manifest_sha256": "190e3ea4794e1dec8502f3f8fd5feaff3b7d5f384f7868595e15a90df5af6666",
+  "capture_manifest_sha256": "af9f90f956ea93e1d68c606d001cbee548431b7780b71fcc65e263fcacd2a3fa",
   "film": {
     "file": "scratch-submission-media/submission-demo.mp4",
-    "bytes": 28748779,
-    "sha256": "dc0b69903d9f0b646e2a890695cb91ec6be6496da2bf874ba56348c1c40c44ff",
+    "bytes": 22215602,
+    "sha256": "9677df9218eb86224ffcab110dc669f1c414c45d619d98972ffb4b5d27533333",
     "duration_seconds": 157,
     "captions": 44,
     "voice": "Lily — Velvety Actress",
@@ -285,7 +274,7 @@
       "loudness_range_lu": 4.2
     },
     "full_audio_video_decode": "passed",
-    "review": "Representative frames and transitions inspected. Creator listening approval remains open."
+    "review": "Contact sheet, poster, captions and ending inspected. Creator full playback approval remains open."
   },
-  "method": "Codex operated the actual UI/pointer route for human actions and the native WebMCP route for agent actions. One scene persists; capture pauses are declared as cuts. No application model or fake agent execution was inserted."
+  "method": "Codex operated the actual UI and pointer route for human actions and the native WebMCP route for agent actions inside a visibly labelled functional Demo browser. One scene persists, all retained actions run at original speed, and no application model or fake agent execution was inserted."
 }

@@ -1,6 +1,6 @@
 # Agent-Native 3D Scene Studio
 
-Copy-ready English Devpost fields. Release verification, the final video and publication remain tracked in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).
+Copy-ready English Devpost fields. The final application, native evidence and video are complete; publication and the final Devpost checks remain tracked in the [submission checklist](docs/SUBMISSION-CHECKLIST.md).
 
 ## Project name
 
@@ -79,7 +79,7 @@ Ask the connected agent to read the shared request and live scene, then act on i
 
 Click **Enable sound** if the browser requires a gesture. Inspect actual calls and responses in Tool activity. The [judge guide](docs/JUDGE-GUIDE.md) gives exact checks for object preservation, both human edits, playback, camera control and selective undo.
 
-Local controls and the developer harness exercise page handlers without invoking an AI model. A browser reporting WebMCP unavailable cannot demonstrate native discovery there. Check [FINAL-REVIEW.md](docs/FINAL-REVIEW.md) for release evidence; the new v2 film is not verified until its capture and final export are recorded there.
+Local controls and the developer harness exercise page handlers without invoking an AI model. A browser reporting WebMCP unavailable cannot demonstrate native discovery there. Check [FINAL-REVIEW.md](docs/FINAL-REVIEW.md) for the verified native capture, film export and release evidence.
 
 ## Development during the challenge
 

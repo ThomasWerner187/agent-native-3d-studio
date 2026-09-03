@@ -8,11 +8,13 @@ The manifest is `scratch-submission-media/native-capture.json`:
 | --- | --- |
 | `schema_version` | `1` |
 | `story_id` | `zen-co-creation-v2` |
-| `capture_id` | Identifier for this one retained scene and its original recording segments |
+| `capture_id` | `native-demo-browser-2026-09-03T17:37:25.728Z` |
 | `app_revision` | The loaded application's 7–40 character hexadecimal Git revision |
 | `page_url` | Actual clean native page URL, without an `agent` query or scene hash |
 | `transport` | `native-webmcp` |
 | `continuity` | `{ "single_page": true, "scene_replacements": 0 }` |
+| `layout` | Functional Demo browser at 1280 × 720, 320px sidebar and 42px browser bar |
+| `presentation` | Source times when the recorded sidebar opens or the interface becomes hidden |
 | `anchors` | `{ "pond": "actual ID", "cabin": "actual ID" }` |
 | `path_object_ids` | Every ID returned by the successful `add_path`, in returned order |
 | `moved_object_ids` | Two distinct path-stone IDs subsequently moved through the UI |
@@ -24,9 +26,9 @@ The manifest is `scratch-submission-media/native-capture.json`:
 
 Use one elapsed-seconds source clock throughout. Clip IDs/order/durations come from [video-narration.json](video-narration.json): `human_pond` 14s, `human_cabin` 16s, `agent_forest` 26s, `agent_details` 21s, `human_move` 16s, `agent_readback` 19s, `atmosphere` 26s, `closing` 19s.
 
-Each clip has `id`, `source_start_seconds`, `source_end_seconds`, and `cuts`. Its end equals the next clip's start. Source duration minus cuts must equal the planned duration. A cut is `{ "start": number, "end": number, "reason": "agent_wait" }`, on the original source clock. This records omitted idle time, including pauses between recording segments when capture was stopped. It does not imply that frames exist for those gaps. Retain actual typing, pointer movement and scene reveals at original speed. Required actions or results must not fall inside cuts. No scene reset, import, composition or replacement take is allowed during the story.
+Each clip has `id`, `source_start_seconds`, `source_end_seconds`, and `cuts`. Its end equals the next clip's start. Source duration minus cuts must equal the planned duration. The final capture uses eight exact contiguous ranges from 0 to 157 seconds and has no cuts. Retain actual typing, pointer movement and scene reveals at original speed. No scene reset, import, composition or replacement take is allowed during the story.
 
-Keep every original recording segment unchanged. The capture runs segment by segment on one native browser page, with the same editable scene throughout; it is not an uninterrupted video stream. Each shot's folder contains actual screencast images and `frames.json` entries `{ "file": "frame.jpg", "time": number }` using the shared elapsed-time clock. Document all waiting and recording gaps in the manifest. Frames must cover the retained shot at a minimum average of ten genuine frames per second, first frame within 0.12s and last within 0.2s of the shot boundaries. No missing action may be invented, reconstructed or sped up; duplicating old frames does not count as new capture.
+Keep every original recording segment unchanged. The final capture uses one native browser page and one editable scene throughout. Each shot's folder contains actual Chrome screenshots and `frames.json` entries `{ "file": "frame.jpg", "time": number }` on the shared clock. The eight folders provide 4,710 genuine frames at approximately 30 fps. Frames cover every boundary; no missing action is invented, reconstructed or sped up.
 
 ## Events and human actions
 
@@ -56,6 +58,6 @@ The native sequence also includes:
 
 The actual framing is chosen from the rendered scene. Recommended starting point: distance 18–22m, height 7–8m, azimuth 18 degrees, sweep 50 degrees, 240-second loop and five-second blend. The validator rejects an obviously distant camera; visual review must still judge the composition.
 
-Three compact editorial notices derive from real forest/path/changed readbacks. Leave at least 1.15 seconds after each of those results. The closing has no code cards or title overlays: after Lily's final line, approximately ten seconds of music accompany the same slowly moving scene.
+The film adds no editorial result cards or title overlays. The functional Demo browser sidebar shows actual requests and concise receipts derived from real WebMCP results. Captions stay inside the scene region when the sidebar is open. After Lily's final line, music accompanies the same slowly moving scene.
 
 These records are provenance, not cryptographic authentication. Review the source footage and finished video; automated validation cannot establish that an attractive scene actually appeared on screen.

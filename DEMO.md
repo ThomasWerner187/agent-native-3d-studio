@@ -2,9 +2,7 @@
 
 A person and their browser agent take a short break by building a quiet place together. The scene remains editable, and each person's choice becomes the agent's starting point.
 
-**New v2 film:** 157 seconds, fresh Lily v3 narration and 44 aligned English captions. Native capture, final export and full audio/video decode are complete. Public upload and creator playback approval remain open.
-
-**Requested presentation revision:** keep subtitles and compact Working together, remove the other default text panels, and record the real ChatGPT sidebar in Chrome. The quieter UI is deployed; that revised full-window recording is pending access to the existing Chrome tab. The current v2 MP4 remains preserved.
+**Final film:** 157 seconds, Lily v3 narration, Aurora Drift and 44 aligned English captions. The native capture, final export, proof validation and full audio/video decode are complete. The film uses a visibly labelled functional **Demo browser** with a compact agent sidebar; it does not claim to reproduce Chrome or ChatGPT branding. Public upload and creator full-playback approval remain open.
 
 ## Story and narration
 
@@ -23,23 +21,23 @@ A person and their browser agent take a short break by building a quiet place to
 
 Place the pond and cabin through the normal UI, then type into the visible request control:
 
-> Please add forty trees, mostly as a layered forest behind my cabin, with a few around the sides. Add warm garden lights near the pond and among the trees. Keep my house and pond exactly where I placed them, with an open view and a clear entrance.
+> Please grow a layered forest of 40 trees behind the cabin, with some around the pond and warm little lights.
 
 After the forest and lights appear:
 
-> Add a gently curving stone path from the cabin's front door toward the pond. Make the stones individually editable, keep small gaps between them, and preserve everything we already built.
+> Please add a gently curved stone path from the cabin to the pond.
 
 Move two path stones by hand. Ask the agent to read their changed positions, then type:
 
-> Keep my stone edits. Give us a cozy evening, my lofi music, and a slow endless camera, much closer to the cabin and pond. Hide the controls so we can relax and enjoy our little world.
+> Please set a cozy evening mood, play Aurora Drift, and begin a close endless camera journey.
 
-The agent inspects live state and uses native `add_grove`, `add_path`, scene queries, lighting, music, camera and presentation tools. The film records those actual calls and the visible human requests. The app's request area does not pretend to contain a separate built-in model.
+The agent inspects live state and uses native `add_grove`, `add_path`, scene queries, lighting, music, camera and presentation tools. The film records those actual calls and the visible human requests. The Demo browser sidebar displays only real requests and actual WebMCP result receipts.
 
 ## Continuity and visual direction
 
 One clean page, one retained scene. The forty-tree grove is designed around the human cabin, dense behind it and lightly framing its sides. A warm, curved path leads the eye between house and pond. Two hand-adjusted stones remain in place after the agent's next actions. The final camera stays close enough to appreciate windows, lanterns and water while moving slowly through a coherent view.
 
-Retain all scene action at original speed. The original footage is captured in segments on one native browser page; the same editable scene persists throughout. Document idle waiting and gaps between recordings. No action may be invented, reconstructed or accelerated. The narration follows the real stages, with brief natural pauses; the final approximately ten seconds are deliberately music-only. No code overlay or giant evidence card covers the ending. See [recording-plan.md](docs/recording-plan.md) and [CAPTURE-FORMAT.md](docs/CAPTURE-FORMAT.md).
+All scene action remains at original speed. The footage covers eight exact contiguous ranges on one native browser page; the same editable scene persists throughout with no cuts. No action is invented, reconstructed or accelerated. The narration follows the real stages, with brief natural pauses; the ending deliberately leaves music and living scenery. No code overlay or evidence card covers it. See [recording-plan.md](docs/recording-plan.md) and [CAPTURE-FORMAT.md](docs/CAPTURE-FORMAT.md).
 
 ## YouTube title
 
@@ -54,7 +52,7 @@ What if you and your agent took a little break — and built somewhere to breath
 
 I place a pond and cabin. My browser agent reads the real scene and adds forty trees and warm garden lights around my choices. I ask for a curved stone path, then adjust two stones myself. The agent reads my changes before creating a cozy evening with my lofi music and a close, endless camera. The controls disappear, and we take a moment to enjoy what we made.
 
-WebMCP gives the connected browser agent access to real object identities, positions, human edits and scene actions. The human and agent work in the same editable world. This film keeps one native browser page and one scene throughout. Its original recording segments retain real actions at their original speed, with idle waiting and recording gaps documented in the manifest. Small result notices summarize recorded native tool responses. No scene action is invented or reconstructed for the edit.
+WebMCP gives the connected browser agent access to real object identities, positions, human edits and scene actions. The human and agent work in the same editable world. This film keeps one native browser page and one scene throughout, with no cuts or scene replacements. The labelled Demo browser sidebar shows the requests and receipts derived from actual native tool responses. No scene action is invented or reconstructed for the edit.
 
 English narration: ElevenLabs Lily — Velvety Actress, eleven_v3. Music: Aurora Drift, created and supplied by Thomas Werner. English subtitles use actual speech alignment.
 
