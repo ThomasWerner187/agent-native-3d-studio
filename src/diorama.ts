@@ -54,7 +54,10 @@ export class Diorama {
       // The uneven cap rises by up to 5 cm. Keep all of it below the separate
       // y=0 meadow disk, or its triangle fan cuts visible radial wedges into it.
       slab.position.y = -0.25 - layer * 0.31;
-      slab.castShadow = slab.receiveShadow = true;
+      // Below-ground caps must not cast onto the meadow: shadow normal bias
+      // can lift their uneven triangle fans above its surface.
+      slab.castShadow = false;
+      slab.receiveShadow = true;
       this.group.add(slab);
     }
 
