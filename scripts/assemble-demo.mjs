@@ -150,6 +150,11 @@ for job in document["jobs"] as! [[String: Any]] {
       NSColor(calibratedWhite: 0.025, alpha: 0.76).setFill()
       NSBezierPath(roundedRect: bounds, xRadius: 13, yRadius: 13).fill()
       text(job["body"] as! String, rect: NSRect(x: 20, y: 8, width: w - 40, height: h - 15), size: 27, bold: true, center: true)
+    } else if kind == "notice" {
+      NSColor(calibratedRed: 0.026, green: 0.055, blue: 0.077, alpha: 0.9).setFill()
+      NSBezierPath(roundedRect: bounds, xRadius: 10, yRadius: 10).fill()
+      text(job["title"] as! String, rect: NSRect(x: 12, y: 25, width: w - 24, height: 20), size: 16, bold: true, center: true)
+      text(job["label"] as! String, rect: NSRect(x: 12, y: 8, width: w - 24, height: 15), size: 10, color: NSColor(calibratedWhite: 0.8, alpha: 1), center: true)
     } else if kind == "title" {
       NSColor(calibratedRed: 0.026, green: 0.055, blue: 0.077, alpha: 0.88).setFill()
       NSBezierPath(roundedRect: bounds, xRadius: 14, yRadius: 14).fill()
@@ -393,9 +398,9 @@ function addEvidence(capture) {
   });
   for (const clip of capture.clips.filter(item => item.cuts.length)) {
     addAsset('waiting-cut-' + clip.id, {
-      kind: 'title', width: 560, height: 77,
+      kind: 'notice', width: 380, height: 52,
       title: 'Agent waiting time removed', label: 'SAME SCENE · ACTIONS AT REAL SPEED',
-    }, clip.id, 0.2, 4, 34, 440);
+    }, clip.id, 0.2, 4, 450, 16);
   }
   const source = readFileSync('src/webmcp.ts', 'utf8');
   const at = source.indexOf('await mc.registerTool(');

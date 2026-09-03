@@ -13,8 +13,8 @@ export function loadDemoPlan() {
   if (source.story_id !== 'collaborative-world-v1' || !Array.isArray(source.segments) || source.segments.length !== 8) {
     throw new Error('Expected the eight-shot collaborative-world-v1 story.');
   }
-  if (!Number.isFinite(source.target_duration_seconds) || source.target_duration_seconds < 135 || source.target_duration_seconds > 150) {
-    throw new Error('The collaborative film must last 135–150 seconds.');
+  if (!Number.isFinite(source.target_duration_seconds) || source.target_duration_seconds < 135 || source.target_duration_seconds >= 180) {
+    throw new Error('The collaborative film must last at least 135 seconds and stay under three minutes.');
   }
   let cursor = 0;
   const ids = new Set();

@@ -2,13 +2,13 @@
 
 **Build a little world together.** Place a pond and cabin yourself, then ask your browser agent to grow a forest around them. Move a tree by hand. The agent reads that change, keeps your placement, and gives the same world its lighting, music and a slow cinematic camera.
 
-[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:25 film plan](DEMO.md) · [MIT license](LICENSE)
+[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:41 film plan](DEMO.md) · [MIT license](LICENSE)
 
-No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The current collaboration release and its new native demonstration are tracked in the [review record](docs/FINAL-REVIEW.md); a completed earlier film does not verify this new flow.
+No application login, API key or backend is required. The connected browser agent supplies the model; this page supplies live objects and structured actions. Local editing also works without an agent. The current collaboration release and its new native demonstration are tracked in the [review record](docs/FINAL-REVIEW.md); the current native recording verifies this flow independently of the earlier gallery film.
 
 ![The collaborative scene editor during local handler QA](docs/collaborative-world-qa.png)
 
-Local handler QA of the current editor. The new native recording remains pending.
+Local handler QA of the current editor. The complete native collaboration was subsequently recorded in the Codex browser; see the review record.
 
 ## Build with an agent
 
@@ -92,7 +92,7 @@ Native WebMCP needs a supporting browser and client. In Chrome 149+, enable `chr
 
 ## Demo production
 
-[video-narration.json](docs/video-narration.json) defines the eight shots, their narration and the **145-second** timeline. The new film follows one retained scene from human placement through agent additions, a human edit and the agent's response. It requires a new native capture; the previous 135-second gallery film is historical material.
+[video-narration.json](docs/video-narration.json) defines the eight shots, their narration and the **161-second** timeline. The new film follows one retained scene from human placement through agent additions, a human edit and the agent's response. The native capture now verifies that flow on one retained scene; the previous 135-second gallery film is historical material.
 
 Local planning does not need recordings, credentials or API calls:
 

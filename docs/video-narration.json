@@ -2,8 +2,8 @@
   "story_id": "collaborative-world-v1",
   "title": "Agent-Native 3D Scene Studio — A Little World, Built Together",
   "language": "en",
-  "target_duration_seconds": 145,
-  "status": "Eight Lily narration tracks and a 145-second audio rehearsal are produced. Native continuity capture, full listening review and the final film remain pending.",
+  "target_duration_seconds": 161,
+  "status": "The 161-second film is exported with actual native continuity capture, eight Lily narration tracks and 31 aligned subtitles. Continuity validation, representative frame review and full media decoding pass; creator playback approval and publication remain pending.",
   "capture_note": "Keep one scene and one page from the first human placement to the closing shot. Show actual native WebMCP requests and results. Label cuts that remove agent waiting time. No reset, import, preset composition or replacement take may stand in for this scene's continuity.",
   "segments": [
     {
@@ -25,7 +25,7 @@
     {
       "id": "agent_forest",
       "title": "Build around my choices",
-      "duration_seconds": 25,
+      "duration_seconds": 29,
       "narration": "Add thirty pines around my pond and cabin. Keep the water and the entrance clear. The agent builds around my choices, keeping both exactly where I placed them.",
       "tts_narration": "Add thirty pines around my pond and cabin. Keep the water and the entrance clear. The agent builds around my choices, keeping both exactly where I placed them.",
       "visual": "Show the natural-language request and actual native scatter call. Keep the real tree reveal at original speed. Read back the added count and both unchanged anchor poses."
@@ -33,7 +33,7 @@
     {
       "id": "agent_details",
       "title": "Make it feel lived in",
-      "duration_seconds": 17,
+      "duration_seconds": 23,
       "narration": "A few stones shape the shoreline. Warm lanterns lead back to the cabin. Every object stays selectable and editable as the little world grows.",
       "tts_narration": "A few stones shape the shoreline. Warm lanterns lead back to the cabin. Every object stays selectable and editable as the little world grows.",
       "visual": "Record native additions of shoreline rocks and lanterns around the existing world. Show the actual results and a query of the decorated scene, including tree ownership."
@@ -57,7 +57,7 @@
     {
       "id": "atmosphere",
       "title": "Give our world an atmosphere",
-      "duration_seconds": 20,
+      "duration_seconds": 26,
       "narration": "The light settles into moonlit blue, the lanterns glow, and the camera begins a slow, endless journey. My own lofi music gives everything room to breathe.",
       "tts_narration": "The light settles into moonlit blue, the lanterns glow, and the camera begins a slow, endless journey. My own lofi music gives everything room to breathe.",
       "visual": "Use native set_lighting and set_camera_motion on the same scene. Enable sound through an actual click if required. Read back running camera motion and real playback, then query unchanged object poses."

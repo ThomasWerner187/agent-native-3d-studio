@@ -1,27 +1,27 @@
 # Recording and export plan
 
-The current story is a **145-second, eight-shot collaboration film**. It follows one retained scene from human pond/cabin placement through agent additions, a human tree move, and the agent's lighting/camera response. [DEMO.md](../DEMO.md) contains the prompts and English script. [video-narration.json](video-narration.json) is the shared source for shot IDs, durations and narration.
+The current story is a **161-second, eight-shot collaboration film**. It follows one retained scene from human pond/cabin placement through agent additions, a human tree move, and the agent's lighting/camera response. [DEMO.md](../DEMO.md) contains the prompts and English script. [video-narration.json](video-narration.json) is the shared source for shot IDs, durations and narration.
 
 ## Current production status
 
-The eight new narration tracks were generated through ElevenLabs using **Lily — Velvety Actress** (`pFZP5JQG7iQjIQuC4Bku`), model `eleven_v3`, stability `0.5`, similarity boost `0.75` and style `0`. The original-speed MP3s use 44.1 kHz / 128 kbps and total **83.04 seconds** across the 145-second story. Character alignment and generation provenance are retained locally.
+The eight new narration tracks were generated through ElevenLabs using **Lily — Velvety Actress** (`pFZP5JQG7iQjIQuC4Bku`), model `eleven_v3`, stability `0.5`, similarity boost `0.75` and style `0`. The original-speed MP3s use 44.1 kHz / 128 kbps and total **83.04 seconds** across the 161-second story. Character alignment and generation provenance are retained locally.
 
 | Shot | Slot | Source voice |
 | --- | ---: | ---: |
 | `human_pond` | 12 s | 5.36 s |
 | `human_cabin` | 18 s | 10.96 s |
-| `agent_forest` | 25 s | 11.04 s |
-| `agent_details` | 17 s | 11.44 s |
+| `agent_forest` | 29 s | 11.04 s |
+| `agent_details` | 23 s | 11.44 s |
 | `human_move` | 15 s | 8.16 s |
 | `agent_readback` | 23 s | 9.76 s |
-| `atmosphere` | 20 s | 12.40 s |
+| `atmosphere` | 26 s | 12.40 s |
 | `closing` | 15 s | 13.92 s |
 
-The **audio rehearsal** is `scratch-submission-media/audio-rehearsal.wav`: **145.000 seconds**, 48 kHz stereo PCM, with the owner-provided Aurora Drift music and **31 character-aligned captions** in `submission-demo.srt`. Measured rehearsal levels are **−18.58 LUFS integrated**, **−3.66 dBTP true peak**, **−21.0 dBFS mean** and **−3.7 dBFS sample peak**. Its metadata explicitly records `native_capture:false`.
+The **audio rehearsal** is `scratch-submission-media/audio-rehearsal.wav`: **161.000 seconds**, 48 kHz stereo PCM, with the owner-provided Aurora Drift music and **31 character-aligned captions** in `submission-demo.srt`. Measurements for the revised 161-second mix are recorded in its generated metadata and the final review. Its metadata explicitly records `native_capture:false`.
 
 Narration stays at original speed. The music bed targets −24.5 LUFS and ducks gently under the voice with 700 ms attack / 1000 ms release. Only music fades at the end; the closing voice is not attenuated by a global fade. Sample-derived voice-bus timestamps prevent delayed MP3 segments from producing a shortened mix.
 
-**The new native capture and final MP4 are not produced.** Browser access is still blocked by admin-policy verification. The audio rehearsal lets the creator listen to the complete presentation before capture; it does not verify native behavior. Full listening review, final film review, public YouTube and Devpost Submitted status remain open.
+**The complete native take and 161-second H.264/AAC film are produced.** It contains 4,378 original browser frames and 15 successful native events, with one retained scene and the same pond, cabin and edited tree IDs. The browser recording must stay inside active tool calls; pauses between recording blocks are explicitly marked as agent waiting time. Human-side actions are demonstrated using the real pointer controls. Public YouTube and Devpost Submitted status remain open; final media measurements are in the review record.
 
 The older 135-second, multi-session gallery film remains a historical artifact in the previous voice-polish worktree. Its 32 captions, media measurements and checksum do not describe this new story. Do not reuse its scene takes as evidence for the new continuous collaboration.
 

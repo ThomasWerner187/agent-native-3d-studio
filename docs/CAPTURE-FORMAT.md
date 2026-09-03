@@ -1,6 +1,6 @@
 # Native recording evidence format
 
-This contract is for the new 145-second collaboration film. It stores facts observed during the actual browser recording. Do not generate a manifest from a local harness, substitute old gallery events, or fill absent evidence with expected results.
+This contract is for the new 161-second collaboration film. It stores facts observed during the actual browser recording. Do not generate a manifest from a local harness, substitute old gallery events, or fill absent evidence with expected results.
 
 The file `scratch-submission-media/native-capture.json` is a JSON object with these fields:
 

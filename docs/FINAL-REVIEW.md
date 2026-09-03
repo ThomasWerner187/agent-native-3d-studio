@@ -1,37 +1,49 @@
 # Final submission review
 
-Review date: **September 3, 2026**. The current release focuses on additive human-agent world building: a person places pond/cabin anchors, an agent decorates the existing scene, the person changes one of its objects, and the agent reads that edit before continuing.
+Reviewed September 3, 2026. The new human–agent collaboration is implemented and recorded through native WebMCP in the Codex browser. **The new film is 2:41, with Lily narration, the creator's Aurora Drift track and 31 burned-in English subtitle cues.** Public video upload, production release and the Devpost Submitted check remain open.
 
-The previous gallery-led demonstration is historical evidence. It does not verify the new 27-tool collaboration release or its planned continuous-scene film.
+## Verified collaboration
 
-## Current implementation
+The final take starts with a pond and cabin placed through the real UI. Native calls add exactly 30 trees, six rocks and four lamps. A real pointer drag moves an agent-created tree, and fresh native readbacks identify its human edit. Lighting and an infinite camera continue on the same 42-object world.
 
-| Area | Review result |
+| Check | Observed result |
 | --- | --- |
-| Human editing | A visible placement palette, Start empty, draggable objects and a numeric inspector keep the person's choices in the shared scene. Local controls use human provenance. |
-| Agent additions | Scatter supports a live anchor, actual object bounds, clearance and reserved cabin entrance space. It plans exact additions before mutation and rejects crowded requests with `no_space`. |
-| Object ownership | Readbacks expose creator, last editor, revision, human revision and recent changes. A human move remains associated with the same object ID. |
-| Selective scatter undo | `undo_scatter` removes untouched additions while preserving objects changed later by a person. Requested counts and live counts distinguish creation from later interruption. |
-| Atmosphere | Continuous camera motion can target the current scene or an object without replacing the scene. Lighting and audio remain separately controllable. |
-| Product presentation | The gallery and camp-layout example are secondary. Copy-prompt buttons prepare instructions; they do not contact a model. Native calls and local previews remain distinct. |
-| Documentation | README, submission story, judge guide and 145-second script describe the same additive collaboration. The tool table lists 27 tools. |
+| Native discovery | **27 WebMCP tools** registered on the clean collaborative-review page. All **15 recorded native calls succeeded**. |
+| Human anchors | Pond `obj_47` at `[0,0,0]` and cabin `obj_48` at `[5.35,0,4.51]` retain their exact IDs and poses in every required readback. |
+| Agent additions | Exactly **30 trees + 6 rocks + 4 lamps**. The native scatter result reports both human anchors preserved. |
+| Human edit | Tree `obj_69` stays agent-created and changes to human-edited, revision 2. Its recorded pose changes from `[11.52,0,17.01]` to `[16.25,0,18.84]`. |
+| Atmosphere | Native readback reports moonlit lighting, an **infinite cinematic camera running**, and **Aurora Drift actually playing**. All object poses remain unchanged by this stage. |
+| Share restoration | A 3,518-character exported link was opened in a fresh tab. Native query succeeded; **42/42 objects matched the original poses and materials**. |
+| Capture integrity | One retained page/scene, zero scene replacements; **4,378 original frames**. The complete native evidence validator passed. Retained shot density is about 26–28 fps; maximum retained inter-frame gap is 0.143 s. |
+| Demonstration method | Codex operated both the real pointer/UI surface and the connected native WebMCP surface for this demonstration. UI actions retain human provenance; native tools retain agent envelopes. |
 
-## Current evidence and open gates
+The machine-readable [capture summary](native-capture-summary.json) records IDs, poses and the capture-manifest checksum. Original frames, requests, responses and the timestamped source reference remain in the local media directory. Between active recording blocks the agent paused frame capture while preparing its next action. Those intervals are explicitly removed as waiting time from the film; the uncut VFR reference holds the last observed frame and is not visual evidence of those uncaptured idle intervals.
 
-| Check | Observed status |
+## Film and audio
+
+| Material | Verified result |
 | --- | --- |
-| Local application gate | Integrated build and smoke passed **27/27 tools and 76/76 behavioral checks** after the placement-region and fog adjustments. The lofi regression also passed 12 bounded automatic cycles. Local harness results are not native discovery proof; any later changes still require the commit gate. |
-| CI reproducibility | The [first collaborative run](https://github.com/ThomasWerner187/agent-native-3d-studio/actions/runs/33734185100) completed 27/27 tools and 75/76 behavioral checks. Its fixed 1.4-second camera wait was too short for the software renderer and rounded scene readback. Motion verification now waits for observable progress, and CI mouse drags retain multiple real pointer events with fewer interpolation steps. The exact current-head CI result is attached to [PR #7](https://github.com/ThomasWerner187/agent-native-3d-studio/pull/7/checks) and recorded in the review-kit manifest. The deployed application is unchanged by this test correction. |
-| Visual QA | New collaboration screenshots and mobile review are local QA. Any images labeled as local harness evidence must retain that label; they do not replace the native recording. |
-| Native browser access | Browser-tool access remains blocked because admin-enforced policy could not be verified. No workaround is being used. New native co-creation, final share reopening and final deployment walkthrough remain unverified. |
-| Audio production | Eight actual ElevenLabs Lily / `eleven_v3` tracks total **83.04 seconds** and fit the shared **145-second** plan at original speed. MP3s, alignment and provenance are cached in the current worktree. |
-| Audio rehearsal | A **145.000-second WAV** and **31 aligned captions** are produced. The rehearsal mix measures **−18.58 LUFS / −3.66 dBTP**, mean **−21.0 dBFS**, sample peak **−3.7 dBFS**. Its metadata says `native_capture:false`. A full listening review remains open. |
-| New film | Script and media pipeline are prepared. No new native footage or final MP4 exists. The assembler requires one recorded page/scene, unchanged anchors, exact tree additions and a real human edit before it will render the final film. |
-| Review deployment | Application `194e932c8daec5857952b5a33169229507b193dd` is deployed at [collaborative-review](https://collaborative-review--agent-native-3d-studio.netlify.app), Netlify deploy `6a99310308d1752d54879bee`. Deployment completed; fresh native browser verification remains blocked. |
-| Source scan | 86 tracked files / 26,086,802 bytes scanned with no credential-pattern, environment-file or work-context findings before the application commit. |
-| Publication | Production publication, final source verification and submission remain pending. The review deployment is a separate candidate. |
-| YouTube | No verified public URL for the new film. |
-| Devpost | Draft `1168246`, [Agent-Native 3D Scene Studio](https://devpost.com/software/agent-native-3d-scene-studio), has Overview saved and was last observed at 2/5 steps. It is not Submitted. Details were unsaved; the story editor contained the empty template plus appended text, and Built-with input was unconfirmed. Replace the whole story with the current SUBMISSION.md, confirm tags, enter final links and save. Browser-policy verification currently blocks completion through the tool. The earlier CAPTCHA is resolved. |
+| Master | `scratch-submission-media/submission-demo.mp4`, **161.000 seconds**, H.264/AAC, 1280 × 720, 30 fps, 20,382,325 bytes. |
+| Master SHA-256 | `55cdccccc5ba8ee784322a84a34ba70c2861cf0976dc119bf4034f1d602227cc` |
+| Narration | Eight existing ElevenLabs **Lily — Velvety Actress** / `eleven_v3` takes, 83.04 seconds of original-speed speech. No new paid generation was needed for this run. |
+| Subtitles | **31 character-aligned English cues**, burned in and also supplied as SRT. |
+| Final audio | **−18.83 LUFS integrated / −3.58 dBTP**, mean −21.1 dBFS, sample peak −3.6 dBFS. Music ducks under narration; the closing voice is not faded out. |
+| Media QA | Full decode succeeded. Representative human-edit, native-result, atmosphere and closing frames were inspected; overlay text fits. Creator listening/playback approval remains open. |
+| Source reference | `source-recording-original-vfr.mp4`, approximately 299.735 seconds, with original timestamp gaps and the recording-cadence note. |
+
+## Application and release status
+
+| Check | Observed result |
+| --- | --- |
+| Application | `194e932c8daec5857952b5a33169229507b193dd` at [collaborative-review](https://collaborative-review--agent-native-3d-studio.netlify.app), deploy `6a99310308d1752d54879bee`. The loaded bundle `index-Dt4eNSSi.js` matches this candidate. |
+| Local gate | Build and smoke passed **27/27 tools, 76/76 behavior checks**; animation and 12-cycle lofi regression passed on the application candidate. |
+| CI gate | [Run 33736101125](https://github.com/ThomasWerner187/agent-native-3d-studio/actions/runs/33736101125) passed at `40db1bfcbb8ee74baed2fa03d56fdaf2dbb6a844`, including 27/27 tools and 76/76 behavior checks. Subsequent film work changes documentation and media tooling, not the deployed application. |
+| Media regression | The updated duration/fixture checks pass: one positive native-shape fixture and eight rejection cases. The actual recording independently passes the native continuity validator. |
+| Browser access | The earlier policy-verification failure cleared after the app restart. The recorder performs and awaits its work inside active browser tool calls. |
+| Public source/license | Previously verified public repository and GitHub MIT detection; final outgoing revision still needs publication verification. |
+| Production | The final collaboration candidate is on the review URL. Production publication is still pending. |
+| YouTube | No public URL verified for the new film. |
+| Devpost | Draft `1168246`, [project preview](https://devpost.com/software/agent-native-3d-scene-studio), was previously observed at 2/5 steps and not Submitted. Replace the story with current SUBMISSION.md, enter final links, save and verify the green Submitted label. This run did not edit Devpost. |
 
 ## Earlier review evidence
 
