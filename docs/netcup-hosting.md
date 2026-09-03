@@ -1,6 +1,6 @@
 # Netcup test deployment
 
-Prepared and uploaded on 2026-09-03 for `https://studio.wernerverse.de/`. This is a separate test deployment; the existing Netlify deployment is unchanged. Authentication is active, but trusted HTTPS is still pending, so signed-in testing has not started.
+Prepared and uploaded on 2026-09-03 for `https://studio.wernerverse.de/`. This is a separate test deployment; the existing Netlify deployment is unchanged. Authentication, trusted HTTPS and the HTTP-to-HTTPS redirect are active. Authenticated HTTP checks passed; browser and native WebMCP verification is tracked separately.
 
 - Build: `npm ci && npm run build && node scripts/package-netcup.mjs`.
 - Runtime: static HTML, JavaScript and CSS; no server application or environment variables.
@@ -14,23 +14,28 @@ Prepared and uploaded on 2026-09-03 for `https://studio.wernerverse.de/`. This i
 
 The included `.htaccess` sets `Origin-Agent-Cluster: ?1`, `X-Content-Type-Options: nosniff`, the referrer policy, HTML revalidation and one-year immutable caching for fingerprinted Vite assets. Cache directives use `private` because this test deployment is authenticated. It does not implement authentication or redirects. Preserve/merge any authentication directives written by Plesk; do not overwrite an existing protected-directory `.htaccess` blindly.
 
-Enforce HTTPS in Plesk after the certificate is working. Configure authentication before exposing this test deployment. If nginx serves static assets directly, `.htaccess` headers may not apply to those responses. Verify headers over HTTPS and configure the equivalent headers in the relevant Plesk server settings when necessary.
+The deployment operator confirmed these domain-specific Plesk settings: PHP and FastCGI disabled; nginx proxy mode enabled; direct static serving and nginx caching disabled. Intelligent processing of static files was then disabled to ensure Apache receives the requests and applies `.htaccess` headers. No shared webspace credentials or SSH settings were changed.
+
+A Let's Encrypt certificate was issued after the user's explicit approval of the terms. Plesk reports expiry on 2026-12-02. HTTPS enforcement is enabled, and normal TLS validation passed in the final checks. Preserve these settings on future updates: if nginx serves static assets directly, `.htaccess` headers may not apply to those responses.
 
 The app uses query parameters (`?agent=1`) and URL fragments (`#scene=...`), not history routes. No SPA fallback or server redirect for those values is required. Shared scene URLs are generated from the current origin.
 
 ## Verification after upload
 
-Local preparation passed `npm ci` (zero reported vulnerabilities), TypeScript/Vite production build, and the existing browser smoke suite: 20/20 tools, 12/12 semantic checks, and corrupted-share-link recovery. A source scan found no network API, WebSocket or localhost dependency in the runtime source. Native WebMCP over the authenticated public origin and Apache/nginx header delivery remain deployment checks.
+Local preparation passed `npm ci` (zero reported vulnerabilities), TypeScript/Vite production build, and the existing browser smoke suite: 20/20 tools, 12/12 semantic checks, and corrupted-share-link recovery. A source scan found no network API, WebSocket or localhost dependency in the runtime source. Native WebMCP over the authenticated public origin remains a browser verification step.
 
 ### Current deployment status
 
-Checked 2026-09-03 at approximately 19:55 UTC:
+Checked 2026-09-03 at approximately 20:08 UTC, after TLS issuance and the final nginx configuration:
 
-- Plesk root-directory protection and a dedicated test user were created by the deployment operator. No credentials were used or recorded in this read-only check.
+- Plesk root-directory protection and a dedicated test user were created by the deployment operator. Credentials were read from an external local file and used only over HTTPS with normal certificate validation. No credentials or authorization headers were written to the repository or QA output.
 - DNS resolves to `188.68.47.172` and `2a03:4000:30:c9c7::15:2448`. IPv4 was also confirmed through Cloudflare DNS and the authoritative Netcup DNS server.
-- Unauthenticated HTTP requests to `/`, `/index.html`, `/?agent=1`, both actual fingerprinted JavaScript/CSS paths, all three `/music/*.mp3` paths, `/studio-netcup-test.zip` and `/.htaccess` returned `401 Unauthorized`. Every response contained the same 172-byte error document, not application or asset content. This verifies access denial for those paths, not the upload-archive deletion independently.
-- HTTPS verification failed with curl exit 60 (`unable to get local issuer certificate`). Certificate verification was not bypassed and no credentials were sent over HTTP.
-- The pending gate is the user's explicit acceptance of the Let's Encrypt terms, followed by certificate issuance/installation and HTTPS enforcement. After that, repeat anonymous checks over HTTPS and complete the authenticated browser and native WebMCP checks below. HTTP currently challenges for a password; do not sign in there.
+- HTTP `/` returns `301` to the HTTPS URL before issuing an authentication challenge.
+- HTTPS `/`, `/index.html`, `/?agent=1`, both actual fingerprinted JavaScript/CSS paths and all three `/music/*.mp3` paths return `401 Unauthorized` without credentials and `200` with credentials. The 401 responses contain the same 172-byte error document; authenticated content types and byte lengths match the expected build files.
+- Authenticated HTML returns `Origin-Agent-Cluster: ?1`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and `Cache-Control: private, max-age=0, must-revalidate`. JavaScript/CSS return the same security headers and `Cache-Control: private, max-age=31536000, immutable`. MP3 responses also include the security headers and correct `audio/mpeg` MIME type.
+- Authenticated index HTML, JavaScript and CSS exactly match the local package by SHA256. An MP3 byte-range request returns `206` with the requested 32-byte range.
+- With authentication, `/studio-netcup-test.zip` returns `404` and `/.htaccess` returns `403` without configuration content.
+- Earlier pre-certificate checks failed TLS validation. That gate is now resolved without bypassing certificate validation. Remaining checks below concern browser rendering and native WebMCP behavior after authentication.
 
 1. Without credentials, `/`, `/index.html` and the JavaScript/CSS asset URLs must require authentication. Do not put credentials in URLs or terminal history.
 2. In a fresh browser, sign in over valid HTTPS. Confirm the initial 3D scene renders and no assets fail to load.
