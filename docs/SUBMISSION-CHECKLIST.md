@@ -15,7 +15,8 @@ This working checklist describes the new **27-tool collaborative world-building 
 | Review results | [FINAL-REVIEW.md](FINAL-REVIEW.md) |
 | Live submission URL | [agent-native-3d-studio.netlify.app](https://agent-native-3d-studio.netlify.app) — final collaboration release must be verified |
 | Public repository | [ThomasWerner187/agent-native-3d-studio](https://github.com/ThomasWerner187/agent-native-3d-studio) |
-| Reviewed collaboration revision | Pending final commit and release checks; previous reviewed application was `9bda5c3` |
+| Reviewed collaboration application | `194e932c8daec5857952b5a33169229507b193dd` — local gates passed |
+| Collaboration review deployment | [collaborative-review](https://collaborative-review--agent-native-3d-studio.netlify.app), Netlify deploy `6a99310308d1752d54879bee`; deployed from application `194e932`, fresh native browser verification pending |
 | Final submitted revision | `[FINAL_SUBMISSION_COMMIT]` |
 | New audio rehearsal | `scratch-submission-media/audio-rehearsal.wav` — 145.000 seconds, Lily; full listening review pending |
 | New native film | Capture and final MP4 pending; the historical 135-second film is a different story |
@@ -26,7 +27,7 @@ This working checklist describes the new **27-tool collaborative world-building 
 
 - [x] Implement human placement/inspection, exact additive scatter, ownership readbacks, selective scatter undo and camera control on the retained scene.
 - [x] Run the integrated local build and smoke after the placement-region and fog adjustments: **27/27 tools, 76/76 behavioral checks**, plus 12 bounded automatic lofi cycles.
-- [ ] Record the final release commit and outgoing secret scan, and rerun the commit gate if subsequent changes are made.
+- [x] Record application `194e932` and its outgoing source scan: 86 tracked files, 26.09 MB, no credential-pattern, environment-file or work-context findings. The final contrast-adjusted build passed 27/27 tools and 76/76 behavioral checks. Media evidence regression: one positive query-shape fixture and eight rejection cases passed.
 - [ ] Publish that revision and check the live app in a fresh browser session without login, cached state or a shared-scene hash.
 - [ ] Discover all 27 tools through native WebMCP and complete the human pond/cabin → agent forest/details → human tree move → agent readback/lighting/camera flow on one retained scene.
 - [ ] Verify exact tree count, preserved anchor poses, human ownership/revision changes, selective undo and actual audio playback. Preserve original native requests/results and pointer footage.
