@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import type { SceneStore } from './store';
+import { MAX_SCENE_OBJECTS, type SceneStore, type SceneActor } from './store';
 import type { Studio } from './scene';
 import { isObjectType, disposeObject } from './factory';
 import { LIGHTING_PRESETS } from './scene';
+import { cancelAllToolTweens, getCanonicalScale } from './anim';
 
 /**
  * Reversibility: every mutating tool auto-captures a snapshot beforehand,
@@ -11,12 +12,30 @@ import { LIGHTING_PRESETS } from './scene';
  * this is that, wired through the same WebMCP tool surface.
  */
 
+interface MaterialState {
+  color: string; roughness: number; metalness: number;
+  emissive: string; emissiveIntensity: number; opacity: number;
+}
+
+function materialState(m: THREE.MeshStandardMaterial): MaterialState {
+  return { color: `#${m.color.getHexString()}`, roughness: m.roughness, metalness: m.metalness,
+    emissive: `#${m.emissive.getHexString()}`, emissiveIntensity: m.emissiveIntensity, opacity: m.opacity };
+}
+
 interface SerializedObject {
   id: string;
   name: string;
   type: string;
   /** Preset variant (chess piece kind) so undo rebuilds the same shape. */
   variant?: string;
+  layoutRole?: 'path' | 'forest' | 'lantern';
+  humanEdited?: boolean;
+  createdBy?: SceneActor;
+  lastChangedBy?: SceneActor;
+  revision?: number;
+  humanRevision?: number;
+  materials?: MaterialState[];
+  lights?: Array<{ color: string; intensity: number }>;
   p: [number, number, number];
   r: [number, number, number];
   s: [number, number, number];
@@ -35,9 +54,21 @@ interface SnapshotData {
   scene_version?: number;
   idCounter: number;
   version: number;
-  lighting: { preset: string; intensity: number };
+  lighting: { preset: string; intensity: number; azimuth?: number };
   camera: { p: [number, number, number]; t: [number, number, number]; fov: number };
   objects: SerializedObject[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteTuple(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
+}
+
+function isHex(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 export interface Snapshot {
@@ -53,7 +84,8 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
   return {
     idCounter: store.idCount,
     version: store.version,
-    lighting: { preset: studio.currentPreset, intensity: studio.currentIntensity },
+    lighting: { preset: studio.currentPreset, intensity: studio.currentIntensity,
+      azimuth: studio.currentAzimuth },
     camera: {
       p: [studio.camera.position.x, studio.camera.position.y, studio.camera.position.z],
       t: [studio.controls.target.x, studio.controls.target.y, studio.controls.target.z],
@@ -61,15 +93,26 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
     },
     objects: store.all().map((e) => {
       const g = e.group;
+      const scale = getCanonicalScale(g);
       const m = e.materials[0];
+      const lights: Array<{ color: string; intensity: number }> = [];
+      g.traverse(o => { if (o instanceof THREE.PointLight) lights.push({ color: `#${o.color.getHexString()}`, intensity: o.intensity }); });
       return {
         id: e.id,
         name: e.name,
         type: e.type,
         variant: e.variant,
+        layoutRole: e.layoutRole,
+        humanEdited: e.humanRevision > 0,
+        createdBy: e.createdBy,
+        lastChangedBy: e.lastChangedBy,
+        revision: e.revision,
+        humanRevision: e.humanRevision,
+        materials: e.materials.map(materialState),
+        lights,
         p: [g.position.x, g.position.y, g.position.z],
         r: [g.rotation.x, g.rotation.y, g.rotation.z],
-        s: [g.scale.x, g.scale.y, g.scale.z],
+        s: [scale.x, scale.y, scale.z],
         color: m ? `#${m.color.getHexString()}` : undefined,
         roughness: m?.roughness,
         metalness: m?.metalness,
@@ -82,6 +125,8 @@ function serialize(store: SceneStore, studio: Studio): SnapshotData {
 }
 
 function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
+  const versionBefore = store.version;
+  cancelAllToolTweens();
   for (const e of store.all()) {
     studio.scene.remove(e.group);
     disposeObject(e.group);
@@ -97,6 +142,12 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       scale: { x: o.s[0], y: o.s[1], z: o.s[2] },
     });
     entry.group.position.set(o.p[0], o.p[1], o.p[2]);
+    entry.layoutRole = o.layoutRole;
+    entry.createdBy = o.createdBy ?? 'unknown';
+    entry.lastChangedBy = o.lastChangedBy ?? 'unknown';
+    entry.revision = o.revision ?? 0;
+    entry.humanRevision = o.humanRevision ?? (o.humanEdited ? ++store.humanRevision : 0);
+    store.humanRevision = Math.max(store.humanRevision, entry.humanRevision);
     entry.group.rotation.set(o.r[0], o.r[1], o.r[2]);
     studio.scene.add(entry.group);
     const m = entry.materials[0];
@@ -116,10 +167,25 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
       light.intensity = 6 * Math.min(4, Math.max(0, m.emissiveIntensity));
       light.color.copy(m.emissive);
     }
+    o.materials?.forEach((state, index) => {
+      const mat = entry.materials[index];
+      if (!mat) return;
+      mat.color.set(state.color); mat.roughness = state.roughness; mat.metalness = state.metalness;
+      mat.emissive.set(state.emissive); mat.emissiveIntensity = state.emissiveIntensity;
+      mat.opacity = state.opacity; mat.transparent = state.opacity < 1; mat.needsUpdate = true;
+    });
+    let lightIndex = 0;
+    entry.group.traverse(object => {
+      if (!(object instanceof THREE.PointLight)) return;
+      const state = o.lights?.[lightIndex++];
+      if (state) { object.color.set(state.color); object.intensity = state.intensity; }
+    });
   }
-  store.version = data.version;
+  // A saved version is metadata from a past observation, never the current
+  // concurrency token. The caller bumps this version after restoration.
+  store.restoreCounters(data.idCounter, versionBefore);
 
-  studio.applyLighting(data.lighting.preset as never, data.lighting.intensity);
+  studio.applyLighting(data.lighting.preset as never, data.lighting.intensity, data.lighting.azimuth, 0);
   studio.camera.position.set(...data.camera.p);
   studio.controls.target.set(...data.camera.t);
   studio.camera.fov = data.camera.fov;
@@ -128,7 +194,7 @@ function restore(store: SceneStore, studio: Studio, data: SnapshotData): void {
 }
 
 /** Portable export schema. schema_version 2 is the current one. */
-const MAX_EXPORT_OBJECTS = 600;
+const MAX_EXPORT_OBJECTS = MAX_SCENE_OBJECTS;
 
 function migrateExport(raw: Record<string, unknown>): { ok: boolean; data?: SnapshotData; error?: string } {
   const schema = raw.schema_version ?? (raw.v === 1 ? 1 : null);
@@ -137,7 +203,20 @@ function migrateExport(raw: Record<string, unknown>): { ok: boolean; data?: Snap
     return { ok: true, data: { ...raw, v: 2, schema_version: 2 } as SnapshotData };
   }
   if (schema === 2 && Array.isArray(raw.objects)) {
-    return { ok: true, data: raw as unknown as SnapshotData };
+    // Public v2 uses snake_case; the in-memory snapshot format uses camelCase.
+    // Normalize once at the boundary so share links and undo use one contract.
+    return {
+      ok: true,
+      data: {
+        v: 2,
+        schema_version: 2,
+        version: raw.scene_version,
+        idCounter: raw.id_counter,
+        lighting: raw.lighting,
+        camera: raw.camera,
+        objects: raw.objects,
+      } as SnapshotData,
+    };
   }
   return { ok: false, error: 'unsupported schema_version (expected 1 or 2)' };
 }
@@ -183,6 +262,13 @@ export class SnapshotManager {
   /** Restore the newest snapshot WITHOUT popping it (atomic batch rollback). */
   restoreLast(): boolean {
     const snap = this.ring[this.ring.length - 1];
+    if (!snap) return false;
+    return this.restoreSnapshot(snap.id);
+  }
+
+  /** Restore the transaction's own capture, even if a human saved another one. */
+  restoreSnapshot(id: string): boolean {
+    const snap = this.ring.find(s => s.id === id);
     if (!snap) return false;
     restore(this.store, this.studio, snap.data);
     this.store.bump();
@@ -232,32 +318,85 @@ export class SnapshotManager {
     } catch {
       return { ok: false, error: 'not valid JSON' };
     }
+    if (!isRecord(raw)) return { ok: false, error: 'payload must be a JSON object' };
     const migrated = migrateExport(raw);
     if (!migrated.ok) return { ok: false, error: migrated.error };
     const data = migrated.data as SnapshotData;
 
-    // validate everything before destroying the live scene
+    // Validate everything before destroying the live scene. Imported links are
+    // user-controlled input, not trusted internal snapshots.
     if (!Array.isArray(data.objects) || data.objects.length > MAX_EXPORT_OBJECTS) {
       return { ok: false, error: `objects must be an array with at most 600 entries` };
     }
-    const presets = LIGHTING_PRESETS as readonly string[];
-    if (data.lighting && !presets.includes(data.lighting.preset)) {
-      return { ok: false, error: `unknown lighting preset "${data.lighting.preset}"` };
+    if (!Number.isSafeInteger(data.version) || data.version < 0) {
+      return { ok: false, error: 'scene_version must be a non-negative integer' };
     }
-    if (data.camera) {
+    if (!Number.isSafeInteger(data.idCounter) || data.idCounter < 0 || data.idCounter > Number.MAX_SAFE_INTEGER - MAX_SCENE_OBJECTS) {
+      return { ok: false, error: 'id_counter must be a non-negative integer' };
+    }
+    const presets = LIGHTING_PRESETS as readonly string[];
+    if (!isRecord(data.lighting) || typeof data.lighting.preset !== 'string' || !presets.includes(data.lighting.preset)) {
+      return { ok: false, error: `unknown or missing lighting preset` };
+    }
+    if (typeof data.lighting.intensity !== 'number' || !Number.isFinite(data.lighting.intensity) || data.lighting.intensity < 0 || data.lighting.intensity > 2) {
+      return { ok: false, error: 'lighting.intensity must be a number between 0 and 2' };
+    }
+    if (data.lighting.azimuth != null && (typeof data.lighting.azimuth !== 'number' || !Number.isFinite(data.lighting.azimuth) || Math.abs(data.lighting.azimuth) > 360)) {
+      return { ok: false, error: 'lighting.azimuth must be a number between -360 and 360' };
+    }
+    if (!isRecord(data.camera)) return { ok: false, error: 'camera is required' };
+    {
       const c = data.camera;
-      if (![c.p, c.t].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n))) || !Number.isFinite(c.fov)) {
+      if (!isFiniteTuple(c.p) || !isFiniteTuple(c.t) || c.p.some(n => Math.abs(n) > 10_000) || c.t.some(n => Math.abs(n) > 10_000) || typeof c.fov !== 'number' || !Number.isFinite(c.fov) || c.fov < 10 || c.fov > 120) {
         return { ok: false, error: 'camera must be {p:[x,y,z], t:[x,y,z], fov:number}' };
       }
     }
-    for (const o of data.objects) {
-      if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${o.type}"` };
-      if (![o.p, o.s].every((v) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n)))) {
+    const ids = new Set<string>();
+    let highestId = 0;
+    for (const rawObject of data.objects) {
+      if (!isRecord(rawObject)) return { ok: false, error: 'every object must be a JSON object' };
+      const o = rawObject as unknown as SerializedObject;
+      if (typeof o.id !== 'string' || !/^obj_\d+$/.test(o.id) || ids.has(o.id)) {
+        return { ok: false, error: `object ids must be unique and match obj_N (got "${String(o.id)}")` };
+      }
+      ids.add(o.id);
+      highestId = Math.max(highestId, Number(o.id.slice(4)));
+      if (typeof o.name !== 'string' || o.name.length > 120) return { ok: false, error: `object "${o.id}" has an invalid name` };
+      if (!isObjectType(o.type)) return { ok: false, error: `unknown object type "${String(o.type)}"` };
+      if (o.layoutRole != null && !['path', 'forest', 'lantern'].includes(o.layoutRole)) return { ok: false, error: 'invalid layoutRole' };
+      if (o.humanEdited != null && typeof o.humanEdited !== 'boolean') return { ok: false, error: 'invalid humanEdited' };
+      for (const actor of [o.createdBy, o.lastChangedBy]) {
+        if (actor != null && !['human', 'agent', 'demo', 'unknown'].includes(actor)) return { ok: false, error: 'invalid object authorship' };
+      }
+      for (const revision of [o.revision, o.humanRevision]) {
+        if (revision != null && (!Number.isSafeInteger(revision) || revision < 0)) return { ok: false, error: 'invalid object revision' };
+      }
+      if (o.materials != null && (!Array.isArray(o.materials) || o.materials.length > 64 || o.materials.some(m =>
+        !isRecord(m) || !isHex(m.color) || !isHex(m.emissive) ||
+        !['roughness', 'metalness', 'opacity'].every(k => typeof m[k] === 'number' && Number.isFinite(m[k]) && m[k] >= 0 && m[k] <= 1) ||
+        typeof m.emissiveIntensity !== 'number' || !Number.isFinite(m.emissiveIntensity) || m.emissiveIntensity < 0 || m.emissiveIntensity > 5
+      ))) return { ok: false, error: 'invalid material states' };
+      if (o.lights != null && (!Array.isArray(o.lights) || o.lights.length > 32 || o.lights.some(l =>
+        !isRecord(l) || !isHex(l.color) || typeof l.intensity !== 'number' || !Number.isFinite(l.intensity) || l.intensity < 0 || l.intensity > 100
+      ))) return { ok: false, error: 'invalid light states' };
+      if (!isFiniteTuple(o.p) || !isFiniteTuple(o.s)) {
         return { ok: false, error: `object "${o.id}" has a malformed pose/scale` };
       }
-      if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.01 || n > 10)) {
+      // Slow reveals legitimately export tiny, nonzero scales while building.
+      if (o.p.some((n) => Math.abs(n) > 60) || o.s.some((n) => n < 0.00001 || n > 10)) {
         return { ok: false, error: `object "${o.id}" out of bounds` };
       }
+      if (!isFiniteTuple(o.r)) return { ok: false, error: `object "${o.id}" has a malformed rotation` };
+      if (o.color != null && !isHex(o.color)) return { ok: false, error: `object "${o.id}" has an invalid color` };
+      if (o.emissive != null && !isHex(o.emissive)) return { ok: false, error: `object "${o.id}" has an invalid emissive color` };
+      if (o.roughness != null && (typeof o.roughness !== 'number' || !Number.isFinite(o.roughness) || o.roughness < 0 || o.roughness > 1)) return { ok: false, error: `object "${o.id}" has invalid roughness` };
+      if (o.metalness != null && (typeof o.metalness !== 'number' || !Number.isFinite(o.metalness) || o.metalness < 0 || o.metalness > 1)) return { ok: false, error: `object "${o.id}" has invalid metalness` };
+      if (o.emissiveIntensity != null && (typeof o.emissiveIntensity !== 'number' || !Number.isFinite(o.emissiveIntensity) || o.emissiveIntensity < 0 || o.emissiveIntensity > 5)) return { ok: false, error: `object "${o.id}" has invalid emissiveIntensity` };
+      if (o.opacity != null && (typeof o.opacity !== 'number' || !Number.isFinite(o.opacity) || o.opacity < 0 || o.opacity > 1)) return { ok: false, error: `object "${o.id}" has invalid opacity` };
+      if (o.type === 'chess_piece' && o.variant != null && !['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'].includes(o.variant)) return { ok: false, error: `object "${o.id}" has an invalid chess piece` };
+    }
+    if (data.idCounter < highestId) {
+      return { ok: false, error: 'id_counter is lower than the highest object id' };
     }
 
     if (opts.captureUndo) this.capture('before import');

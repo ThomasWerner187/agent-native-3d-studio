@@ -1,0 +1,81 @@
+{
+  "story_id": "collaborative-world-v1",
+  "title": "Agent-Native 3D Scene Studio — A Little World, Built Together",
+  "language": "en",
+  "target_duration_seconds": 145,
+  "status": "Eight Lily narration tracks and a 145-second audio rehearsal are produced. Native continuity capture, full listening review and the final film remain pending.",
+  "capture_note": "Keep one scene and one page from the first human placement to the closing shot. Show actual native WebMCP requests and results. Label cuts that remove agent waiting time. No reset, import, preset composition or replacement take may stand in for this scene's continuity.",
+  "segments": [
+    {
+      "id": "human_pond",
+      "title": "I choose the starting point",
+      "duration_seconds": 12,
+      "narration": "I start with a pond, right here. A little world I can build in together with my browser agent.",
+      "tts_narration": "I start with a pond, right here. A little world I can build in together with my browser agent.",
+      "visual": "Begin with the human choosing Pond and placing it in the scene. Keep the pointer action and selected pond visible. No earlier beauty-shot insert."
+    },
+    {
+      "id": "human_cabin",
+      "title": "The agent reads my scene",
+      "duration_seconds": 18,
+      "narration": "I place a cabin beside the water. Now I ask the agent to read what I made. WebMCP gives it the objects, their positions, and my edits.",
+      "tts_narration": "I place a cabin beside the water. Now I ask the agent to read what I made. Web M C P gives it the objects, their positions, and my edits.",
+      "visual": "Place the cabin by hand. Record native help and describe_scene, then query_scene with the pond and cabin poses, bounds and ownership. Preserve their actual IDs."
+    },
+    {
+      "id": "agent_forest",
+      "title": "Build around my choices",
+      "duration_seconds": 25,
+      "narration": "Add thirty pines around my pond and cabin. Keep the water and the entrance clear. The agent builds around my choices, keeping both exactly where I placed them.",
+      "tts_narration": "Add thirty pines around my pond and cabin. Keep the water and the entrance clear. The agent builds around my choices, keeping both exactly where I placed them.",
+      "visual": "Show the natural-language request and actual native scatter call. Keep the real tree reveal at original speed. Read back the added count and both unchanged anchor poses."
+    },
+    {
+      "id": "agent_details",
+      "title": "Make it feel lived in",
+      "duration_seconds": 17,
+      "narration": "A few stones shape the shoreline. Warm lanterns lead back to the cabin. Every object stays selectable and editable as the little world grows.",
+      "tts_narration": "A few stones shape the shoreline. Warm lanterns lead back to the cabin. Every object stays selectable and editable as the little world grows.",
+      "visual": "Record native additions of shoreline rocks and lanterns around the existing world. Show the actual results and a query of the decorated scene, including tree ownership."
+    },
+    {
+      "id": "human_move",
+      "title": "I keep the mouse",
+      "duration_seconds": 15,
+      "narration": "This tree feels too close. I move it myself. My edit becomes part of the shared state the agent sees.",
+      "tts_narration": "This tree feels too close. I move it myself. My edit becomes part of the shared state the agent sees.",
+      "visual": "Drag a visible agent-created tree to a distinct new position. Keep the selection and human activity entry visible; capture the real pointer movement."
+    },
+    {
+      "id": "agent_readback",
+      "title": "Read what changed",
+      "duration_seconds": 23,
+      "narration": "I ask it to read the scene again and keep my new placement. It can see which tree moved, where it is now, and who made that change.",
+      "tts_narration": "I ask it to read the scene again and keep my new placement. It can see which tree moved, where it is now, and who made that change.",
+      "visual": "Record fresh native describe_scene and query_scene calls. Show the same tree ID, changed position, human edit and revision. Pond and cabin remain unchanged."
+    },
+    {
+      "id": "atmosphere",
+      "title": "Give our world an atmosphere",
+      "duration_seconds": 20,
+      "narration": "The light settles into moonlit blue, the lanterns glow, and the camera begins a slow, endless journey. My own lofi music gives everything room to breathe.",
+      "tts_narration": "The light settles into moonlit blue, the lanterns glow, and the camera begins a slow, endless journey. My own lofi music gives everything room to breathe.",
+      "visual": "Use native set_lighting and set_camera_motion on the same scene. Enable sound through an actual click if required. Read back running camera motion and real playback, then query unchanged object poses."
+    },
+    {
+      "id": "closing",
+      "title": "A little world, built together",
+      "duration_seconds": 15,
+      "narration": "One person. One browser agent. The same living scene. WebMCP connects real objects and actions with shared creative control. A little world, built together.",
+      "tts_narration": "One person. One browser agent. The same living scene. Web M C P connects real objects and actions with shared creative control. A little world, built together.",
+      "visual": "End on a moving view of the same retained scene. Briefly show the actual registration source, then the project title and live URL. No replacement scene or earlier take."
+    }
+  ],
+  "voice": {
+    "provider": "ElevenLabs",
+    "name": "Lily — Velvety Actress",
+    "voice_id": "pFZP5JQG7iQjIQuC4Bku",
+    "model_id": "eleven_v3",
+    "delivery": "Warm, relaxed narration with natural pauses and room for the lofi music."
+  }
+}

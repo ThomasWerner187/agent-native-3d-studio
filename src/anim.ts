@@ -34,6 +34,7 @@ interface Tween {
   ease: Ease;
   update: (k: number) => void;
   done?: () => void;
+  cancelled?: () => void;
   group?: string;
 }
 
@@ -75,23 +76,34 @@ export function tween(opts: {
   ease?: Ease;
   update: (k: number) => void;
   done?: () => void;
+  /** Cleanup for effects whose final action must still happen on interruption. */
+  cancelled?: () => void;
   /** Starting a tween in a group cancels the previous one in that group. */
   group?: string;
 }): void {
   if (opts.group) cancelGroup(opts.group);
+  if (opts.dur <= 0 && !(opts.delay && opts.delay > 0)) {
+    opts.update(1);
+    opts.done?.();
+    return;
+  }
   tweens.push({
     startAt: performance.now() + (opts.delay ?? 0),
     dur: opts.dur,
     ease: opts.ease ?? easeInOutCubic,
     update: opts.update,
     done: opts.done,
+    cancelled: opts.cancelled,
     group: opts.group,
   });
 }
 
 export function cancelGroup(group: string): void {
   for (let i = tweens.length - 1; i >= 0; i--) {
-    if (tweens[i].group === group) tweens.splice(i, 1);
+    if (tweens[i].group === group) {
+      const [cancelled] = tweens.splice(i, 1);
+      cancelled.cancelled?.();
+    }
   }
   flushGroup(group, false);
 }
@@ -100,7 +112,7 @@ export function updateTweens(now: number): void {
   for (let i = tweens.length - 1; i >= 0; i--) {
     const t = tweens[i];
     if (now < t.startAt) continue;
-    const k = Math.min(1, (now - t.startAt) / t.dur);
+    const k = t.dur <= 0 ? 1 : Math.min(1, (now - t.startAt) / t.dur);
     t.update(t.ease(k));
     if (k >= 1) {
       const group = t.group;
@@ -111,9 +123,28 @@ export function updateTweens(now: number): void {
   }
 }
 
+// A reveal is presentation, not an edit to the object's intended scale.
+const spawnTargets = new WeakMap<THREE.Object3D, THREE.Vector3>();
+
+export function getCanonicalScale(obj: THREE.Object3D): THREE.Vector3 {
+  return (spawnTargets.get(obj) ?? obj.scale).clone();
+}
+
+/** Hand over a newly appearing object at its intended size. */
+export function settleSpawn(obj: THREE.Object3D): void {
+  if (spawnTargets.has(obj)) cancelGroup(`spawn:${obj.uuid}`);
+}
+
 /** Pop-in spawn: scale from 0 to 1 with a little overshoot. */
 export function spawnPop(obj: THREE.Object3D, delay = 0, dur = 420): void {
+  settleSpawn(obj);
   const target = obj.scale.clone();
+  spawnTargets.set(obj, target);
+  const finish = () => {
+    obj.scale.copy(target);
+    obj.updateMatrix();
+    spawnTargets.delete(obj);
+  };
   obj.scale.setScalar(0.001);
   tween({
     delay,
@@ -123,19 +154,27 @@ export function spawnPop(obj: THREE.Object3D, delay = 0, dur = 420): void {
       const s = Math.max(0.001, k);
       obj.scale.set(target.x * s, target.y * s, target.z * s);
     },
+    done: finish,
+    cancelled: finish,
     group: `spawn:${obj.uuid}`,
   });
 }
 
 /** Shrink to nothing, then remove from parent. */
 export function despawn(obj: THREE.Object3D, done: () => void, dur = 260, delay = 0): void {
+  settleSpawn(obj);
   const start = obj.scale.clone();
   tween({
     delay,
     dur,
     ease: easeOutCubic,
-    update: (k) => obj.scale.copy(start).multiplyScalar(Math.max(0.001, 1 - k)),
+    update: (k) => {
+      obj.scale.copy(start).multiplyScalar(Math.max(0.001, 1 - k));
+      // Deleted roots are no longer in SceneStore's matrix synchronization.
+      obj.updateMatrix();
+    },
     done,
+    cancelled: done,
     group: `spawn:${obj.uuid}`,
   });
 }
@@ -175,6 +214,7 @@ export function rotateObject(obj: THREE.Object3D, to: { x?: number; y?: number; 
 }
 
 export function scaleObject(obj: THREE.Object3D, to: { x: number; y: number; z: number }, dur = 450): void {
+  settleSpawn(obj);
   const from = obj.scale.clone();
   const target = new THREE.Vector3(to.x, to.y, to.z);
   tween({
@@ -253,4 +293,9 @@ export function cancelCameraTween(): void {
 export function cancelAllToolTweens(): void {
   const groups = new Set(tweens.map((t) => t.group).filter((g): g is string => !!g));
   for (const g of groups) cancelGroup(g);
+}
+
+/** Camera-only movement and HUD outlines cannot change the sun's shadow map. */
+export function hasShadowTweens(): boolean {
+  return tweens.some(t => !!t.group && t.group !== 'camera');
 }

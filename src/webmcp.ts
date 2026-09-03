@@ -1,7 +1,8 @@
 import type { ToolContext } from './tools';
+import * as THREE from 'three';
 import {
   describeScene, queryScene, addObject, transformObject, setMaterial, setLighting,
-  frameCamera, cameraPath, scatter, snapshotTool, undoTool, setUi,
+  frameCamera, cameraPath, scatter, undoScatter, snapshotTool, undoTool, setUi, fullSizeBounds,
   deleteObjects, boardSquare, chessMove, setMusicTool, helpTool,
   exportScene, importScene, fail, ok,
 } from './tools';
@@ -31,10 +32,19 @@ export interface ToolDef {
   };
   /** Auto-capture a snapshot before this tool runs. */
   mutating?: boolean;
+  /** Has its own position journal instead of a whole-scene snapshot. */
+  journaled?: boolean;
   run: (ctx: ToolContext, args: Record<string, unknown>) => Promise<string> | string;
 }
 
 const TYPES = OBJECT_TYPES as unknown as string[];
+const EXPECTED_VERSION = {
+  expected_scene_version: {
+    type: 'integer',
+    minimum: 0,
+    description: 'Optional optimistic-lock version from describe_scene/query_scene. Rejects the edit if the scene changed since that observation.',
+  },
+};
 
 /**
  * CDP-only harnesses (Codex/ChatGPT driving Chrome without a WebMCP client)
@@ -49,6 +59,95 @@ const CDP_RECIPE = (name: string) =>
 
 export const TOOL_DEFS: ToolDef[] = [
   {
+    name: 'compose_lofi_scene',
+    description: 'Compose one of three authored cozy worlds with one undo point. Optional cycle visits all three after each hold, with a dark dip between worlds. Returns immediately. Read describe_scene for progress and sequence; control_lofi pauses/resumes/stops/advances. Human takeover pauses the full sequence. Audio may need a click.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      scene: { type: 'string', enum: ['lakeside_cabin', 'lantern_grove', 'island_hideaway'], description: 'Authored starting world. Default lakeside_cabin.' },
+      cycle: { type: 'boolean', description: 'Visit all three worlds repeatedly with one initial undo point. Default false.' },
+      hold_seconds: { type: 'number', minimum: 120, maximum: 1800, description: 'Enjoy each completed world before cycling. Default 180 seconds.' },
+      mood: { type: 'string', enum: ['moonlit', 'golden_hour'], description: 'Cool moonlight or warm sunset. Default moonlit.' },
+      build_seconds: { type: 'number', minimum: 12, maximum: 90, description: 'Slow reveal duration. Default 32 seconds.' },
+      seed: { type: 'integer', description: 'Repeatable forest arrangement. Default 42.' },
+      camera: { type: 'string', enum: ['cinematic', 'orbit'], description: 'Infinite camera direction. Default cinematic.' },
+      music: { type: 'boolean', description: 'Queue the local lofi playlist and fade in. Default true.' },
+    } },
+    mutating: true, annotations: { destructiveHint: true },
+    run: (ctx, args) => JSON.stringify(ctx.lofi.start(args)),
+  },
+  {
+    name: 'control_lofi',
+    description: 'Control the full lofi sequence: pause freezes build, camera and scene changes; resume continues it. next intentionally replaces the world with the next authored scene. stop cancels future changes and keeps current objects. undo restores the scene before the initial composition, including across cycles.',
+    inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'stop', 'next'] } }, required: ['action'] },
+    annotations: { destructiveHint: true },
+    run: (ctx, args) => {
+      if (!['pause', 'resume', 'stop', 'next'].includes(String(args.action))) return fail('action must be pause, resume, stop or next.');
+      if (args.action === 'resume' && !ctx.lofi.resume()) return fail('No paused lofi session to resume.');
+      if (args.action === 'next' && !ctx.lofi.next()) return fail('Start a lofi session first, or wait for the current scene transition to finish.');
+      if (args.action === 'pause') ctx.lofi.pause();
+      if (args.action === 'stop') ctx.lofi.stop();
+      return ok(ctx, { lofi: ctx.lofi.state });
+    },
+  },
+  {
+    name: 'set_camera_motion',
+    description: 'Start an infinite background orbit or cinematic camera, or pause/resume/stop it. Returns immediately. Cinematic varies height, distance and target continuously. Human dragging pauses it; explicit resume blends back gently. Works on any scene. Read describe_scene for live camera_motion.',
+    inputSchema: { type: 'object', properties: {
+      action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
+      mode: { type: 'string', enum: ['orbit', 'cinematic'] },
+      loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One full circuit. Default 240 seconds.' },
+      target: { type: 'string', description: 'Scene, or any object id/name to orbit. Default scene; uses its live bounds.' },
+    }, required: ['action'] },
+    run: (ctx, args) => {
+      const action = args.action, mode = args.mode ?? 'cinematic', period = args.loop_seconds ?? 240;
+      if (!['start', 'pause', 'resume', 'stop'].includes(String(action)) || !['orbit', 'cinematic'].includes(String(mode)) || typeof period !== 'number' || !Number.isFinite(period) || period < 60 || period > 600) return fail('Valid action, mode and loop_seconds (60–600) are required.');
+      const director = ctx.studio.director;
+      if (action === 'start') {
+        const target = String(args.target ?? 'scene');
+        const bounds = new THREE.Box3();
+        if (target === 'scene') for (const entry of ctx.store.all()) bounds.union(fullSizeBounds(entry.group));
+        else {
+          const resolved = ctx.store.resolve(target);
+          if (!resolved.ok) return fail(resolved.error, 'unknown_target');
+          bounds.copy(fullSizeBounds(resolved.entry.group));
+        }
+        const sphere = bounds.isEmpty() ? new THREE.Sphere(ctx.studio.controls.target.clone(), 5) : bounds.getBoundingSphere(new THREE.Sphere());
+        ctx.lofi.preferMotion(mode as 'orbit' | 'cinematic');
+        director.start(mode as 'orbit' | 'cinematic', period, sphere.center, sphere.radius);
+      }
+      if (action === 'pause') director.pause();
+      if (action === 'stop') director.stop();
+      if (action === 'resume' && !director.resume()) return fail('No paused camera motion to resume.');
+      return ok(ctx, { camera_motion: director.state });
+    },
+  },
+  {
+    name: 'arrange_scene',
+    description: 'Adapt the existing diorama path, grove and lanterns to the live camp placement. Preserves the camp, selection and all human-edited objects. Searches around fixed obstacles before changing anything. Returns preserved_ids and moved_ids; undo_layout reverses only its positions.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      anchor: { type: 'string', description: 'Camp id/name. Defaults to selected camp, otherwise camp.' },
+      seed: { type: 'integer', description: 'Deterministic grove variation. Default 42.' },
+      clearance: { type: 'number', minimum: 0.3, maximum: 2, description: 'Extra clearance around camp and path. Default 0.6.' },
+    } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async (ctx, args) => JSON.stringify(await ctx.layout.arrange(args)),
+  },
+  {
+    name: 'undo_layout',
+    description: 'Undo the most recent arrangement, position by position. Keeps the camp, later human edits, material changes and newly created objects. Returns moved_ids and skipped_ids. Use this instead of whole-scene undo for cooperative layouts.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo()),
+  },
+  {
+    name: 'redo_layout',
+    description: 'Reapply the last undone layout, preserving objects changed since the undo. Returns moved_ids and skipped_ids.',
+    inputSchema: { type: 'object', properties: { ...EXPECTED_VERSION } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: async ctx => JSON.stringify(await ctx.layout.undo(true)),
+  },
+  {
     name: 'help',
     description:
       'START HERE. One call returns the studio playbook: workflow conventions, build/camera/chess recipes, ' +
@@ -60,7 +159,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'describe_scene',
     description:
-      'Read the current state of the 3D scene at a glance: object counts by type, the first objects with id/name/type/position/rotation/scale/color, the camera pose and the active lighting preset. Read-only. For large scenes use query_scene with pagination instead of relying on the truncated list.',
+      'Read live scene state: selection, human edits, layout undo availability, object counts, positions, camera and lighting. Start here before arranging around a human placement. Large lists are truncated; query_scene paginates and returns bounds. Read-only.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -111,6 +210,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'The kind of object to add.' },
         piece: {
           type: 'string',
@@ -138,8 +238,9 @@ export const TOOL_DEFS: ToolDef[] = [
           },
         },
         rotation_y: { type: 'number', description: 'Rotation around the vertical axis, in degrees.' },
-        name: { type: 'string', description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
+        name: { type: 'string', maxLength: 120, description: 'Short human-readable name (e.g. "reading lamp"). Helps later targeting.' },
         animate: { type: 'boolean', description: 'false = bulk placement: the object pops in staggered, but the call returns immediately instead of waiting for the pop (default true).' },
+        delay_ms: { type: 'number', minimum: 0, maximum: 2000, description: 'animate:false only: delay the pop for authored reveals, in milliseconds.' },
       },
       required: ['type'],
     },
@@ -156,6 +257,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id (e.g. "obj_3") or name — or an array of those to edit many at once.',
@@ -187,6 +289,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Object id, name, or array of those.',
@@ -214,6 +317,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         preset: { type: 'string', enum: LIGHTING_PRESETS as unknown as string[], description: 'The lighting mood.' },
         intensity: { type: 'number', minimum: 0, maximum: 2, description: '1 = normal, 0.5 = dimmer, 1.5 = brighter.' },
         azimuth: {
@@ -237,6 +341,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         target: { type: 'string', description: 'An object id/name, or "scene" for the whole scene.' },
         angle: {
           type: 'string',
@@ -269,6 +374,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         keyframes: {
           type: 'array',
           description: 'The shots in order. Each: {target, angle?, distance?, focal_length?, duration_ms?, hold_ms?}.',
@@ -301,17 +407,20 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'scatter',
     description:
-      'The power tool: distribute many copies of one type across a rectangular area with natural variation — ' +
-      'forests, boulder fields, lantern rows. exclusion_zones keep paths clear; avoid_object_ids dodge existing ' +
-      'objects. Pass a seed to reproduce the exact layout. Use instead of many add_object calls.',
+      'Add exactly count objects around any live anchor or within area. Preserves and avoids all existing objects, ' +
+      'their real footprints, and other additions. Seeded planning either fits every object or changes nothing. ' +
+      'Returns undo_id; undo_scatter keeps later human edits.',
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         type: { type: 'string', enum: TYPES, description: 'What to scatter (usually tree, rock or lamp).' },
-        count: { type: 'number', minimum: 1, maximum: 200, description: 'How many instances to place.' },
+        count: { type: 'integer', minimum: 1, maximum: 200, description: 'Exact number to place; fails without changes if they cannot all fit.' },
+        anchor: { type: 'string', description: 'Any existing object id/name. Without area, derives a spacious region around its live bounds.' },
+        clearance: { type: 'number', minimum: 0, maximum: 5, description: 'Minimum gap between real footprints and preserved objects. Default 0.4.' },
         area: {
           type: 'object',
-          description: 'Rectangle to fill. Default: 10x10 around the center.',
+          description: 'Rectangle containing complete object footprints. Default: around anchor, or 10x10 at the origin.',
           properties: {
             center_x: { type: 'number', description: 'Center of the area, world x.' },
             center_z: { type: 'number', description: 'Center of the area, world z.' },
@@ -338,21 +447,31 @@ export const TOOL_DEFS: ToolDef[] = [
         },
         avoid_object_ids: {
           type: 'array',
-          description: 'Keep clear of these existing objects (ids or names).',
+          description: 'Additional named obstacles (ids/names), validated before planning. All existing objects are always avoided.',
           items: { type: 'string' },
         },
         footprint: {
           type: 'string',
           enum: ['pad', 'actual_bounds'],
-          description: 'pad = fixed safety margin around each avoided object; actual_bounds = real bounding box. Default pad.',
+          description: 'Compatibility parameter. Both values now preserve full actual bounds; clearance sets the gap.',
         },
-        seed: { type: 'number', description: 'RNG seed for reproducible layouts. Omit to get a random one (returned in the result).' },
+        seed: { type: 'integer', description: 'RNG seed for reproducible layouts. Omit to get a random one (returned in the result).' },
       },
       required: ['type', 'count'],
     },
-    annotations: { idempotentHint: true },
+    annotations: { destructiveHint: false },
     mutating: true,
     run: (ctx, args) => scatter(ctx, args),
+  },
+  {
+    name: 'undo_scatter',
+    description: 'Remove unchanged additions from one scatter. Preserves every existing object and additions edited or deleted afterward. Returns removed_ids and skipped_ids; never restores a whole scene.',
+    inputSchema: { type: 'object', properties: {
+      ...EXPECTED_VERSION,
+      undo_id: { type: 'string', description: 'Id returned by scatter. Defaults to the most recent scatter.' },
+    } },
+    annotations: { destructiveHint: false }, mutating: true, journaled: true,
+    run: (ctx, args) => undoScatter(ctx, args),
   },
   {
     name: 'set_ui',
@@ -379,6 +498,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         targets: {
           type: ['string', 'array'],
           description: 'Explicit object id(s)/name(s) to delete.',
@@ -395,8 +515,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'export_scene',
     description:
-      'Export the whole scene (objects, materials, camera, lighting) and get a share link: the URL contains the scene, ' +
-      'anyone can open it and see the exact scene — no WebMCP or setup needed. Also returned as JSON for import_scene.',
+      'Export objects, materials, camera and lighting as a compressed portable share URL. import_scene accepts it and older scene links. Copy or save the returned link before reloading; the active URL stays unchanged. Very large scenes or old uncompressed links may exceed browser-agent URL limits.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     run: (ctx, args) => exportScene(ctx, args),
@@ -409,6 +528,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         json: { type: 'string', description: 'Scene JSON from export_scene. Omit if you pass url.' },
         url: { type: 'string', description: 'A share link containing #scene=... .' },
       },
@@ -420,12 +540,11 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'batch',
     description:
-      'Run up to 200 tool calls in ONE turn: ops is an array of {tool, args}. One snapshot, one result with every ' +
-      'operation outcome, undo rolls the whole batch back. Use for complete setups (e.g. furniture + light + camera) ' +
-      'instead of many separate calls. Not nestable; batch/undo/snapshot are rejected inside.',
+      'Run up to 200 scene edits/readouts in one turn: ops is an array of {tool,args}. One undo point. Stops on failure and rolls back; human takeover preserves partial work. Put expected_scene_version on the batch. Run UI, music, share links, background sessions and layout journals separately.',
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         ops: {
           type: 'array',
           minItems: 1,
@@ -472,6 +591,7 @@ export const TOOL_DEFS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...EXPECTED_VERSION,
         piece: { type: 'string', description: 'The piece to move — id (e.g. "obj_17") or name (e.g. "white king e2").' },
         to: { type: 'string', description: 'Target square in algebraic notation, e.g. "e4" (files a-h, ranks 1-8).' },
         board: { type: 'string', description: 'Optional chessboard id/name. Omit to use the chessboard nearest the piece.' },
@@ -536,7 +656,7 @@ for (const def of TOOL_DEFS) def.description += CDP_RECIPE(def.name);
  * Live measurement showed model turns (not scene animation) dominate agent
  * wall-clock, so collapsing turns is the single biggest speed lever.
  */
-const BATCH_DISALLOWED = new Set(['batch', 'undo', 'snapshot']);
+const BATCH_DISALLOWED = new Set(['compose_lofi_scene', 'control_lofi', 'set_camera_motion', 'batch', 'undo', 'snapshot', 'arrange_scene', 'undo_layout', 'redo_layout', 'undo_scatter', 'set_ui', 'set_music', 'export_scene']);
 
 export async function batch(ctx: ToolContext, args: Record<string, unknown>): Promise<string> {
   const ops = Array.isArray(args.ops) ? args.ops : null;
@@ -549,7 +669,12 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
   // undo a no-op.
 
   const results: Record<string, unknown>[] = [];
+  const humanRevision = ctx.store.humanRevision;
+  const humanChanges = { count: 0 };
+  const batchContext = { ...ctx, humanChanges };
+  const versionBefore = ctx.store.version;
   let failed = 0;
+  let interrupted = false;
   for (let i = 0; i < ops.length; i++) {
     const op = ops[i] as { tool?: unknown; args?: unknown };
     const name = String(op?.tool ?? '');
@@ -557,15 +682,20 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
     if (!def) {
       failed++;
       results.push({ index: i, ok: false, code: 'unknown_tool', error: `Unknown tool "${name}".` });
-      continue;
+      break;
     }
     if (BATCH_DISALLOWED.has(name)) {
       failed++;
       results.push({ index: i, ok: false, code: 'bad_request', error: `"${name}" cannot run inside batch.` });
-      continue;
+      break;
     }
     try {
-      const res = await def.run(ctx, (op?.args ?? {}) as Record<string, unknown>);
+      const input = (op?.args ?? {}) as Record<string, unknown>;
+      const error = validateArguments(input, def.inputSchema, `ops[${i}].args`);
+      const expected = input.expected_scene_version;
+      const res = error ? fail(error, 'bad_request')
+        : expected != null && expected !== ctx.store.version ? fail('Nested expected_scene_version is stale. Put the observed version on the batch itself.', 'stale_scene')
+        : await def.run(batchContext, input);
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(res) as Record<string, unknown>;
@@ -574,75 +704,188 @@ export async function batch(ctx: ToolContext, args: Record<string, unknown>): Pr
       }
       if (parsed.ok === false) failed++;
       results.push({ index: i, tool: name, ...parsed });
+      interrupted = parsed.applied === false || ctx.store.humanRevision !== humanRevision + humanChanges.count;
+      if (failed || interrupted) break;
     } catch (e) {
       failed++;
       results.push({ index: i, tool: name, ok: false, code: 'internal_error', error: e instanceof Error ? e.message : String(e) });
+      break;
     }
   }
 
   // atomic: any failed operation rolls the whole batch back (one snapshot)
-  const status = failed > 0 ? 'rolled_back' : 'applied';
-  if (failed > 0) ctx.snapshots.restoreLast();
+  // Human takeover must never be overwritten by a whole-scene rollback.
+  interrupted ||= ctx.store.humanRevision !== humanRevision + humanChanges.count;
+  const status = interrupted ? 'interrupted' : failed > 0 ? 'rolled_back' : 'applied';
+  if (status === 'rolled_back') {
+    const snapshot = transactionSnapshots.get(ctx.store);
+    if (snapshot && ctx.store.version !== versionBefore) ctx.snapshots.restoreSnapshot(snapshot);
+  }
   const payload: Record<string, unknown> = {
     operations: ops.length,
     failed,
+    operations_attempted: results.length,
     transaction_status: status,
     results,
-    note: status === 'rolled_back'
+    note: interrupted
+      ? 'The batch stopped when an operation was interrupted or a human edited the scene. Live partial changes and human work are preserved; inspect the scene before continuing.'
+      : status === 'rolled_back'
       ? `${failed} of ${ops.length} operations failed — the batch was rolled back atomically; the scene is unchanged.`
       : `All ${ops.length} operations applied. undo rolls the whole batch back.`,
   };
-  if (failed > 0) {
-    return JSON.stringify({ ok: false, code: 'batch_rolled_back', transaction_status: status, ...payload });
+  if (failed > 0 || interrupted) {
+    return JSON.stringify({ ok: false, applied: false, code: interrupted ? 'batch_interrupted' : 'batch_rolled_back', error: payload.note, ...payload });
   }
   return ok(ctx, payload);
 }
 
 const MUTATING = new Set(TOOL_DEFS.filter((t) => t.mutating).map((t) => t.name));
+const activeTransactions = new WeakMap<ToolContext['store'], string>();
+const transactionSnapshots = new WeakMap<ToolContext['store'], string>();
+
+/** Enforce the same small schema vocabulary advertised to native hosts.
+ * The development harness and nested batch calls must obey it as well. */
+function validateArguments(value: unknown, schema: Record<string, unknown>, path = 'args'): string | null {
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  const isRecord = value !== null && typeof value === 'object' && !Array.isArray(value);
+  const matches = (type: unknown) => type === undefined
+    || (type === 'object' && isRecord)
+    || (type === 'array' && Array.isArray(value))
+    || (type === 'number' && typeof value === 'number' && Number.isFinite(value))
+    || (type === 'integer' && typeof value === 'number' && Number.isSafeInteger(value))
+    || (type === 'string' && typeof value === 'string')
+    || (type === 'boolean' && typeof value === 'boolean');
+  if (!types.some(matches)) return `${path} must be ${types.join(' or ')}.`;
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return `${path} must be one of: ${schema.enum.join(', ')}.`;
+  if (typeof value === 'number') {
+    if (typeof schema.minimum === 'number' && value < schema.minimum) return `${path} must be at least ${schema.minimum}.`;
+    if (typeof schema.maximum === 'number' && value > schema.maximum) return `${path} must be at most ${schema.maximum}.`;
+  }
+  if (typeof value === 'string' && typeof schema.maxLength === 'number' && value.length > schema.maxLength) return `${path} must be at most ${schema.maxLength} characters.`;
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === 'number' && value.length < schema.minItems) return `${path} needs at least ${schema.minItems} items.`;
+    if (value.length > (typeof schema.maxItems === 'number' ? schema.maxItems : 600)) return `${path} contains too many items.`;
+    if (schema.items) for (let i = 0; i < value.length; i++) {
+      const error = validateArguments(value[i], schema.items as Record<string, unknown>, `${path}[${i}]`);
+      if (error) return error;
+    }
+  }
+  if (isRecord) {
+    const record = value as Record<string, unknown>;
+    for (const key of (schema.required ?? []) as string[]) if (record[key] === undefined) return `${path}.${key} is required.`;
+    for (const [key, child] of Object.entries((schema.properties ?? {}) as Record<string, Record<string, unknown>>)) {
+      if (record[key] === undefined) continue;
+      const error = validateArguments(record[key], child, `${path}.${key}`);
+      if (error) return error;
+    }
+  }
+  return null;
+}
 
 export type ToolLogger = (tool: string, args: Record<string, unknown>, result: string) => void;
 
+function invocationId(): string {
+  return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** Shared invocation path: auto-snapshot, run, log. Used by WebMCP and dev harness alike. */
-async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal): Promise<string> {
+async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unknown>, log: ToolLogger, signal?: AbortSignal, actor: 'agent' | 'human' | 'demo' = 'agent'): Promise<string> {
   ctx.studio.noteActivity();
+  ctx.store.syncMatrices();
   const t0 = performance.now();
+  const fallbackOperationId = invocationId();
   const versionBefore = ctx.store.version;
   const isMutating = MUTATING.has(def.name);
+  const nextLofiScene = def.name === 'control_lofi' && args?.action === 'next';
+  const transaction = isMutating || def.name === 'undo' || def.name === 'snapshot' || nextLofiScene;
+  const argumentError = validateArguments(args, def.inputSchema);
+  const active = transaction && activeTransactions.get(ctx.store);
+  if (argumentError || active) {
+    const result = JSON.stringify({ ok: false, code: argumentError ? 'bad_request' : 'scene_busy',
+      operation_id: fallbackOperationId, actor, applied: false, scene_version_before: versionBefore,
+      scene_version_after: versionBefore, duration_ms: 0,
+      error: argumentError ?? `The ${active} operation is still settling. Re-observe the scene and retry when it completes.` });
+    log(def.name, args, result); return result;
+  }
+  if (ctx.layout.busy && (isMutating || def.name === 'undo' || nextLofiScene)) {
+    const result = JSON.stringify({ ok: false, operation_id: fallbackOperationId, scene_version_before: versionBefore, scene_version_after: ctx.store.version, duration_ms: 0, code: 'layout_busy', actor, applied: false, error: 'A layout is still running. Read the scene after it settles and retry.' });
+    log(def.name, args, result);
+    return result;
+  }
+
+  if (ctx.lofi.building && isMutating && def.name !== 'compose_lofi_scene') {
+    const result = JSON.stringify({ ok: false, code: 'lofi_busy', operation_id: fallbackOperationId, actor, applied: false,
+      scene_version_before: versionBefore, scene_version_after: versionBefore, duration_ms: 0,
+      error: 'Lofi construction is active. Read describe_scene, or control_lofi stop before editing. undo restores the original scene.' });
+    log(def.name, args, result); return result;
+  }
 
   // optimistic concurrency: reject stale plans before touching the scene
   const expected = args?.expected_scene_version;
   if (isMutating && expected != null) {
-    const exp = Number(expected);
-    if (Number.isFinite(exp) && exp !== ctx.store.version) {
-      const result = JSON.stringify({
-        ok: false, code: 'stale_scene',
-        error: `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
-        expected_scene_version: exp, actual_scene_version: ctx.store.version,
-      });
+    const exp = expected;
+    const failure = (code: string, error: string, extra: Record<string, unknown> = {}) => JSON.stringify({
+      ok: false,
+      code,
+      operation_id: fallbackOperationId,
+      actor,
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error,
+      ...extra,
+    });
+    if (typeof exp !== 'number' || !Number.isSafeInteger(exp) || exp < 0) {
+      const result = failure('bad_request', 'expected_scene_version must be a non-negative integer.');
+      log(def.name, args ?? {}, result);
+      return result;
+    }
+    if (exp !== ctx.store.version) {
+      const result = failure(
+        'stale_scene',
+        `Stale observation: you saw scene_version ${exp}, but the scene is now ${ctx.store.version} (the human or another operation changed it). Re-observe with describe_scene/query_scene and retry.`,
+        { expected_scene_version: exp, actual_scene_version: ctx.store.version },
+      );
       log(def.name, args ?? {}, result);
       return result;
     }
   }
 
   // exactly one snapshot per logical transaction, taken here (central ownership)
-  const snapId = isMutating ? ctx.snapshots.capture(`before ${def.name}`) : null;
+  const snapId = isMutating && !def.journaled ? ctx.snapshots.capture(`before ${def.name}`) : null;
 
   if (signal?.aborted) {
     if (snapId) ctx.snapshots.discard(snapId);
-    const result = JSON.stringify({ ok: false, code: 'cancelled', error: 'Cancelled before it started.', applied: false });
+    const result = JSON.stringify({
+      ok: false,
+      code: 'cancelled',
+      operation_id: fallbackOperationId,
+      actor,
+      scene_version_before: versionBefore,
+      scene_version_after: ctx.store.version,
+      applied: false,
+      duration_ms: Math.round(performance.now() - t0),
+      error: 'Cancelled before it started.',
+    });
     log(def.name, args ?? {}, result);
     return result;
   }
-  const onAbort = () => cancelAllToolTweens();
+  const onAbort = () => { if (transaction) cancelAllToolTweens(); };
   signal?.addEventListener('abort', onAbort, { once: true });
 
   let result: string;
+  if (transaction) activeTransactions.set(ctx.store, def.name);
+  if (snapId) transactionSnapshots.set(ctx.store, snapId);
   try {
-    result = await def.run(ctx, args ?? {});
+    result = await def.run({ ...ctx, actor, ...(signal ? { signal } : {}) }, args ?? {});
   } catch (e) {
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   } finally {
     signal?.removeEventListener('abort', onAbort);
+    ctx.store.syncMatrices();
+    if (transaction) activeTransactions.delete(ctx.store);
+    if (snapId) transactionSnapshots.delete(ctx.store);
   }
 
   // uniform operation envelope: every invocation reports the same metadata
@@ -657,12 +900,14 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
     // the run finished, but cancellation arrived mid-flight: report honestly
     data = { ...data, applied: false, cancelled: true };
   }
-  if (!ok && snapId) ctx.snapshots.discard(snapId); // failed calls leave no undo noise
+  // A failed call with partial effects must remain reversible. Pure validation
+  // failures and an explicitly rolled-back batch leave no undo noise.
+  if (!ok && snapId && (ctx.store.version === versionBefore || data.transaction_status === 'rolled_back')) ctx.snapshots.discard(snapId);
 
   const envelope: Record<string, unknown> = {
     ok,
-    operation_id: typeof data.operation_id === 'string' ? data.operation_id : undefined,
-    actor: 'agent',
+    operation_id: typeof data.operation_id === 'string' ? data.operation_id : fallbackOperationId,
+    actor,
     scene_version_before: versionBefore,
     scene_version_after: ctx.store.version,
     applied: (data.applied as boolean) ?? ok,
@@ -675,6 +920,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   } else {
     envelope.code = data.code ?? 'internal_error';
     envelope.error = data.error ?? 'operation failed';
+    envelope.result = data;
   }
   result = JSON.stringify(envelope);
   log(def.name, args ?? {}, result);
@@ -724,10 +970,11 @@ export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   log: ToolLogger,
+  actor: 'agent' | 'human' | 'demo' = 'demo',
 ): Promise<string> {
   const def = TOOL_DEFS.find((t) => t.name === name);
   if (!def) {
     return JSON.stringify({ ok: false, code: 'unknown_tool', error: `Unknown tool "${name}". Available: ${TOOL_DEFS.map((t) => t.name).join(', ')}` });
   }
-  return invoke(ctx, def, args ?? {}, log);
+  return invoke(ctx, def, args ?? {}, log, undefined, actor);
 }
