@@ -14,6 +14,7 @@ import { LayoutManager } from './layout';
 import { LofiSession } from './lofi';
 import { initLofiUI } from './lofi-ui';
 import { initCollaborationUI } from './collaboration-ui';
+import { initDemoBrowser } from './demo-browser';
 import { cancelAllToolTweens } from './anim';
 import * as THREE from 'three';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
@@ -272,6 +273,8 @@ initCollaborationUI(ctx, localCall, {
     toast('A fresh canvas. Place a pond, then a cabin.');
   },
 });
+
+initDemoBrowser(ctx);
 
 function frameEmptyScene(): void {
   studio.noteActivity();

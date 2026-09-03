@@ -3,7 +3,7 @@ import { cancelCameraTween } from './anim';
 import type { Studio } from './scene';
 
 export type MotionMode = 'orbit' | 'cinematic' | 'drift';
-export interface MotionFraming { distance?: number; height?: number; azimuthDegrees?: number; sweepDegrees?: number; blendSeconds?: number }
+export interface MotionFraming { distance?: number; height?: number; azimuthDegrees?: number; sweepDegrees?: number; blendSeconds?: number; fromCurrentView?: boolean }
 
 /** A background camera, not a never-resolving tool call. Human input wins. */
 export class CameraDirector {
@@ -24,6 +24,7 @@ export class CameraDirector {
   private explicitFraming = false;
   private sweep = THREE.MathUtils.degToRad(50);
   private blendSeconds = 8;
+  private fromCurrentView = false;
 
   constructor(private studio: Studio) {}
 
@@ -32,6 +33,7 @@ export class CameraDirector {
       elapsed_seconds: Math.round(this.elapsed * 10) / 10, loops: Math.floor(this.elapsed / this.period),
       shot: this.mode === 'orbit' ? 'Endless orbit' : this.mode === 'drift' ? 'Quiet garden drift' : this.shot,
       distance: this.radius, height: this.height, sweep_degrees: this.mode === 'drift' ? THREE.MathUtils.radToDeg(this.sweep) : 360,
+      from_current_view: this.fromCurrentView,
       focus: this.focus.toArray(), scene_radius: this.sceneRadius ?? this.studio.terrain.radius,
       infinite: this.status !== 'stopped', reason: this.reason };
   }
@@ -45,6 +47,7 @@ export class CameraDirector {
     cancelCameraTween();
     this.studio.noteActivity();
     this.mode = mode; this.period = period; this.elapsed = 0;
+    this.fromCurrentView = mode === 'orbit' && framingOptions.fromCurrentView === true;
     this.focus.copy(focus ?? this.studio.controls.target);
     this.sceneRadius = boundsRadius != null && Number.isFinite(boundsRadius) ? Math.max(1, boundsRadius) : null;
     const offset = this.studio.camera.position.clone().sub(this.focus);
@@ -55,6 +58,7 @@ export class CameraDirector {
     const framing = Math.max(1, 1 / this.studio.camera.aspect);
     this.radius = framingOptions.distance ?? (mode === 'drift' ? 20 : Math.max(9, Math.hypot(offset.x, offset.z) / framing, (this.sceneRadius ?? 0) * 2.15));
     this.height = framingOptions.height ?? (mode === 'drift' ? 8 : Math.max(5, offset.y / framing, (this.sceneRadius ?? 0) * 1.35));
+    if (this.fromCurrentView) this.adoptCurrentView();
     this.status = 'running'; this.reason = '';
     this.captureBlend();
   }
@@ -64,9 +68,11 @@ export class CameraDirector {
     this.status = 'paused'; this.reason = reason;
   }
 
-  resume(): boolean {
+  resume(fromCurrentView = this.mode === 'orbit'): boolean {
     if (this.status !== 'paused') return false;
     cancelCameraTween();
+    this.studio.noteActivity();
+    if (this.mode === 'orbit' && fromCurrentView) this.adoptCurrentView();
     this.captureBlend();
     this.status = 'running'; this.reason = '';
     return true;
@@ -74,11 +80,30 @@ export class CameraDirector {
 
   stop(): void { this.status = 'stopped'; this.reason = ''; }
 
+  /** Resume around the human's current framing, including their latest zoom. */
+  private adoptCurrentView(): void {
+    this.fromCurrentView = true;
+    this.explicitFraming = true;
+    this.focus.copy(this.studio.controls.target);
+    this.sceneRadius = null;
+    const offset = this.studio.camera.position.clone().sub(this.focus);
+    const min = this.studio.controls.minDistance ?? 0;
+    const max = this.studio.controls.maxDistance ?? Infinity;
+    if (offset.lengthSq() === 0) offset.set(0, 0, min);
+    else offset.clampLength(min, max);
+    this.radius = Math.hypot(offset.x, offset.z);
+    this.height = offset.y;
+    // Preserve elapsed loop accounting while anchoring its current phase here.
+    this.phase = Math.atan2(offset.x, offset.z) - this.elapsed / this.period * Math.PI * 2;
+  }
+
   private captureBlend(): void {
     this.fromPosition.copy(this.studio.camera.position);
     this.fromTarget.copy(this.studio.controls.target);
     this.fromFov = this.studio.camera.fov;
-    this.blend = 0;
+    // A captured orbit is already on its path; blending two orbit positions
+    // would briefly dolly inward and could cross controls.minDistance.
+    this.blend = this.fromCurrentView ? 1 : 0;
   }
 
   update(dt: number): void {
@@ -89,7 +114,8 @@ export class CameraDirector {
     const drift = this.mode === 'drift';
     const a = this.phase + (drift ? Math.sin(t) * this.sweep / 2 : t);
     const cinematic = this.mode === 'cinematic';
-    const scale = Math.max(1, 1 / this.studio.camera.aspect);
+    // A captured view already includes portrait framing and the user's zoom.
+    const scale = this.fromCurrentView ? 1 : Math.max(1, 1 / this.studio.camera.aspect);
     const island = this.sceneRadius ?? this.studio.terrain.radius;
     // A periodic, continuous path: no cuts, endpoint snaps or camera through trees.
     const r = drift ? this.radius * (1 - 0.035 * Math.sin(t))

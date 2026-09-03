@@ -1,6 +1,8 @@
 /** Engineering QA through the local harness; this is not native WebMCP evidence. */
 export async function collaborationChecks({ page, run, describe, check, decodeScene }) {
   await page.getByRole('button', { name: 'Close local tool inspector', exact: true }).click();
+  const studioTools = page.getByRole('button', { name: 'Studio tools', exact: true });
+  if (await studioTools.getAttribute('aria-expanded') === 'false') await studioTools.click();
   const call = async (tool, args = {}) => JSON.parse(await run(tool, args));
   const query = async args => (await call('query_scene', { limit: 200, ...args })).result.objects;
   const edit = async (label, value) => {

@@ -140,7 +140,7 @@ export class Studio {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.cinematic ? 1.5 : 1));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.autoUpdate = false;
@@ -399,13 +399,20 @@ export class Studio {
   }
 
   private onResize(): void {
+    const bounds = this.renderer.domElement.getBoundingClientRect();
+    this.resizeViewport(bounds.width, bounds.height);
+  }
+
+  /** Keep rendering and pointer projection aligned with the actual canvas. */
+  resizeViewport(width: number, height: number): void {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) return;
     const previousScale = Math.max(1, 1 / this.camera.aspect);
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.aspect = width / height;
     const factor = Math.max(1, 1 / this.camera.aspect) / previousScale;
     this.camera.position.sub(this.controls.target).multiplyScalar(factor).add(this.controls.target);
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(width, height, false);
+    this.composer.setSize(width, height);
   }
 
   invalidateShadows(): void { this.renderer.shadowMap.needsUpdate = true; }

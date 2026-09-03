@@ -15,6 +15,12 @@ if (process.argv.includes('--plan')) {
 }
 const capture = JSON.parse(await readFile(resolve(root, 'native-capture.json'), 'utf8'));
 const clips = validateCaptureTimeline(capture, plan);
+const width = capture.layout?.width ?? 1280;
+const height = capture.layout?.height ?? 720;
+if (width !== 1280 || height !== 720 || (capture.layout?.mode === 'demo-browser' &&
+  (capture.layout.sidebar_width !== 320 || capture.layout.bar_height !== 42))) {
+  throw new Error('Capture layout must be 1280×720; demo-browser uses a 320px sidebar and 42px bar.');
+}
 for (const { id: name, duration } of plan.shots) {
   if (selected.length && !selected.includes(name)) continue;
   const clip = clips.find(item => item.id === name);
@@ -40,7 +46,7 @@ for (const { id: name, duration } of plan.shots) {
   const manifest = resolve(root, `${name}.ffconcat`);
   await writeFile(manifest, `${lines.join('\n')}\n`);
   const encoded = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', manifest,
-    '-vf', 'fps=30,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p',
+    '-vf', `fps=30,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
     '-t', String(duration), '-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-movflags', '+faststart', '-an', resolve(root, `${name}.mp4`)], { stdio: 'inherit' });
   if (encoded.status !== 0) throw Error(`${name}: ffmpeg failed`);
   console.log(`${name}: ${frames.length} genuine frames, ${duration}s`);

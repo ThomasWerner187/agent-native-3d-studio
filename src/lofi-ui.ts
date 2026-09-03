@@ -34,7 +34,9 @@ export function initLofiUI(ctx: ToolContext, call: Call, stopTour: () => void) {
   el('lofi-motion').addEventListener('change', () => void run('set_camera_motion', { action: 'start', mode: (el('lofi-motion') as HTMLSelectElement).value }));
   el('camera-orbit').addEventListener('click', () => {
     const state = ctx.studio.director.state;
-    void run('set_camera_motion', { action: state.status === 'running' ? 'pause' : state.status === 'paused' ? 'resume' : 'start', mode: 'orbit' });
+    const action = state.status === 'running' ? 'pause' : state.status === 'paused' ? 'resume' : 'start';
+    void run('set_camera_motion', { action, mode: 'orbit',
+      ...(action === 'start' || state.mode === 'orbit' ? { from_current_view: true } : {}) });
   });
   el('lofi-sound').addEventListener('click', () => {
     const music = musicState();

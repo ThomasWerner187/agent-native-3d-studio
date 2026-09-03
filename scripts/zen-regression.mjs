@@ -127,23 +127,85 @@ try {
   assert.equal(impossible.code, 'no_space');
   assert.deepEqual({ size: edge.store.size, version: edge.store.version, ids: edge.store.idCount, snapshots: edge.captures.length }, before);
   edge.dispose();
+  // smoke.mjs evaluates its top-level-await regression imports concurrently;
+  // another fixture can restore its document shim while this one is running.
+  // CameraDirector only needs the visibility flag from this point onward.
+  globalThis.document ??= {};
   globalThis.document.hidden = false;
   const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 1000); camera.position.set(30, 30, 30);
-  const studio = { camera, controls: { target: new THREE.Vector3() }, terrain: { radius: 200 }, noteActivity() {} };
+  const studio = { camera, controls: { target: new THREE.Vector3(), minDistance: 2.5, maxDistance: 120 }, terrain: { radius: 200 }, noteActivity() {} };
   const director = new CameraDirector(studio), focus = new THREE.Vector3(1, 1, 2);
-  director.start('drift', 240, focus, 80, { distance: 22, height: 8, azimuthDegrees: 18, sweepDegrees: 50, blendSeconds: 1 });
+  director.start('drift', 240, focus, 80, { distance: 17.5, height: 4.8, azimuthDegrees: 18, sweepDegrees: 50, blendSeconds: 1 });
   const samples = [];
   for (let i = 0; i < 241; i++) { director.update(1); samples.push(camera.position.clone()); }
   for (const point of samples.slice(1)) {
     const offset = point.clone().sub(focus);
-    assert(Math.hypot(offset.x, offset.z) < 23 && Math.hypot(offset.x, offset.z) > 21, 'Explicit distance must not grow to full world bounds');
-    assert(offset.y > 7.5 && offset.y < 8.5);
+    assert(Math.hypot(offset.x, offset.z) < 18.2 && Math.hypot(offset.x, offset.z) > 16.8, 'Explicit demo distance must not grow to full world bounds');
+    assert(offset.y > 4.4 && offset.y < 5.2);
     assert(offset.z > 0, 'The cozy drift must never go behind the forest');
   }
   assert(samples[0].distanceTo(samples[240]) < 1e-7, 'The infinite drift closes seamlessly');
   director.pause('human input'); const paused = camera.position.clone(); director.update(10); assert(camera.position.equals(paused));
   assert(director.resume()); director.update(1); assert(!camera.position.equals(paused));
   console.log(' ✓ atomic no-space failure, intimate periodic camera, human pause/resume');
+
+  const close = (actual, expected, label) => assert(Math.abs(actual - expected) < 1e-7, `${label}: ${actual} != ${expected}`);
+  for (const aspect of [16 / 9, 9 / 16]) for (const distance of [2.5, 5, 17.5, 119]) {
+    camera.aspect = aspect;
+    studio.controls.target.set(4, 1, -3);
+    const viewOffset = new THREE.Vector3(0.6, 0.3, 0.7).normalize().multiplyScalar(distance);
+    camera.position.copy(studio.controls.target).add(viewOffset);
+    const initial = camera.position.clone(), currentFocus = studio.controls.target.clone();
+    director.start('orbit', 120, new THREE.Vector3(70, 40, 80), 200, { fromCurrentView: true });
+    director.update(0);
+    assert(camera.position.distanceTo(initial) < 1e-7, 'Orbit starts at the exact current pose');
+    assert(studio.controls.target.equals(currentFocus), 'Current focus wins over scene bounds');
+    for (let i = 0; i < 120; i++) {
+      director.update(1);
+      close(camera.position.distanceTo(currentFocus), distance, 'Current zoom stays fixed throughout an orbit');
+      close(camera.position.y - currentFocus.y, viewOffset.y, 'Current camera height stays fixed');
+    }
+    assert(camera.position.distanceTo(initial) < 1e-7, 'Current-view orbit closes without a seam');
+    assert.equal(director.state.from_current_view, true);
+  }
+  // A scroll/pan takeover pauses rather than fighting the human. Explicit
+  // resume adopts both the newly zoomed position and the newly panned target.
+  director.pause('You took the camera');
+  studio.controls.target.set(-6, 0.7, 5);
+  const zoomedOffset = new THREE.Vector3(-1.6, 0.8, 2.1);
+  camera.position.copy(studio.controls.target).add(zoomedOffset);
+  const zoomed = camera.position.clone(), panned = studio.controls.target.clone();
+  director.update(40); assert(camera.position.equals(zoomed));
+  assert(director.resume()); director.update(0);
+  assert(camera.position.distanceTo(zoomed) < 1e-7, 'Resume must not return to the pre-zoom framing');
+  director.update(30);
+  close(camera.position.distanceTo(panned), zoomedOffset.length(), 'Resumed zoom remains the human zoom');
+  close(camera.position.y - panned.y, zoomedOffset.y, 'Resumed height remains the human height');
+  assert(studio.controls.target.equals(panned));
+  // Match the actual controls' distance budget, including a close-up below
+  // the old tool's arbitrary eight-unit framing minimum.
+  for (const [distance, expected] of [[0.5, 2.5], [200, 120]]) {
+    camera.position.copy(panned).add(new THREE.Vector3(0, distance * 0.6, distance * 0.8));
+    director.start('orbit', 240, undefined, undefined, { fromCurrentView: true }); director.update(0);
+    close(camera.position.distanceTo(panned), expected, 'Current-view orbit uses OrbitControls limits');
+  }
+  const cameraApi = harness();
+  Object.assign(cameraApi.ctx.studio, studio, { director });
+  cameraApi.ctx.lofi.preferMotion = () => {};
+  camera.position.copy(panned).add(zoomedOffset);
+  const started = await call(cameraApi, 'set_camera_motion', { action: 'start', mode: 'orbit' });
+  assert(started.ok && started.result.camera_motion.from_current_view);
+  director.update(0); close(camera.position.distanceTo(panned), zoomedOffset.length(), 'Default native orbit keeps close zoom');
+  const orbitBeforeInvalid = director.state;
+  const conflicting = await call(cameraApi, 'set_camera_motion', { action: 'start', mode: 'orbit', from_current_view: true, distance: 20 });
+  assert.equal(conflicting.ok, false); assert.deepEqual(director.state, orbitBeforeInvalid);
+  await call(cameraApi, 'set_camera_motion', { action: 'pause' });
+  camera.position.copy(panned).add(new THREE.Vector3(0, 1, 4));
+  const resumed = await call(cameraApi, 'set_camera_motion', { action: 'resume', from_current_view: true });
+  assert(resumed.ok); director.update(0);
+  close(camera.position.distanceTo(panned), Math.sqrt(17), 'Native resume adopts a second human zoom');
+  console.log(' ✓ orbit keeps every zoom/focus in landscape and portrait, respects controls limits, and resumes from human takeover');
+  cameraApi.dispose();
 } finally {
   globalThis.document = previousDocument;
   await rm(scratch, { recursive: true, force: true });

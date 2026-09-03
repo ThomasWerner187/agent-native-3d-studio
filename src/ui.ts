@@ -183,6 +183,7 @@ export function logToolCall(tool: string, args: Record<string, unknown>, result:
     actor = parsed.actor ?? 'human';
   } catch { /* non-JSON result counts as ok */ }
   pushLog({ tool, args, result, ok, actor, time: new Date() });
+  window.dispatchEvent(new CustomEvent('studio:tool-result', { detail: { tool, args, result, actor } }));
 }
 
 export function logInfo(text: string): void {

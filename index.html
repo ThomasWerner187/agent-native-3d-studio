@@ -14,6 +14,16 @@
 </head>
 <body>
 <div id="app">
+  <div id="demo-browser-bar" hidden>
+    <span class="demo-browser-label">Demo browser</span>
+    <div class="demo-address"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="8.5" width="9" height="7" rx="2"/><path d="M7 8.5V6a3 3 0 0 1 6 0v2.5"/></svg><span>Scene Studio</span></div>
+    <button id="demo-agent-toggle" type="button" aria-label="Open agent sidebar" aria-expanded="false" aria-controls="demo-agent-panel" title="Open your agent"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M8.5 12h7M12 8.5v7M3 12H1m22 0h-2M12 3V1m0 22v-2"/></svg></button>
+  </div>
+  <aside id="demo-agent-panel" aria-label="Demo agent sidebar" hidden>
+    <header class="demo-agent-head"><div><strong>Agent</strong><span>WebMCP · live actions</span></div><button id="demo-agent-close" type="button" aria-label="Close agent sidebar"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></header>
+    <div id="demo-agent-messages" role="log" aria-label="Conversation" aria-live="polite"><p class="demo-agent-empty">A little world.<br>Built together.</p></div>
+    <form id="demo-agent-form"><label class="sr-only" for="demo-agent-input">Message your agent</label><textarea id="demo-agent-input" rows="3" maxlength="1200" placeholder="What shall we make?"></textarea><div class="demo-agent-compose-foot"><span id="demo-agent-status" role="status">Ready for your agent</span><button type="submit" aria-label="Send idea"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V5m-4 4 4-4 4 4"/></svg></button></div></form>
+  </aside>
   <canvas id="viewport" tabindex="0" aria-label="Interactive 3D forest. Drag empty space to orbit; drag an object to move it. Escape clears selection. H toggles controls."></canvas>
   <nav id="quiet-controls" class="hud quiet-controls" aria-label="Build your world">
     <button type="button" data-add-object="pond">Add pond</button>

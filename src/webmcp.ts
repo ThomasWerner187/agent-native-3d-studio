@@ -91,12 +91,13 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: 'set_camera_motion',
-    description: 'Start or control endless camera motion. drift keeps an intimate front-facing garden view, gently sweeping instead of disappearing behind trees. targets frames live anchors together; distance/height override whole-world framing. Human input pauses it; resume explicitly. Returns immediately; inspect camera_motion.',
+    description: 'Endless camera motion. orbit keeps the current view unless target/framing is given. from_current_view preserves zoom and focus. Human input pauses; orbit resume adopts the adjusted view. drift makes an intimate sweep; distance/height override framing. Returns immediately.',
     inputSchema: { type: 'object', properties: {
       ...EXPECTED_VERSION,
       action: { type: 'string', enum: ['start', 'pause', 'resume', 'stop'] },
       mode: { type: 'string', enum: ['orbit', 'cinematic', 'drift'] },
       loop_seconds: { type: 'number', minimum: 60, maximum: 600, description: 'One seamless cycle. Default 240 seconds.' },
+      from_current_view: { type: 'boolean', description: 'Orbit from the current zoom, height, heading and focus. Default true for an unframed orbit or orbit resume. Cannot combine true with target, targets, distance, height or azimuth_degrees.' },
       target: { type: 'string', description: 'Scene or one object id/name. Default scene.' },
       targets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 10, description: 'Frame these live objects together, e.g. cabin and pond. Overrides target.' },
       distance: { type: 'number', minimum: 8, maximum: 80, description: 'Horizontal orbit radius. 20–24 is an intimate cabin-and-pond view.' },
@@ -115,6 +116,16 @@ export const TOOL_DEFS: ToolDef[] = [
       if (args.expected_scene_version != null && (!Number.isSafeInteger(args.expected_scene_version) || args.expected_scene_version !== ctx.store.version)) return fail('Scene changed since the camera plan. Read the live scene and retry.', 'stale_scene');
       const director = ctx.studio.director;
       if (action === 'start') {
+        const framingKeys = ['target', 'targets', 'distance', 'height', 'azimuth_degrees'];
+        const hasFraming = framingKeys.some(key => args[key] != null);
+        const fromCurrentView = args.from_current_view ?? (mode === 'orbit' && !hasFraming);
+        if (fromCurrentView && mode !== 'orbit') return fail('from_current_view is available for orbit mode.');
+        if (fromCurrentView && hasFraming) return fail('from_current_view cannot be combined with target, targets, distance, height or azimuth_degrees.');
+        if (fromCurrentView) {
+          ctx.lofi.preferMotion('orbit');
+          director.start('orbit', period, undefined, undefined, { fromCurrentView: true, blendSeconds: args.blend_seconds as number | undefined });
+          return ok(ctx, { camera_motion: director.state });
+        }
         const targets = args.targets ?? [String(args.target ?? 'scene')];
         if (!Array.isArray(targets) || targets.length < 1 || targets.length > 10 || targets.some(target => typeof target !== 'string')) return fail('targets must contain 1–10 object ids or names.');
         const bounds = new THREE.Box3();
@@ -137,7 +148,10 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       if (action === 'pause') director.pause();
       if (action === 'stop') director.stop();
-      if (action === 'resume' && !director.resume()) return fail('No paused camera motion to resume.');
+      if (action === 'resume') {
+        if (args.from_current_view === true && director.state.mode !== 'orbit') return fail('from_current_view is available for orbit mode.');
+        if (!director.resume(args.from_current_view as boolean | undefined)) return fail('No paused camera motion to resume.');
+      }
       return ok(ctx, { camera_motion: director.state });
     },
   },

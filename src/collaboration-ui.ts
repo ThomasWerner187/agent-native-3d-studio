@@ -85,9 +85,16 @@ export function initCollaborationUI(ctx: ToolContext, call: Call, actions: Actio
   document.querySelectorAll<HTMLButtonElement>('[data-add-object]').forEach(button => {
     button.addEventListener('click', () => void edit(async () => {
       const previousSelection = ctx.store.selectedId;
+      const type = button.dataset.addObject;
+      const demo = new URL(location.href).searchParams.get('demo') === '1';
+      const preferred = demo && type === 'pond' && !ctx.store.all().some(entry => entry.type === 'pond')
+        ? { x: -5, z: 6 }
+        : demo && type === 'cabin' && !ctx.store.all().some(entry => entry.type === 'cabin')
+          ? { x: 3, z: -3 }
+          : ctx.store.freeSpot(7);
       const result = await run('add_object', {
-        type: button.dataset.addObject,
-        position: ctx.store.freeSpot(7),
+        type,
+        position: preferred,
       });
       if (result.result?.id && ctx.store.selectedId === previousSelection) ctx.select(result.result.id);
     }));

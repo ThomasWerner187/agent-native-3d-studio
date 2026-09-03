@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { basename, join, resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { loadDemoPlan, timelineMatchesPlan, voiceLeadInSeconds } from './demo-plan.mjs';
-import { validateNativeCapture } from './demo-evidence.mjs';
+import { clipTime, validateNativeCapture } from './demo-evidence.mjs';
 
 const argv = process.argv.slice(2);
 const output = resolve(argv.find(arg => !arg.startsWith('--')) || 'scratch-submission-media');
@@ -190,6 +190,66 @@ function addAsset(name, properties, shotId, start, end, x, y) {
   return file;
 }
 
+function demoBrowserLayout(capture) {
+  if (capture?.layout?.mode !== 'demo-browser') return false;
+  const layout = capture.layout;
+  if (layout.width !== width || layout.height !== height || layout.sidebar_width !== 320 || layout.bar_height !== 42) {
+    throw new Error('Demo-browser capture requires the recorded 1280×720 layout, 320px sidebar and 42px bar.');
+  }
+  const states = capture.presentation;
+  const first = capture.clips[0].source_start_seconds;
+  const last = capture.clips.at(-1).source_end_seconds;
+  if (!Array.isArray(states) || !states.length || states[0].source_seconds > first || states.some((state, index) =>
+    !Number.isFinite(state.source_seconds) || state.source_seconds < 0 || state.source_seconds > last ||
+    typeof state.sidebar_open !== 'boolean' || (index && state.source_seconds <= states[index - 1].source_seconds))) {
+    throw new Error('Demo-browser capture needs an initial observed sidebar state and chronological presentation changes on the source clock.');
+  }
+  return true;
+}
+
+function sidebarIntervals(capture, shot) {
+  const clip = capture.clips.find(item => item.id === shot.id);
+  const changes = capture.presentation;
+  let open = changes.findLast(state => state.source_seconds <= clip.source_start_seconds).sidebar_open;
+  let cursor = 0;
+  const intervals = [];
+  for (const state of changes) {
+    if (state.source_seconds <= clip.source_start_seconds || state.source_seconds >= clip.source_end_seconds) continue;
+    // A state change during a declared recording gap takes effect at the next
+    // retained frame. No video or transition is manufactured for the gap.
+    const at = clipTime(clip, state.source_seconds);
+    if (at > cursor) intervals.push({ start: cursor, end: at, sidebar_open: open });
+    cursor = at;
+    open = state.sidebar_open;
+  }
+  if (cursor < shot.duration) intervals.push({ start: cursor, end: shot.duration, sidebar_open: open });
+  return intervals;
+}
+
+function addCaptionAssets(capture = null) {
+  const demoBrowser = demoBrowserLayout(capture);
+  if (!demoBrowser) addAsset('title-' + shots[0].id, {
+    kind: 'title', width: 550, height: 77,
+    title: 'A moment, built together', label: 'AGENT-NATIVE 3D SCENE STUDIO · WEBMCP',
+  }, shots[0].id, 0.15, 3.2, 34, 525);
+  for (const shot of shots) {
+    const intervals = demoBrowser ? sidebarIntervals(capture, shot) : [{ start: 0, end: shot.duration, sidebar_open: false }];
+    for (const cue of cues.filter(item => item.shot_id === shot.id)) {
+      intervals.forEach((interval, index) => {
+        const start = Math.max(cue.start - shot.start, interval.start);
+        const end = Math.min(cue.end - shot.start, interval.end);
+        if (end <= start) return;
+        const sidebarOpen = demoBrowser && interval.sidebar_open;
+        addAsset(`${cue.asset_id}-${index}`, {
+          kind: 'caption', width: sidebarOpen ? 880 : 1040,
+          height: demoBrowser ? 76 : 77, body: cue.text,
+        }, shot.id, start, end, sidebarOpen ? 40 : 120, 620);
+      });
+    }
+  }
+  return demoBrowser;
+}
+
 function wrap(text, max = 50) {
   const lines = [];
   for (const input of String(text).split('\n')) {
@@ -296,17 +356,10 @@ function segmentCaptions(segment) {
 const cues = [];
 for (const segment of timeline.segments) {
   const shot = shots.find(item => segment.start >= item.start && segment.start < item.start + item.duration);
-  const relative = segment.start - shot.start;
-  if (segment.id === shots[0].id) addAsset(`title-${segment.id}`, {
-    kind: 'title', width: 550, height: 77,
-    title: 'A moment, built together',
-    label: 'AGENT-NATIVE 3D SCENE STUDIO · WEBMCP',
-  }, shot.id, relative + 0.15, relative + 3.2, 34, 525);
   segment.caption_cues.forEach((chunk, index) => {
     const start = segment.start + voiceOffset + chunk.start;
     const end = segment.start + voiceOffset + chunk.end;
-    cues.push({ start, end, text: chunk.text });
-    addAsset(`caption-${segment.id}-${index}`, { kind: 'caption', width: 1040, height: 77, body: chunk.text }, shot.id, start - shot.start, end - shot.start, 120, 620);
+    cues.push({ start, end, text: chunk.text, shot_id: shot.id, asset_id: `caption-${segment.id}-${index}` });
   });
 }
 
@@ -360,6 +413,7 @@ async function waitForCaptures() {
 }
 
 function addEvidence(capture) {
+  if (capture.layout?.mode === 'demo-browser') return;
   const { proof } = capture;
   // Requests are visible in the real page. Keep protocol excerpts compact so
   // that evidence supplements the scene rather than covering half the image.
@@ -409,12 +463,15 @@ function overlayGraph(base, items) {
 
 if (checking) {
   // A local compositing check has no native evidence cards.
+  const checkManifest = join(output, 'native-capture.json');
+  addCaptionAssets(existsSync(checkManifest) ? JSON.parse(readFileSync(checkManifest, 'utf8')) : null);
   renderAssets();
   const caption = jobs.find(job => job.kind === 'caption').path;
-  const title = jobs.find(job => job.kind === 'title').path;
+  const title = jobs.find(job => job.kind === 'title')?.path;
+  const placement = overlays.get(shots[0].id).find(item => item.file === caption);
   const items = [
-    { file: title, start: 0, end: 1, x: 34, y: 525 },
-    { file: caption, start: 0, end: 1, x: 60, y: 620 },
+    ...(title ? [{ file: title, start: 0, end: 1, x: 34, y: 525 }] : []),
+    { file: caption, start: 0, end: 1, x: placement.x, y: placement.y },
   ];
   const graph = overlayGraph('[0:v]setsar=1[base]', items);
   const voiceIndex = items.length + 1, musicIndex = items.length + 2;
@@ -428,6 +485,7 @@ if (checking) {
 
 const capture = validateNativeCapture(await waitForCaptures(), plan);
 const events = capture.events;
+const demoBrowser = addCaptionAssets(capture);
 addEvidence(capture);
 renderAssets();
 const rendered = [];
@@ -485,9 +543,17 @@ run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', master, '-vf', `f
 run(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(plan.duration - 8), '-i', master, '-frames:v', '1', '-q:v', '2', join(output, 'submission-poster.jpg')]);
 const captionSources = [...new Set(timeline.segments.map(segment => segment.caption_timing))];
 const segmentMetadata = timeline.segments.map(segment => ({ id: segment.id, start: segment.start, duration: segment.duration, voice_offset: voiceOffset, audio: segment.audio, audio_duration: segment.audio_duration, alignment: segment.alignment || null, provenance: segment.provenance || null, caption_timing: segment.caption_timing, captions: segment.caption_cues.length }));
-writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_at: new Date().toISOString(), story_id: plan.story_id, capture_id: capture.capture_id, app_revision: capture.app_revision, capture_continuity: capture.continuity, master, format: final, shots, voice: narration.voice, provider: narration.provider, model: narration.model, narration, segments: segmentMetadata, captions: cues.length, native_events: events.length, music, source: 'native-capture.json', caption_timing: captionSources.join(' '), audio_processing: { narration_speed: 1, narration_time_stretch: false, voice_lead_in_seconds: voiceOffset, narration_loudness_target_lufs: -16, music_loudness_target_lufs: musicLoudness, music_ducking: { ...ducking, sidechain: 'normalized narration bus' } }, audio_metrics: audioMetrics }, null, 2));
+const captionLayout = demoBrowser ? {
+  sidebar_open: { x: 40, y: 620, width: 880, height: 76 },
+  sidebar_closed: { x: 120, y: 620, width: 1040, height: 76 },
+  other_editorial_overlays: false,
+} : { default: { x: 120, y: 620, width: 1040, height: 77 }, other_editorial_overlays: true };
+writeFileSync(join(output, 'export-metadata.json'), JSON.stringify({ generated_at: new Date().toISOString(), story_id: plan.story_id, capture_id: capture.capture_id, app_revision: capture.app_revision, capture_continuity: capture.continuity, capture_layout: capture.layout || null, presentation: capture.presentation || [], caption_layout: captionLayout, master, format: final, shots, voice: narration.voice, provider: narration.provider, model: narration.model, narration, segments: segmentMetadata, captions: cues.length, native_events: events.length, music, source: 'native-capture.json', caption_timing: captionSources.join(' '), audio_processing: { narration_speed: 1, narration_time_stretch: false, voice_lead_in_seconds: voiceOffset, narration_loudness_target_lufs: -16, music_loudness_target_lufs: musicLoudness, music_ducking: { ...ducking, sidechain: 'normalized narration bus' } }, audio_metrics: audioMetrics }, null, 2));
 const narrationCredit = narration.provider === 'ElevenLabs'
   ? `English narration: ElevenLabs ${narration.voice}, model ${narration.model}, voice ID ${narration.voice_id}. Eight source MP3 tracks, character alignments and generation provenance are retained with [timeline.json](timeline.json).`
   : `English narration is synthesized locally using the macOS ${narration.voice} voice. Eight source AIFF tracks are retained with [timeline.json](timeline.json).`;
-writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), ${plan.duration} seconds, 1280 × 720, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). Compact notices summarize actual recorded results; they are editorial annotations, not recreated chat.\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage retains one scene on one native browser page, from human placement through agent additions and later human edits. Capture runs in original segments, not as an uninterrupted video stream. Original frames and timestamp manifests are retained unchanged in each shot folder. Declared cuts document idle waiting and recording gaps; retained actions run at their original speed. No action is invented, reconstructed or accelerated. Source ranges and object continuity evidence are retained in native-capture.json. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
+const captureCredit = demoBrowser
+  ? 'The captured Demo browser is a functional interface, visibly labelled as a demo; it is not Chrome or ChatGPT. Only narration captions are added in the edit. Their placement follows the recorded sidebar state and never covers the open sidebar. No title, result or recording-pause cards are composited.'
+  : 'Compact notices summarize actual recorded results; they are editorial annotations, not recreated chat.';
+writeFileSync(join(output, 'README.md'), `# Submission film\n\n- Master: [submission-demo.mp4](submission-demo.mp4), ${plan.duration} seconds, ${width} × ${height}, H.264 CRF 18 video / AAC audio.\n- [Captions](submission-demo.srt): ${captionSources.join(' ')}\n- [Contact sheet](submission-contact-sheet.jpg) and [poster](submission-poster.jpg) are inspection artifacts.\n- Native tool evidence comes from [native-capture.json](native-capture.json). ${captureCredit}\n- ${narrationCredit}\n- Narration is normalized and placed in its shot without time stretching or playback-speed changes. Final mix: ${audioMetrics.integrated_lufs} LUFS integrated, ${audioMetrics.true_peak_dbtp} dBTP true peak, ${audioMetrics.mean_volume_dbfs} dBFS mean and ${audioMetrics.peak_volume_dbfs} dBFS sample peak.\n- Music: Aurora Drift, created and supplied by Thomas Werner using Suno, mixed quietly beneath the narration.\n- Export is 30 FPS; browser capture timing is preserved. The 30 FPS file is not a claim that the original screencast captured every displayed frame.\n- The app footage retains one scene on one native browser page, from human placement through agent additions and later human edits. Capture runs in original segments, not as an uninterrupted video stream. Original frames and timestamp manifests are retained unchanged in each shot folder. Declared cuts document idle waiting and recording gaps; retained actions run at their original speed. No action is invented, reconstructed or accelerated. Source ranges and object continuity evidence are retained in native-capture.json. No upload or Devpost submission is performed by this script.\n\nRebuild: \`node scripts/assemble-demo.mjs\` from the repository root. The script waits for complete raw clips and native evidence. \`--plan\` validates audio lengths and character alignment before rendering; \`--check\` checks local text rendering and ffmpeg compositing without waiting for captures.\n`);
 console.log(`Ready for full playback review: ${master}`);
