@@ -1,6 +1,6 @@
 # Netcup test deployment
 
-Prepared and uploaded on 2026-09-03 for `https://studio.wernerverse.de/`. This is a separate test deployment; the existing Netlify deployment is unchanged. Authentication, trusted HTTPS and the HTTP-to-HTTPS redirect are active. Authenticated HTTP checks passed; browser and native WebMCP verification is tracked separately.
+Prepared and uploaded on 2026-09-03 for `https://studio.wernerverse.de/`. This is a separate test deployment; the existing Netlify deployment is unchanged. Authentication, trusted HTTPS and the HTTP-to-HTTPS redirect are active. Authenticated HTTP, browser rendering and native WebMCP verification passed.
 
 - Build: `npm ci && npm run build && node scripts/package-netcup.mjs`.
 - Runtime: static HTML, JavaScript and CSS; no server application or environment variables.
@@ -22,7 +22,7 @@ The app uses query parameters (`?agent=1`) and URL fragments (`#scene=...`), not
 
 ## Verification after upload
 
-Local preparation passed `npm ci` (zero reported vulnerabilities), TypeScript/Vite production build, and the existing browser smoke suite: 20/20 tools, 12/12 semantic checks, and corrupted-share-link recovery. A source scan found no network API, WebSocket or localhost dependency in the runtime source. Native WebMCP over the authenticated public origin remains a browser verification step.
+Local preparation passed `npm ci` (zero reported vulnerabilities), TypeScript/Vite production build, and the existing browser smoke suite: 20/20 tools, 12/12 semantic checks, and corrupted-share-link recovery. A source scan found no network API, WebSocket or localhost dependency in the runtime source. Native WebMCP over the authenticated public origin was subsequently verified as described below.
 
 ### Current deployment status
 
@@ -35,7 +35,20 @@ Checked 2026-09-03 at approximately 20:08 UTC, after TLS issuance and the final 
 - Authenticated HTML returns `Origin-Agent-Cluster: ?1`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and `Cache-Control: private, max-age=0, must-revalidate`. JavaScript/CSS return the same security headers and `Cache-Control: private, max-age=31536000, immutable`. MP3 responses also include the security headers and correct `audio/mpeg` MIME type.
 - Authenticated index HTML, JavaScript and CSS exactly match the local package by SHA256. An MP3 byte-range request returns `206` with the requested 32-byte range.
 - With authentication, `/studio-netcup-test.zip` returns `404` and `/.htaccess` returns `403` without configuration content.
-- Earlier pre-certificate checks failed TLS validation. That gate is now resolved without bypassing certificate validation. Remaining checks below concern browser rendering and native WebMCP behavior after authentication.
+- Earlier pre-certificate checks failed TLS validation. That gate is now resolved without bypassing certificate validation.
+
+### Native WebMCP browser verification
+
+The deployment operator completed the following check in the Codex in-app browser on the authenticated public Studio origin on 2026-09-03:
+
+- Normal HTTPS and HTTP Basic login succeeded.
+- Native browser WebMCP discovery (`webmcp.fetchTools`) exposed all 20 tools.
+- Native `help` and `describe_scene` calls succeeded.
+- Native `add_object` created the sphere named `Netcup QA sphere` (`obj15`), increasing the reported object count from 14 to 15.
+- Native `undo` restored the count to 14; a subsequent `describe_scene` confirmed the restoration.
+- Screenshot inspection confirmed the scene rendered correctly and the interface reported WebMCP live with 20 tools.
+
+This verifies native discovery and a reversible tool mutation after authentication. The full 20-tool behavioral suite was run locally; it was not repeated in full against the hosted origin. The following checklist remains the repeatable verification procedure for future deployments:
 
 1. Without credentials, `/`, `/index.html` and the JavaScript/CSS asset URLs must require authentication. Do not put credentials in URLs or terminal history.
 2. In a fresh browser, sign in over valid HTTPS. Confirm the initial 3D scene renders and no assets fail to load.
