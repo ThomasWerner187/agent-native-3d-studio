@@ -16,6 +16,14 @@ import { initLofiUI } from './lofi-ui';
 import { cancelAllToolTweens } from './anim';
 import * as THREE from 'three';
 import { AGENT_PLAYBOOK, NO_CLIENT_RECIPE } from './agent-guide';
+import { decodeSceneLink } from './share-codec';
+
+// Consume scene payloads before renderer construction or tool registration.
+// WebMCP hosts repeat the page URL in tool metadata; a large scene fragment
+// must not become the active tool page's identity. Share generates a fresh
+// portable link whenever the user wants to save this live scene.
+const incomingSceneHash = location.hash.startsWith('#scene=') ? location.hash : null;
+if (incomingSceneHash) history.replaceState(null, '', location.pathname + location.search);
 
 /**
  * Boot: scene, mouse interaction, curated starter scene, then WebMCP tools.
@@ -103,14 +111,18 @@ studio.onFrame(() => {
 snapshots.captureBoot();
 
 // --- shared-scene links: #scene=... restores an exported scene on load ------
-{
+const sharedSceneReady = (async () => {
   // A truncated/edited link must never take the page down — fall back to
   // the default scene instead.
-  if (location.hash.startsWith('#scene=')) {
+  if (incomingSceneHash) {
     try {
-      const m = location.hash.match(/#scene=([A-Za-z0-9\-_]+)/);
-      if (!m) throw new Error('no usable scene payload in link');
-      const r = snapshots.importJson(atobUrlSafe(m[1]), { captureUndo: true });
+      const versionBeforeDecode = store.version;
+      const json = await decodeSceneLink(incomingSceneHash);
+      if (store.version !== versionBeforeDecode) {
+        logInfo('Shared scene loading stopped because you changed the scene. Your current work was preserved.');
+        return;
+      }
+      const r = snapshots.importJson(json, { captureUndo: true });
       if (r.ok) {
         logInfo(`Scene restored from share link (${r.restored} objects). Modify anything — undo returns to this state.`);
         snapshots.captureBoot(); // the shared state becomes the new reset baseline
@@ -120,15 +132,8 @@ snapshots.captureBoot();
     } catch {
       logInfo('Share link damaged — starting from the default scene.');
     }
-    history.replaceState(null, '', location.pathname + location.search);
   }
-}
-
-function atobUrlSafe(s: string): string {
-  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
+})();
 
 // --- agent discoverability --------------------------------------------------
 // Agents without a WebMCP-capable harness read the console / DOM manifest.
@@ -163,8 +168,8 @@ installAudioUnlock();
 
 // --- Share button: scene link (works without WebMCP on the visitor side) -----
 document.getElementById('scene-share')?.addEventListener('click', async () => {
-  const res = JSON.parse(exportScene(ctx, {}) as string) as { url?: string };
   try {
+    const res = JSON.parse(await exportScene(ctx, {})) as { url?: string };
     if (!res.url) throw new Error('No scene link');
     await navigator.clipboard.writeText(res.url);
     toast('Scene link copied — anyone can open it.');
@@ -254,6 +259,7 @@ canvas.addEventListener('pointerdown', () => {
 const devMode = new URLSearchParams(location.search).has('agent') || import.meta.env.DEV;
 
 void (async () => {
+  await sharedSceneReady;
   const count = await registerTools(ctx, logToolCall);
   if (count > 0) {
     setStatus('live', count);

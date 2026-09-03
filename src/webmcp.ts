@@ -489,8 +489,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'export_scene',
     description:
-      'Export the whole scene (objects, materials, camera, lighting) and get a share link: the URL contains the scene, ' +
-      'anyone can open it and see the exact scene — no WebMCP or setup needed. Also returned as JSON for import_scene.',
+      'Export objects, materials, camera and lighting as a compressed portable share URL. import_scene accepts it and older scene links. Copy or save the returned link before reloading; the active URL stays unchanged. Very large scenes or old uncompressed links may exceed browser-agent URL limits.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     run: (ctx, args) => exportScene(ctx, args),
@@ -851,7 +850,7 @@ async function invoke(ctx: ToolContext, def: ToolDef, args: Record<string, unkno
   if (transaction) activeTransactions.set(ctx.store, def.name);
   if (snapId) transactionSnapshots.set(ctx.store, snapId);
   try {
-    result = await def.run(ctx, args ?? {});
+    result = await def.run(signal ? { ...ctx, signal } : ctx, args ?? {});
   } catch (e) {
     result = JSON.stringify({ ok: false, code: 'internal_error', error: `Tool "${def.name}" failed: ${e instanceof Error ? e.message : String(e)}` });
   } finally {

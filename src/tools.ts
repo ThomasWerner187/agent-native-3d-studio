@@ -1,5 +1,6 @@
 import type { LofiSession } from './lofi';
 import { musicState } from './ambience';
+import { decodeSceneLink, encodeSceneHash } from './share-codec';
 import * as THREE from 'three';
 import type { Studio } from './scene';
 import { LIGHTING_PRESETS, type LightingPreset } from './scene';
@@ -35,6 +36,8 @@ export interface ToolContext {
   layout: LayoutManager;
   lofi: LofiSession;
   select: (id: string | null) => void;
+  /** Native invocation cancellation; each call receives its own context copy. */
+  signal?: AbortSignal;
 }
 
 type Args = Record<string, unknown>;
@@ -1152,46 +1155,36 @@ export function setMusicTool(_ctx: ToolContext, args: Args): string {
 /* export_scene / import_scene — scenes become shareable artifacts     */
 /* ------------------------------------------------------------------ */
 
-function b64urlEncode(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function b64urlDecode(s: string): string {
-  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
-export function exportScene(ctx: ToolContext, _args: Args): string {
+export async function exportScene(ctx: ToolContext, _args: Args): Promise<string> {
   const json = ctx.snapshots.exportJson();
-  const hash = `#scene=${b64urlEncode(json)}`;
+  const objects = ctx.store.size, snapshotVersion = ctx.store.version;
+  let hash: string;
+  try { hash = await encodeSceneHash(json); }
+  catch (error) { return fail(error instanceof Error ? error.message : 'Scene compression failed.', 'export_failed'); }
   const url = `${location.origin}${location.pathname}${hash}`;
-  if (location.hash !== hash) history.replaceState(null, '', hash);
   return ok(ctx, {
-    bytes: json.length,
-    objects: ctx.store.size,
+    bytes: new TextEncoder().encode(json).byteLength,
+    encoding: 'gzip-v1',
+    snapshot_scene_version: snapshotVersion,
+    objects,
     url,
     note:
       url.length > 30_000
-        ? 'Share link created, but it is very long (large scene). Anyone can open it — no WebMCP needed.'
-        : 'Share link created (also set as this page URL). Anyone can open it — no WebMCP needed. import_scene restores the JSON.',
+        ? 'Compressed share link created, but this large scene may still exceed browser-agent URL limits. Copy or save it before reloading. The active page URL stays unchanged.'
+        : 'Compressed share link created. Copy or save it before reloading; the active page URL stays unchanged. Anyone can open it, and import_scene restores it.',
   });
 }
 
 export async function importScene(ctx: ToolContext, args: Args): Promise<string> {
+  const versionBeforeDecode = ctx.store.version;
   let json = args.json != null ? String(args.json) : '';
   if (!json && args.url != null) {
-    const url = String(args.url);
-    if (url.length > 5_400_000) return fail('Share link is too large (maximum decoded scene is 4 MB).', 'bad_request');
-    const m = url.match(/#scene=([A-Za-z0-9\-_]+)$/);
-    if (!m) return fail('url contains no #scene= fragment.', 'bad_request');
-    try { json = b64urlDecode(m[1]); }
-    catch { return fail('The share link contains invalid base64 data.', 'bad_request'); }
+    try { json = await decodeSceneLink(String(args.url)); }
+    catch (error) { return fail(error instanceof Error ? error.message : 'Invalid scene link.', 'bad_request'); }
   }
   if (!json) return fail('Provide the exported json or a share url (with #scene=...).', 'bad_request');
+  if (ctx.signal?.aborted) return fail('Scene import was cancelled before applying it.', 'cancelled');
+  if (ctx.store.version !== versionBeforeDecode) return fail('The scene changed while decoding the link. Your current work was preserved; observe the scene and retry.', 'scene_changed_during_import');
   // invoke() already captured the pre-import snapshot — no nested capture here
   const r = ctx.snapshots.importJson(json);
   if (!r.ok) return fail(r.error ?? 'import failed', 'bad_request');

@@ -172,7 +172,8 @@ for (const segment of timeline.segments) {
   const shot = shots.find(item => segment.start >= item.start && segment.start < item.start + item.duration);
   const relative = segment.start - shot.start;
   addAsset(`title-${segment.id}`, {
-    kind: 'title', width: 460, height: 77, title: segment.title,
+    kind: 'title', width: segment.id === 'opening' ? 760 : 460, height: 77,
+    title: segment.id === 'opening' ? 'Edited demo · multiple live WebMCP sessions' : segment.title,
     label: segment.id === 'opening' || segment.id === 'closing' ? 'SCENE STUDIO  /  AGENT-NATIVE · WEBMCP' : 'A LITTLE WORLD, BUILT TOGETHER',
   }, shot.id, relative + 0.15, relative + (segment.id === 'closing' ? 18.3 : 5.5), 34, 525);
   const chunks = subtitleChunks(segment.narration);
@@ -268,7 +269,7 @@ function card(event, shotId, start, end, suffix = '') {
   const lines = body.split('\n').length;
   addAsset(`native-${shotId}-${event.tool}${suffix}`, {
     kind: 'evidence', width: 625, height: Math.min(445, 110 + lines * 24),
-    label: 'EDITED NATIVE WEBMCP SESSION', title: `${event.tool} · recorded excerpt`, body, fontSize: 18,
+    label: 'EDITED DEMO · MULTIPLE LIVE WEBMCP SESSIONS', title: `${event.tool} · recorded excerpt`, body, fontSize: 18,
   }, shotId, start, end, 34, 40);
 }
 

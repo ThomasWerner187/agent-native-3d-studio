@@ -10,7 +10,16 @@ import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import './animation-regression.mjs';
+import './share-regression.mjs';
+
+function decodeScene(url) {
+  const payload = new URL(url).hash.slice('#scene='.length);
+  const compressed = payload.startsWith('gz1.');
+  const bytes = Buffer.from(compressed ? payload.slice(4) : payload, 'base64url');
+  return JSON.parse((compressed ? gunzipSync(bytes, { maxOutputLength: 4_000_000 }) : bytes).toString('utf8'));
+}
 
 // Use a free port so an older developer preview can never mask this build.
 const reservation = createServer();
@@ -139,8 +148,46 @@ try {
     }
   }
 
-  // --- corrupted share link must never take the page down (boot path) -------
+  // --- valid portable scenes leave the active tool page URL short ----------
   await page.close(); // Release this renderer before allocating another one.
+  const validSharePage = await newTestPage();
+  const sharedUrl = new URL(id.export_scene.result.url);
+  const expectedSharedScene = decodeScene(sharedUrl.href);
+  sharedUrl.search = '?agent=1';
+  await validSharePage.goto(sharedUrl.href);
+  // __tool is exposed only after registerTools has completed.
+  await validSharePage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
+  const sharedResult = await validSharePage.evaluate(async () => {
+    const current = JSON.parse(await window.__tool('describe_scene', {}));
+    const urlBefore = location.href;
+    const exported = JSON.parse(await window.__tool('export_scene', {}));
+    const after = JSON.parse(await window.__tool('describe_scene', {}));
+    return { current, exported, after, urlBefore, urlAfter: location.href };
+  });
+  const validSharedObjects = decodeScene(sharedResult.exported.result.url).objects;
+  const validShareOk = sharedResult.current.ok && sharedResult.after.ok
+    && sharedResult.current.result.object_count === expectedSharedScene.objects.length
+    && JSON.stringify(validSharedObjects) === JSON.stringify(expectedSharedScene.objects)
+    && sharedUrl.hash.startsWith('#scene=gz1.') && sharedUrl.href.length < 6000
+    && !new URL(sharedResult.urlBefore).hash && sharedResult.urlAfter === sharedResult.urlBefore;
+  if (validShareOk) console.log(' ✓ shared scene restores before tools; export keeps the active URL short');
+  else { failures++; console.log(`✗ shared scene tool continuation: ${JSON.stringify({ count: sharedResult.current.result?.object_count, expected: expectedSharedScene.objects.length, urlBefore: sharedResult.urlBefore, urlAfter: sharedResult.urlAfter })}`); }
+  const legacyUrl = `${BASE}/?agent=1#scene=${Buffer.from(JSON.stringify(expectedSharedScene)).toString('base64url')}`;
+  await validSharePage.goto(legacyUrl);
+  await validSharePage.waitForFunction(() => typeof window.__tool === 'function', null, { timeout: bootTimeout });
+  const legacyShared = await validSharePage.evaluate(() => window.__scene());
+  const oversizedUrl = `${BASE}/#scene=gz1.${gzipSync(Buffer.alloc(4_000_001, 32)).toString('base64url')}`;
+  const oversizedImport = await validSharePage.evaluate(async url => JSON.parse(await window.__tool('import_scene', { url })), oversizedUrl);
+  const afterOversized = await validSharePage.evaluate(() => window.__scene());
+  const legacyShareOk = legacyShared.ok && legacyShared.result.object_count === expectedSharedScene.objects.length;
+  const boundedShareOk = !oversizedImport.ok && oversizedImport.code === 'bad_request'
+    && afterOversized.result.scene_version === legacyShared.result.scene_version
+    && afterOversized.result.object_count === legacyShared.result.object_count;
+  if (!legacyShareOk) failures++;
+  if (!boundedShareOk) failures++;
+  await validSharePage.close();
+
+  // --- corrupted share link must never take the page down (boot path) -------
   const pageErrors = [];
   const badPage = await newTestPage();
   badPage.on('pageerror', (err) => pageErrors.push(String(err)));
@@ -217,7 +264,12 @@ try {
 
   // --- behavioral correctness: verify observable state, not just {ok:true} ---
   const badPage2 = await newTestPage();
-  const behavioral = [];
+  const behavioral = [{
+    name: 'shared scene restores before tools and keeps its active URL short',
+    pass: validShareOk,
+    detail: JSON.stringify({ objects: sharedResult.current.result?.object_count, expected: expectedSharedScene.objects.length, activeUrl: sharedResult.urlAfter }),
+  }, { name: 'legacy scene links remain readable', pass: legacyShareOk, detail: '' },
+  { name: 'oversized compressed imports preserve the live scene', pass: boundedShareOk, detail: oversizedImport.error ?? '' }];
   const check = (name, pass, detail = '') => {
     behavioral.push({ name, pass, detail });
     if (!pass) failures++;
@@ -282,7 +334,6 @@ try {
     JSON.stringify({ before: beforeRoundtrip.scene_version, after: afterImport.scene_version }),
   );
   const exportedAgain = j(await run('export_scene', {}));
-  const decodeScene = url => JSON.parse(Buffer.from(url.split('#scene=')[1], 'base64url').toString('utf8'));
   check('scene links preserve every material and lantern light', JSON.stringify(decodeScene(shareUrl).objects) === JSON.stringify(decodeScene(exportedAgain.result.url).objects));
   await run('set_material', { targets: addId, roughness: 0.42 });
   const beforeOldImport = await describe();
