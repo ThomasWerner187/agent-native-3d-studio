@@ -1,0 +1,46 @@
+# Final submission review
+
+Review date: **September 3, 2026**. Scope: the Agent-Native 3D Scene Studio submission, with emphasis on an endless lofi sequence controlled through native WebMCP. This record separates completed review work from the final release checks. Submission status is tracked in [SUBMISSION-CHECKLIST.md](SUBMISSION-CHECKLIST.md).
+
+## Completed review work
+
+| Area | Finding or change |
+| --- | --- |
+| Existing work | The 17 previously dirty files matched the work preserved in `b6e0521`; that commit is included in the `8202256` ancestry integrated for this review. |
+| Repository cleanup | Removed the obsolete `scripts/show-verify.mjs` and stale tracked local Netlify configuration. The project-level deployment configuration remains the source for the build. |
+| Share URL handling | The `gz1` gzip representation reduced the tested link from **31,386 to 3,318 characters (about 89%)**. Local checks restored all **46 objects exactly** and then successfully called further tools. Legacy links, the 4 MB decompression cap, asynchronous import races, cancellation and preservation of human edits also passed local checks. The final native share round trip remains **unverified**: browser-tool navigation to the final-review deployment is denied because its admin-enforced policy could not be verified. Earlier native lofi/collaboration observations remain valid, but they do not validate this later share update. |
+| Dependency audit | `npm ci` completed; its audit reported **0 vulnerabilities**. |
+| Secret scan | The earlier full scan covered **158.65 MB** with **0 findings**. The staged share update scan covered **33.47 KB** with **0 findings**. The outgoing pre-push scan is a separate release gate. |
+| Product focus | Three authored lofi scenes, an optional repeating sequence, observable timing, an explicit next-scene action, and full-session human pause/resume. The scene recipes and timing are configurable through existing WebMCP tools. |
+| Tool documentation | All **26** tools are listed once in the README. Native agent calls, local human actions, scripted tours and the developer harness are distinguished. |
+| Judge access | Prepared an English guide with browser setup, exact native prompts, expected scene transitions, sound unlock, human control, collaborative layout undo and share-link checks. |
+| Submission text | Prepared first-person English project copy, testing instructions, source links and dated development history. |
+| Film production | The rerendered local candidate is **135 seconds, 1280 × 720, 30 FPS H.264/AAC**, with **42 caption cues**, **17 recorded native events**, SRT captions and a poster in `scratch-submission-media`. Eight narration segments use the macOS Samantha voice. The opening and evidence cards disclose **an edited demo assembled from multiple live WebMCP sessions**, not one uninterrupted session. Native-agent waiting-time cuts are labeled; the complete 20-second scene build is shown in real time. |
+| Asset provenance | DM Sans and Manrope include OFL notices. Thomas confirmed ownership of the bundled Suno tracks; [music credits](../public/music/README.md) record their origin. |
+
+## Final release evidence
+
+The following results were observed on the consolidated review candidate. A passing local test or media export does not establish that the public deployment or Devpost entry is final.
+
+| Check | Current evidence |
+| --- | --- |
+| Reviewed application revision | `9bda5c3`, including the earlier reviewed application `3487e00` and the compact-share update. This identifies the reviewed code release; it is not a claim that publication or Devpost submission is complete. |
+| Final submitted revision | Pending creator approval of publication and final submission; record it in the submission checklist. |
+| Production build | `npm run build` passed. |
+| Semantic smoke and regression checks | Final smoke on `9bda5c3`: **26/26 tool invocations; 58/58 semantic checks passed**, including compressed navigation, legacy links, decompression limits and asynchronous import races/cancellation. `npm run test:animations` and `npm run test:lofi` previously passed on the unchanged animation/sequence core. The lofi suite advances the real session logic through **12 automatic cycles** with a deterministic clock and verifies disposal bounds, pause, hidden-tab timing, stop, edit preservation and reduced motion. |
+| Native WebMCP discovery and execution | The in-app browser executed native `compose_lofi_scene`, `describe_scene` and `control_lofi` next calls. Human pointer input paused the complete sequence, and resume continued it. This is distinct from the developer-harness smoke checks. Final deployed-build verification is recorded separately below. |
+| Cinematic and responsive visual review | Native-browser cinematic footage was captured. The **390 × 844** mobile layout fits without the introductory panel overlapping the controls. This was a focused visual check. |
+| Accessibility/style review | The Impeccable detector used its degraded regex path because parser dependencies were unavailable. Its width-animation warning was fixed. This is **not a complete accessibility audit**. |
+| Sound | **Aurora Drift** actually played after clicking **Enable sound**; playback was verified through the native browser's live state. |
+| Public repository and license | An anonymous GitHub fetch confirmed **Public** visibility, the signed-out interface, an accessible `LICENSE` file and GitHub's **MIT license** detection. The About description was updated without a stale tool count. This confirms basic access and licensing; the published `main` README still describes the previous 20-tool version, so final source verification after push/merge remains pending. |
+| Published live site | [Final-review preview](https://final-review--agent-native-3d-studio.netlify.app) deployed successfully as Netlify deploy `6a990cece684e99516a09013`, matching the build of reviewed application `9bda5c3`. Final browser-tool navigation is blocked by admin-policy verification, so the updated share behavior has no final native-deployment proof. Publication at the submission URL must use the approved reviewed code release. |
+| Narrated video | Local MP4 format/duration, captions and poster are produced. Measured mixed-audio mean: **−19.2 dBFS**; peak: **−3.7 dBFS**. These measurements do not verify listening quality. The creator's complete watch/listen and approval of the synthesized voice remain pending. Public YouTube upload and logged-out playback verification are also pending. |
+| Devpost | **Draft created; not Submitted.** The creator completed the CAPTCHA. Submission `1168246`, **Agent-Native 3D Scene Studio**, has its Overview saved and **2/5 steps completed**. [Project preview](https://devpost.com/software/agent-native-3d-scene-studio). Details are not yet saved, and the required public YouTube link is missing. |
+| Unsaved draft cleanup | In the last visible Details state, About contained the blank Devpost template followed by the appended project story; WebMCP was still unconfirmed Built-with input rather than a tag. Before saving, replace the entire About content with the clean story from `scratch-submission-media/submission-kit/fields/project-story.md` or [SUBMISSION.md](../SUBMISSION.md), confirm the tags, and enter the real final links. |
+| Devpost browser access | Subsequent browser-tool access to `devpost.com` was denied because its admin-enforced policy could not be verified. The saved Overview remains intact; the Details step still requires saving through an authorized browser session. The CAPTCHA is already resolved. |
+
+## Practical limits retained in the submission
+
+The lofi scenes are authored procedural recipes, and the music is a bundled playlist. This is a browser scene editor without an application account or backend. Native tool discovery requires a supporting browser and client. Shared links contain scene state but not running timers, audio playback or the undo journal. Keep the returned/copied share link: the address bar is cleaned after restoration, so reloading or bookmarking that clean URL does not retain the scene. Layout adaptation applies to tagged starter-scene objects. General undo restores the whole scene; layout undo preserves unrelated later edits.
+
+The final public build, source revision and video must describe the same behavior. Keep the submitted materials unchanged after the deadline and available throughout judging, as recorded in the [release checklist](SUBMISSION-CHECKLIST.md).

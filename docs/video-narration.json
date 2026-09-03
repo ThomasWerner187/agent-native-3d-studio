@@ -1,0 +1,65 @@
+{
+  "title": "Agent-Native 3D Scene Studio — A Little World, Built Together",
+  "language": "en",
+  "target_duration_seconds": 135,
+  "status": "Production script; final capture and upload remain separate verification steps.",
+  "capture_note": "The final edit combines multiple real native WebMCP sessions. Show 'Edited demo · multiple live WebMCP sessions' at the opening and on evidence cards. Label cuts that remove agent waiting time and preserve continuously moving scene footage under narration.",
+  "segments": [
+    {
+      "id": "opening",
+      "title": "A little world",
+      "duration_seconds": 12,
+      "narration": "I wanted a little world that could keep unfolding while I work or unwind. A quiet cabin, warm lanterns, soft music, and an agent that can direct it with me.",
+      "visual": "Open on a moving moonlit cabin beauty shot. Show the project title briefly, then the real browser-agent prompt."
+    },
+    {
+      "id": "native_composition",
+      "title": "Ask the browser agent",
+      "duration_seconds": 18,
+      "narration": "I ask my browser agent for an endless moonlit retreat. Through WebMCP, it discovers the page's tools and starts a composition. The scene, mood, timing, camera and music are all explicit choices the agent can control.",
+      "visual": "Show native discovery and compose_lofi_scene with scene lakeside_cabin, mood moonlit, build_seconds 20, seed 42, cycle true, hold_seconds 180, camera cinematic and music true. Keep the genuine result readable."
+    },
+    {
+      "id": "build",
+      "title": "Watch it unfold",
+      "duration_seconds": 18,
+      "narration": "Water appears. The cabin arrives. Pines grow around it, and the lanterns come on. Everything is live three-dimensional geometry. The camera keeps drifting while a bundled lofi playlist sets the atmosphere. These are procedural scene recipes, not generated video.",
+      "visual": "Play the real gradual pond, cabin, forest and lantern build without speed changes. Show actual audio playback or the sound-unlock click. Finish with a continuous moving camera shot."
+    },
+    {
+      "id": "observable_state",
+      "title": "An observable session",
+      "duration_seconds": 16,
+      "narration": "The tool returns a session id immediately. The agent can read the real build progress, current scene, next scene, camera state and whether sound is playing. A long-running atmosphere never needs to hold a tool call open.",
+      "visual": "Show the real describe_scene result alongside the visible scene and sequence progress. Keep scene, sequence, camera_motion and music state readable."
+    },
+    {
+      "id": "scene_transition",
+      "title": "Let the scene change",
+      "duration_seconds": 24,
+      "narration": "Now I ask the agent to move to the next scene. WebMCP triggers the change, the image dips gently, and another little world starts growing. The same session continues through three authored scenes: Lakeside Cabin, Lantern Grove and Island Hideaway.",
+      "visual": "Show a genuine control_lofi call with action next. Record the transition and the next recipe's build. Use the initial 20-second build setting and allow the resulting construction to remain visible."
+    },
+    {
+      "id": "endless",
+      "title": "Stay a little longer",
+      "duration_seconds": 14,
+      "narration": "With cycling enabled, the studio waits between scenes and keeps going. The agent can choose the pace or advance when I ask. It can also pause or stop the session, leaving the built objects available for editing.",
+      "visual": "Show the named scene, next-scene countdown and continuous camera. Briefly reveal the editable objects and tool activity without suggesting arbitrary text-to-mesh generation."
+    },
+    {
+      "id": "human_control",
+      "title": "The human keeps control",
+      "duration_seconds": 14,
+      "narration": "I still have the mouse. Grabbing the canvas pauses the whole sequence, so it won't switch scenes while I'm exploring. I can resume when I'm ready, or undo the session and return to my original scene.",
+      "visual": "Show a manual canvas drag, paused full-session state and a real resume. If showing undo, preserve its actual response and return to a previously captured live beauty shot with an explicit cut."
+    },
+    {
+      "id": "closing",
+      "title": "Built together",
+      "duration_seconds": 19,
+      "narration": "I built this with TypeScript, three.js and twenty-six WebMCP tools. The agent works with the page's real scene state and actions. Local preview buttons are labeled separately. No application login or backend: just a shared creative space, and a little world to slow down in.",
+      "visual": "Show the real registration source briefly, then finish on a moving clean scene with the project title and https://agent-native-3d-studio.netlify.app."
+    }
+  ]
+}

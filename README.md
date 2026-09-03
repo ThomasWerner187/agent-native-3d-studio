@@ -1,24 +1,27 @@
 # Agent-Native 3D Scene Studio
 
-**A little world. To slow down in.** Ask your browser agent for a calming lofi scene. A cabin, pond, pines and lanterns appear gradually; music fades in and a cinematic camera keeps drifting. Everything stays editable in the shared three.js scene.
+**A little world. To slow down in.** Ask your browser agent for an endless lofi retreat. A cabin, pond, pines and lanterns appear gradually; music fades in and a cinematic camera keeps drifting. Three authored scenes can linger and change in a continuous sequence. Everything stays editable in the shared three.js scene.
 
-[Lofi review build](https://diorama-review--agent-native-3d-studio.netlify.app) · [Production studio](https://agent-native-3d-studio.netlify.app) · [30-second demo script](DEMO.md) · [90-second recording plan](docs/recording-plan.md) · [Submission description](SUBMISSION.md) · [MIT license](LICENSE)
+[Open the studio](https://agent-native-3d-studio.netlify.app) · [Judge guide](docs/JUDGE-GUIDE.md) · [Submission story](SUBMISSION.md) · [2:15 film script](DEMO.md) · [MIT license](LICENSE)
 
 ![The live lofi cabin, pond and cinematic director](docs/lofi-retreat.jpg)
+
+No application login, API key or backend is required. A connected browser agent supplies the model; the page supplies the scene and tools. The local preview works without an agent. For the native experience, use a WebMCP-capable browser and follow the [judge walkthrough](docs/JUDGE-GUIDE.md).
 
 ## Create a lofi scene
 
 Click **Create a lofi scene** for the local experience, or give a WebMCP browser agent this prompt:
 
-> Create a calming lofi scene with a moonlit cabin, water, warm lanterns, slowly growing trees, an infinite cinematic camera and soft music. Use compose_lofi_scene, then describe_scene to check progress.
+> Create an endless moonlit lofi retreat. Use compose_lofi_scene with scene lakeside_cabin, cycle true, hold_seconds 180, a cinematic camera and music. Let each world unfold gradually, then use describe_scene to check progress, the next scene and sound status.
 
-`compose_lofi_scene` accepts `mood` (moonlit or golden_hour), `seed`, `build_seconds` (12–90, default 32), `camera` (cinematic or orbit), and `music`. It starts a background session and returns a `session_id` immediately. This is an authored procedural composition that the agent configures through a semantic tool, not arbitrary text-to-mesh generation.
+`compose_lofi_scene` accepts `scene` (`lakeside_cabin`, `lantern_grove` or `island_hideaway`), `cycle` (default false), `hold_seconds` (120–1800, default 180), `mood` (moonlit or golden_hour), `seed`, `build_seconds` (12–90, default 32), `camera` (cinematic or orbit), and `music`. It starts a background session and returns a `session_id` immediately. The agent configures authored procedural recipes through a semantic tool; it does not generate arbitrary meshes.
 
-- **The scene unfolds:** pond → cedar A-frame cabin → forest → path and lanterns → music and camera. The progress and actual playback state are visible and available through `describe_scene`.
+- **The scene unfolds:** water, a cedar A-frame cabin, forest, paths and lanterns build gradually. Each recipe has its own arrangement. The progress and actual playback state are visible and available through `describe_scene`.
+- **Worlds keep changing:** with `cycle:true`, each completed scene holds for the chosen duration, then a gentle dark dip leads into the next procedural build. The three recipes repeat. `control_lofi{action:"next"}` advances on request; `describe_scene` exposes the current scene, next scene and remaining hold time.
 - **An endless camera:** `set_camera_motion` starts continuous orbit or a smooth periodic route with changing height, distance and focus. No endpoint cut; no maximum loop count. A circuit defaults to four minutes. Observation tools do not interrupt it.
-- **Human control:** grabbing the canvas pauses the camera; during construction it also pauses the build. `control_lofi` pauses/resumes the complete session or stops it while retaining its objects. **Undo** restores the pre-composition scene, including when construction is interrupted.
+- **Human control:** grabbing the canvas pauses the complete lofi session, including construction, camera and automatic scene changes. `control_lofi` resumes it or stops it while retaining its objects. The `undo` tool restores the pre-composition scene across the sequence.
 - **Sound:** the local three-track playlist fades in softly. The UI and tools distinguish requested playback from actual playback. If the browser blocks audio, click **Enable sound**. Volume and mute remain available.
-- **Clean view:** hides the interface for enjoying the scene. H or the unobtrusive **Controls** button brings it back. Exporting/recording video and YouTube upload are future work.
+- **Clean view:** hides the interface for enjoying the scene. H or the unobtrusive **Controls** button brings it back. Scene export is available as a share link; video recording and upload are external production steps.
 
 The local Create button calls the same handler with `actor: human`; it does not contact an AI model. A connected browser agent calls the registered WebMCP tool with `actor: agent`. **Tool activity** exposes the original arguments and response. The background session state is observable in both cases.
 
@@ -35,6 +38,8 @@ The local Create button calls the same handler with `actor: human`; it does not 
 ## Why WebMCP matters here
 
 The WebGL canvas doesn't expose the scene graph through the DOM. A screenshot contains visible objects, but not their stable ids, exact positions, human-edit history or undo semantics. WebMCP lets this page publish those capabilities as discoverable, structured tools in the same live browser session. The agent can observe, act and verify while the person keeps the mouse.
+
+The immediate use is making small ambient scenes together. The wider development question is how visual editors can expose intent, ownership and reversible edits to browser agents. The camp interaction makes that question concrete: a person chooses a placement, and the agent adapts the surroundings without taking that choice away.
 
 A custom API or other automation integration could provide similar capabilities. The contribution here is the **standard browser-facing contract**, shared live state and reversible collaboration—not a claim that 3D automation is otherwise impossible. See the [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp).
 
@@ -67,33 +72,74 @@ The full cinematic image retains its resolution, ambient occlusion, bloom and sh
 | Group operations | `batch` |
 | Chess geometry | `board_square`, `chess_move` |
 
-Registration uses `document.modelContext.registerTool({ name, description, inputSchema, annotations, execute }, { signal })`. Tools return an operation envelope containing `ok`, `operation_id`, `actor`, before/after scene versions, `applied`, `duration_ms` and a result or error. Mutating tools can reject stale observations through `expected_scene_version`. Animations settle before the call reports live values, except explicit bulk `add_object{animate:false}` and the background lofi/camera tools, which report acceptance immediately and expose ongoing state.
+Registration in [src/webmcp.ts](src/webmcp.ts) uses `document.modelContext.registerTool({ name, description, inputSchema, annotations, execute }, { signal })`. Tools return an operation envelope containing `ok`, `operation_id`, `actor`, before/after scene versions, `applied`, `duration_ms` and a `result` or error. Mutating tools can reject stale observations through `expected_scene_version`. Animations settle before the call reports live values, except explicit bulk `add_object{animate:false}` and the background lofi/camera tools, which report acceptance immediately and expose ongoing state.
 
-General edits use whole-scene snapshots. Cooperative arrangements have their own position journal; use **layout undo** to preserve later human work. Layout tools and background lofi/camera controls cannot be nested inside `batch`. A running or paused lofi construction rejects competing scene edits until stopped, while allowing observation, undo and session controls. A running layout rejects competing tool mutations while still allowing mouse interaction and read-only queries.
+General edits use whole-scene snapshots. Cooperative arrangements have their own position journal; use **layout undo** to preserve later human work. Layout tools and background lofi/camera controls cannot be nested inside `batch`. Stop a lofi sequence before making ordinary scene edits; observation, undo and session controls remain available during construction. A running layout rejects competing tool mutations while still allowing mouse interaction and read-only queries.
 
 ## Run and verify
+
+Use Node.js 22, as in CI. No environment variables or secrets are needed.
 
 ```bash
 npm ci
 npm run dev
+```
+
+Open the local URL printed by Vite. To check the production build and tool behavior:
+
+```bash
 npm run build
+npm run test:animations
+npm run test:lofi
 npm run smoke
 ```
 
-The smoke suite uses its own free preview port, exercises every listed tool and checks observable behavior: pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`. GPU-less CI runs the same semantic suite in Performance mode through software OpenGL; the cinematic view is also checked in a hardware-accelerated browser.
+The smoke suite uses system Chrome if available, otherwise Playwright's Chromium. If neither is installed, run `npx playwright-core install chromium` first. CI installs Chromium and its system dependencies explicitly.
 
-Native WebMCP requires a supporting browser/client. In supported Chrome testing builds, enable `chrome://flags/#enable-webmcp-testing`; the status chip reports actual API availability. The scene and local controls also work without WebMCP. `?agent=1` exposes a clearly labeled developer harness for handler tests.
+The suite starts its own free preview port and exercises every listed tool, including pointer placement, preserved camp coordinates, selective undo/redo, later edits, invalid calls, import validation, ordinary undo and stale versions. Results are written to `scripts/smoke-result.json`. It tests handlers through the labeled developer harness in Performance mode with software OpenGL. Native browser discovery and the cinematic view require the separate live checks in the [judge guide](docs/JUDGE-GUIDE.md).
+
+The September 3 reviewed application revision `9bda5c3` passed the production build and **26/26 tool invocations and 58/58 semantic checks**, including compact-share navigation and import protections. Animation regressions and the deterministic lofi suite passed on the unchanged animation/sequence core, including 12 automatic cycles with bounded object disposal. Earlier native in-app-browser checks confirmed composition, state readback, next-scene control, human pause/resume and actual sound playback. The final native share round trip remains unverified because browser-tool access is blocked by admin-policy verification. These are separate evidence sources; see [the final review](docs/FINAL-REVIEW.md) for deployment, film and submission gates.
+
+Native WebMCP requires a supporting browser/client. In Chrome 149+, enable `chrome://flags/#enable-webmcp-testing`, relaunch Chrome and connect a compatible agent. The status chip reports actual API availability. The scene and local controls also work without WebMCP. `?agent=1` exposes a clearly labeled developer harness for handler tests; it does not add a model connection.
+
+## Demo production on macOS
+
+The optional media helpers use macOS `say`, Swift/AppKit, `ffmpeg` and `ffprobe`. After capturing real native-browser footage and its tool evidence as described in the [recording plan](docs/recording-plan.md), run these from the repository root:
+
+```bash
+npm run demo:audio
+node scripts/encode-demo-capture.mjs
+node scripts/assemble-demo.mjs
+```
+
+The commands prepare the local English voice track, encode existing timestamped capture frames and assemble a 135-second MP4 with captions and a poster in `scratch-submission-media`. Raw browser captures and `native-capture.json` are required inputs, kept outside the repository. These helpers do not automate browser capture, YouTube upload or Devpost submission. The exported candidate still needs the creator's complete watch-through and voice approval before publication.
+
+## Code map
+
+| Area | Source |
+| --- | --- |
+| Native registration, schemas and invocation contract | [src/webmcp.ts](src/webmcp.ts) |
+| Scene queries and editing handlers | [src/tools.ts](src/tools.ts) |
+| Human-preserving layouts and position journal | [src/layout.ts](src/layout.ts) |
+| Background composition, scene recipes and camera direction | [src/lofi.ts](src/lofi.ts), [src/lofi-scenes.ts](src/lofi-scenes.ts), [src/camera-director.ts](src/camera-director.ts) |
+| Pointer interaction and edit ownership | [src/interaction.ts](src/interaction.ts), [src/store.ts](src/store.ts) |
+| Snapshots, import and share state | [src/snapshot.ts](src/snapshot.ts) |
+| Procedural assets and rendering | [src/factory.ts](src/factory.ts), [src/lofi-assets.ts](src/lofi-assets.ts), [src/scene.ts](src/scene.ts) |
+| Semantic smoke checks, timing regressions and CI | [scripts/smoke.mjs](scripts/smoke.mjs), [scripts/animation-regression.mjs](scripts/animation-regression.mjs), [scripts/lofi-regression.mjs](scripts/lofi-regression.mjs), [.github/workflows/ci.yml](.github/workflows/ci.yml) |
+
+For changes, keep the local and WebMCP invocation paths consistent, preserve human edits during cooperative layouts, and update the tool table and judge instructions when behavior changes. Build and run the smoke suite before reviewing a release. The [submission checklist](docs/SUBMISSION-CHECKLIST.md) tracks the final revision, external video and release freeze.
 
 ## Limits
 
 - The editable surface is flat at y=0; the layered island is art direction, without physics or terrain simulation.
 - Layout adaptation applies to the starter scene's tagged paths, grove and lanterns around a camp. It is not a general-purpose layout solver. Fixed obstacles can make a request infeasible.
-- A one-second scene operation does not imply a one-second model response. Agent discovery and reasoning time depend on the client. The 30-second presentation is an edited real session.
+- A one-second scene operation does not imply a one-second model response. Agent discovery and reasoning time depend on the client; the film script distinguishes scene timing from edited agent waiting time.
 - General snapshot undo replaces the whole scene. Only layout undo preserves unrelated later edits.
-- Reduced-motion preference keeps the lofi camera still and removes growing-object animation. Continuous motion can still be explicitly requested.
+- Reduced-motion preference keeps the lofi camera still, removes growing-object animation and skips the scene-transition fade. Continuous motion can still be explicitly requested.
 - Share links preserve cabin/pond geometry and materials, but not session timers, camera routes or audio playback.
 - Materials are edited per object. Share links carry scene state, not the live undo journal or accounts, and can become long.
+- Scene state lives in the current page. Keep the link copied by **Share** or returned by `export_scene`; exporting does not change the current URL. Opening that link restores the scene and then cleans the address bar before native tool registration. Bookmarking or reloading the resulting clean base URL does not retain the restored scene. There is no account-based cloud save or multi-user room.
 - Chess tools provide geometry and animation, not a chess rules engine.
 - Cinematic rendering costs more than performance mode; frame rate depends on hardware, viewport and scene size.
 
-MIT licensed. Bundled DM Sans and Manrope fonts use their respective SIL Open Font Licenses in [public/fonts](public/fonts). Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).
+MIT licensed. Bundled DM Sans and Manrope fonts use their respective SIL Open Font Licenses in [public/fonts](public/fonts). The three music tracks were supplied by their creator, Thomas Werner; see [music credits](public/music/README.md). Built with TypeScript, three.js and Vite for [The WebMCP Challenge](https://webmcp.devpost.com/).

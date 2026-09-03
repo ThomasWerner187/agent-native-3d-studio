@@ -1,35 +1,67 @@
-# Scene Studio — narrated hackathon film
+# Recording and export plan
 
-Target: **90 seconds**, English narration, 1080p landscape, 30 FPS. First 30 seconds also work as a separate teaser. This is a production plan; no film has been recorded or uploaded yet.
+Produce the [2:15 English film](../DEMO.md) from the same revision that will be submitted. The script covers the product, an actual WebMCP invocation and human control. Recording and editing are production steps outside the app; the studio does not include a built-in video recorder.
 
-## Entry requirements
+## Current candidate
 
-The [official rules](https://webmcp.devpost.com/rules), checked 2 September 2026, require a video shorter than three minutes, a functioning demo with audio explaining the project and WebMCP use, and a publicly visible YouTube upload. English or an English translation is required. The submission deadline is 3 September 2026 at 13:00 PDT (22:00 Berlin).
+The rerendered local export was captured against application revision `3487e00`; the final reviewed application is `9bda5c3`, which adds the compact-share update. Its production build and smoke suite passed **26/26 tools and 58/58 semantic checks**; animation and lofi regressions passed on the unchanged core, including 12 bounded automatic cycles. Preview deploy `6a990cece684e99516a09013` matches that final build. The later share behavior still needs a native-browser round trip: browser-tool access is blocked by admin-policy verification, and the earlier film does not establish that later check.
 
-## Reuse the As I Am recorder
+The local film is **135 seconds, 1280 × 720, 30 FPS, H.264 video and AAC audio**. Its **42 caption cues** and **17 recorded native events** accompany English SRT captions, a poster, a contact sheet and export metadata in `scratch-submission-media`. The film uses eight locally synthesized macOS Samantha narration segments and the owner-provided Aurora Drift music track. It is an **edited demo assembled from multiple live WebMCP sessions**; the opening and evidence cards disclose that provenance rather than presenting one uninterrupted session. Native-agent waiting-time cuts are labeled; the complete 20-second build is shown at its recorded timing. The 30 FPS export does not imply that the browser source captured every displayed frame.
 
-The existing `tools/clickthru` toolkit in As I Am already supports capture from the selected Codex Browser tab, real cursor interactions, MP4 packaging, narration and timed captions. Its preferred voice workflow uses one continuous performance. Keep that structure.
+The exported mix measured **−19.2 dBFS mean** and **−3.7 dBFS peak**. Format checks and level measurements passed; a complete listen-through and creator approval of the synthesized voice are still required. Public YouTube upload and the Devpost Submitted status are not complete.
 
-Adapt before recording:
+## Rebuild the media on macOS
 
-- Its live capture currently saves at most 12 FPS and caps frames at 1440 px. Use a verified 30 FPS capture path for our slowly moving 3D camera; test a short take before a full capture. Keep the scene at full cinematic quality.
-- Its voice-led editor extends static screen holds. Our background is always moving: preserve continuous footage and edit only intentional gaps. Do not freeze the water, smoke or camera under narration.
-- Capture actual `compose_lofi_scene` and `describe_scene` calls through the page's native WebMCP capability. A recording of the local Create button must be labeled as a local tool demonstration.
-- Replace all As I Am titles, URLs, chapter names and provenance labels in a copied adapter. Do not modify that project's recorder or existing takes.
-- Use a new ignored output directory per take. Keep the original footage, event timings and tool results. Avoid simultaneous duplicate browser captures.
-- Lower the lofi music under narration, retain captions, and visually verify the result. A music request alone does not prove audible playback; check the actual playback state and listen to the export.
+Prerequisites: the installed project dependencies, macOS `say`, Swift with AppKit, and `ffmpeg`/`ffprobe` on `PATH`. Run from the repository root:
 
-A local guide voice can be used for an initial cut. No new paid speech request, YouTube upload or Devpost submission has been made for this project.
+```bash
+npm run demo:audio
+```
 
-## Story
+This prepares the eight AIFF narration segments and `scratch-submission-media/timeline.json`; the default voice is Samantha. Browser capture is a separate step: retain genuine timestamped frame images and `frames.json` manifests in the `opening`, `composition`, `state`, `next`, `endless`, `human` and `closing` subdirectories, plus the actual native requests/results in `native-capture.json`. These raw inputs are intentionally not committed. A fresh clone cannot produce the film from the narration command alone.
 
-| Time | Show | Explain |
-| --- | --- | --- |
-| 0–8 s | One prompt over the live scene | “What if a website could understand the kind of place you want to be in?” |
-| 8–30 s | Actual WebMCP call, gradual cabin/pond/forest reveal, lanterns and music | “I ask my browser agent for a calming lofi world. Through WebMCP, it discovers the scene's tools and starts a complete composition.” |
-| 30–43 s | Camera drift, real reflection, close cabin detail | “Light, sound and movement unfold together. The camera continues for as long as I want.” |
-| 43–58 s | Tool activity and live progress/state | “The agent works with objects, camera states and a controllable session. It can verify what happened instead of guessing from pixels.” |
-| 58–73 s | Human takes the camera; pause/resume; one reversible edit | “And I keep control. I can interrupt the camera, edit the world, resume the atmosphere or undo the composition.” |
-| 73–90 s | Clean, uninterrupted beauty shot and project link | “A small environment for focus and relaxation, with a path toward ambient films. One shared canvas for people and agents.” |
+Once those captures are present, encode and assemble them:
 
-The built-in composition is an authored, parameterized procedural recipe. It is not arbitrary text-to-mesh generation. The music is an existing local playlist. State this naturally in the implementation segment or captions. A custom API could implement similar operations; WebMCP makes the contract discoverable in the live shared page.
+```bash
+node scripts/encode-demo-capture.mjs
+node scripts/assemble-demo.mjs
+```
+
+The encoder preserves source timestamps; the assembler validates the required clips and native evidence, renders title/caption overlays with AppKit, mixes narration and music, and writes `submission-demo.mp4`, `submission-demo.srt`, `submission-poster.jpg`, `submission-contact-sheet.jpg` and `export-metadata.json` under `scratch-submission-media`. Neither command records browser actions or uploads anything. Rebuilding after changing the narration or captures requires another full review.
+
+## Capture
+
+1. Open the final candidate in a WebMCP-capable desktop browser at 1920 × 1080, with no private tabs or account details in view. Start from the base URL with no shared-scene hash. Confirm **WebMCP live · 26 tools**.
+2. Use **Cinematic** on hardware that renders it smoothly. Record a short sample first: water, smoke and camera motion must remain continuous in the export. Capture at 30 FPS where the recording tool supports it; do not duplicate a low-frame-rate source and describe that as a 30 FPS capture.
+3. Record a connected browser agent discovering and calling `compose_lofi_scene` with `cycle:true`, followed by `describe_scene`. Preserve the full requests, results and raw recording. A local tool inspector or the Create button is useful for rehearsal, but does not establish native WebMCP discovery.
+4. Record a native `control_lofi` call with `action:"next"`, the transition and the next procedural build. Then record human camera takeover pausing the complete sequence and an explicit resume. The starter-camp collaboration can be captured separately as supplementary material; it is not needed to interrupt the lofi story in the main film.
+5. Capture a clean moving cabin shot for the opening and closing. **H** or **Clean view** hides the HUD; **H** or **Controls** restores it. Keep some footage with the HUD visible so provenance and controls can be assessed.
+
+The exact prompts and narration are in [DEMO.md](../DEMO.md), with matching machine-readable shots in [video-narration.json](video-narration.json). The 20-second builds can play at their real pace underneath the explanation. Use cuts to remove model waiting time and label those cuts. Keep the browser tab visible during construction because hidden tabs pause scene work.
+
+## Voice and edit
+
+- Record the English script as one natural performance, then align the footage to it. Use the exact feature names when the relevant tool is on screen. A guide voice is acceptable for reviewing the cut; record which voice the final film actually uses.
+- Keep narration prominent and music quiet underneath. Check actual sound playback before capture, not just a successful music request. A silent browser recording may need the separately captured audio mixed in.
+- Keep camera, water and smoke footage moving under the voice. Avoid extending a still frame to cover a long sentence.
+- Add readable English captions. Use short labels such as **Native WebMCP call**, **Human placement** and **Layout undo** only when the footage supports them.
+- Show the project title and live URL at the end. Do not spend the first seconds on a logo sequence.
+
+## Export and review
+
+Export an MP4 with H.264 video and AAC audio for upload. Retain the raw take and a separate final master. For every candidate export, check:
+
+| Check | Pass condition |
+| --- | --- |
+| Duration | Under 3:00 including title and credits; target 2:15 |
+| Narration | Audible, in English, explains both the product and WebMCP |
+| Motion | No unintended frozen frames, cursor resets or abrupt camera jumps |
+| Provenance | Native requests/results are readable; editing across multiple live sessions is disclosed; local actions are represented accurately |
+| Claims | Scene actions shown match the candidate build; no generated-mesh or generated-music claim |
+| Display | Text stays readable at ordinary YouTube player size; captions stay in frame |
+| Audio | Listen through the exported file on speakers or headphones; no clipping or missing voice |
+| Privacy | No credentials, unrelated tabs, notifications or personal account screens |
+
+Watch the whole exported film, then upload it as **Public** on YouTube. Wait for processing and verify the watch page while logged out, with sound. Copy the final public link into the submission, save it, and verify the green **Submitted** status on [Devpost My projects](https://devpost.com/submit-to/31011-the-webmcp-challenge/manage/submissions).
+
+The [official rules](https://webmcp.devpost.com/rules), checked September 3, 2026, require a public YouTube demonstration with explanatory audio and permit judges to stop watching at three minutes. Follow the [submission checklist](SUBMISSION-CHECKLIST.md) for the release freeze and judging window.
